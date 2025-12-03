@@ -22,12 +22,14 @@
 
 Este projeto gera **dados sintéticos realistas** de transações bancárias brasileiras, incluindo:
 
-- ✅ **Clientes** com CPF, nome, endereço (Faker pt_BR)
-- ✅ **Dispositivos** (smartphones, tablets, desktops)
-- ✅ **Transações** (PIX, cartão, TED, boleto)
-- ✅ **Fraudes** (8 tipos diferentes com taxa configurável)
-- ✅ **Geolocalização** brasileira real
-- ✅ **Bancos** reais (códigos BACEN)
+- ✅ **Clientes** com CPF, nome, endereço, renda (Faker pt_BR)
+- ✅ **Dispositivos** (smartphones, tablets, desktops com fabricantes reais)
+- ✅ **Transações** (PIX, cartão crédito/débito, TED, boleto, saque)
+- ✅ **Fraudes** (8 tipos diferentes com distribuição realista)
+- ✅ **Geolocalização** correlacionada com estado do cliente
+- ✅ **Bancos** reais brasileiros com market share realista
+- ✅ **MCCs** com valores típicos por categoria
+- ✅ **Padrões temporais** (mais transações em horário comercial)
 
 ### 🎯 Por que foi criado?
 
@@ -58,22 +60,25 @@ pip install -r requirements.txt
 
 ```bash
 # Gerar 1GB de dados (teste rápido)
-python generate.py --size 1GB
+python3 generate.py --size 1GB
 
 # Gerar 10GB de dados
-python generate.py --size 10GB --workers 4
+python3 generate.py --size 10GB --workers 4
 
 # Gerar 50GB de dados (recomendado para Big Data)
-python generate.py --size 50GB --workers 8
+python3 generate.py --size 50GB --workers 8
+
+# Gerar dados reproduzíveis (mesmo seed = mesmos dados)
+python3 generate.py --size 1GB --seed 42
 ```
 
 ### Resultado
 
 ```
-data/
+output/
 ├── customers.json      # 100K clientes brasileiros
 ├── devices.json        # 300K dispositivos
-└── transactions_*.json # Arquivos de 128MB cada
+└── transactions_*.json # Arquivos de ~128MB cada (JSON Lines)
 ```
 
 ---
@@ -85,21 +90,36 @@ data/
 | `--size` | `1GB` | Tamanho total dos dados (ex: `1GB`, `10GB`, `50GB`) |
 | `--workers` | `CPU cores` | Número de processos paralelos |
 | `--fraud-rate` | `0.007` | Taxa de fraude (0.7% = ~7 a cada 1000) |
-| `--output` | `./data` | Diretório de saída |
+| `--output` | `./output` | Diretório de saída |
 | `--customers` | `100000` | Número de clientes a gerar |
-| `--devices-per-customer` | `3` | Dispositivos por cliente |
+| `--devices` | `3x customers` | Número de dispositivos a gerar |
+| `--days` | `730` | Dias de histórico (padrão 2 anos) |
+| `--start-date` | - | Data inicial (YYYY-MM-DD) |
+| `--end-date` | - | Data final (YYYY-MM-DD) |
+| `--seed` | - | Seed para reprodutibilidade |
+| `--quiet` | - | Modo silencioso (JSON output) |
+| `--customers-only` | - | Gerar apenas clientes e dispositivos |
 
 ### Exemplos
 
 ```bash
 # Teste rápido (500MB, 2 workers)
-python generate.py --size 500MB --workers 2
+python3 generate.py --size 500MB --workers 2
 
 # Produção (50GB, máximo de workers, 1% fraude)
-python generate.py --size 50GB --workers 10 --fraud-rate 0.01
+python3 generate.py --size 50GB --workers 10 --fraud-rate 0.01
+
+# Período específico
+python3 generate.py --size 5GB --start-date 2024-01-01 --end-date 2024-06-30
+
+# Reproduzível (sempre gera os mesmos dados)
+python3 generate.py --size 1GB --seed 42
+
+# Para scripts/CI (saída JSON)
+python3 generate.py --size 1GB --quiet
 
 # Customizado (20GB, 200K clientes)
-python generate.py --size 20GB --customers 200000 --output ./meus_dados
+python3 generate.py --size 20GB --customers 200000 --output ./meus_dados
 ```
 
 ---
@@ -113,9 +133,9 @@ python generate.py --size 20GB --customers 200000 --output ./meus_dados
   "customer_id": "CUST_00000001",
   "nome": "Maria Silva Santos",
   "cpf": "123.456.789-00",
-  "data_nascimento": "1985-03-15",
   "email": "maria.silva@email.com.br",
   "telefone": "(11) 98765-4321",
+  "data_nascimento": "1985-03-15",
   "endereco": {
     "logradouro": "Rua das Flores, 123",
     "bairro": "Centro",
@@ -124,9 +144,17 @@ python generate.py --size 20GB --customers 200000 --output ./meus_dados
     "cep": "01310-100"
   },
   "renda_mensal": 5500.00,
+  "profissao": "Analista de Sistemas",
+  "conta_criada_em": "2018-06-01T10:30:00",
+  "tipo_conta": "DIGITAL",
+  "status_conta": "ATIVA",
+  "limite_credito": 22000.00,
   "score_credito": 750,
-  "banco_principal": "341",
-  "conta_desde": "2018-06-01"
+  "nivel_risco": "BAIXO",
+  "banco_codigo": "260",
+  "banco_nome": "Nubank",
+  "agencia": "0001",
+  "numero_conta": "123456-7"
 }
 ```
 
@@ -138,11 +166,12 @@ python generate.py --size 20GB --customers 200000 --output ./meus_dados
   "customer_id": "CUST_00000001",
   "tipo": "SMARTPHONE",
   "fabricante": "Samsung",
-  "modelo": "Galaxy S21",
-  "sistema_operacional": "Android 13",
-  "fingerprint": "a1b2c3d4e5f6...",
+  "modelo": "Galaxy S23",
+  "sistema_operacional": "Android 14",
+  "fingerprint": "a1b2c3d4e5f6789...",
   "primeiro_uso": "2023-01-15",
-  "is_trusted": true
+  "is_trusted": true,
+  "is_rooted_jailbroken": false
 }
 ```
 
@@ -152,8 +181,9 @@ python generate.py --size 20GB --customers 200000 --output ./meus_dados
 {
   "transaction_id": "TXN_000000000000001",
   "customer_id": "CUST_00000001",
+  "session_id": "SESS_000000000001",
   "device_id": "DEV_00000001",
-  "timestamp": "2024-03-15T14:32:45",
+  "timestamp": "2024-03-15T14:32:45.123456",
   "tipo": "PIX",
   "valor": 150.00,
   "moeda": "BRL",
@@ -161,35 +191,101 @@ python generate.py --size 20GB --customers 200000 --output ./meus_dados
   "ip_address": "177.45.123.89",
   "geolocalizacao_lat": -23.550520,
   "geolocalizacao_lon": -46.633308,
-  "merchant_name": "Supermercado Extra",
+  "merchant_id": "MERCH_012345",
+  "merchant_name": "Carrefour",
   "merchant_category": "Supermercados",
   "mcc_code": "5411",
+  "mcc_risk_level": "low",
+  "numero_cartao_hash": null,
+  "bandeira": null,
+  "tipo_cartao": null,
+  "parcelas": null,
+  "entrada_cartao": null,
+  "cvv_validado": null,
+  "autenticacao_3ds": null,
   "chave_pix_tipo": "CPF",
-  "chave_pix_destino": "123.456.789-00",
+  "chave_pix_destino": "a1b2c3d4e5f6...",
   "banco_destino": "341",
+  "distancia_ultima_transacao_km": 5.23,
+  "tempo_desde_ultima_transacao_min": 45,
+  "transacoes_ultimas_24h": 3,
+  "valor_acumulado_24h": 450.00,
+  "horario_incomum": false,
+  "novo_beneficiario": false,
+  "status": "APROVADA",
+  "motivo_recusa": null,
   "fraud_score": 12.5,
   "is_fraud": false,
-  "fraud_type": null,
-  "status": "APROVADA"
+  "fraud_type": null
 }
 ```
 
 ---
 
+## 🏦 Bancos Suportados
+
+Os bancos são selecionados com peso proporcional ao market share real:
+
+| Código | Banco | Tipo | Peso |
+|--------|-------|------|------|
+| 001 | Banco do Brasil | Público | 15% |
+| 341 | Itaú Unibanco | Privado | 15% |
+| 104 | Caixa Econômica | Público | 14% |
+| 237 | Bradesco | Privado | 12% |
+| 033 | Santander | Privado | 10% |
+| 260 | Nubank | Digital | 10% |
+| 077 | Banco Inter | Digital | 5% |
+| 336 | C6 Bank | Digital | 4% |
+| 290 | PagBank | Digital | 3% |
+| ... | +7 outros | ... | ... |
+
+---
+
 ## 🚨 Tipos de Fraude
 
-O gerador inclui **8 tipos de fraude** baseados em cenários reais:
+O gerador inclui **8 tipos de fraude** com distribuição baseada em dados reais:
 
 | Tipo | Descrição | % do Total |
 |------|-----------|------------|
-| `CARTAO_CLONADO` | Cartão físico/dados clonados | ~15% |
-| `CONTA_TOMADA` | Account takeover | ~15% |
+| `ENGENHARIA_SOCIAL` | Golpes por telefone/WhatsApp | ~25% |
+| `CONTA_TOMADA` | Account takeover | ~20% |
+| `CARTAO_CLONADO` | Cartão físico/dados clonados | ~18% |
 | `IDENTIDADE_FALSA` | Documentos falsos | ~12% |
-| `ENGENHARIA_SOCIAL` | Golpes por telefone/WhatsApp | ~18% |
-| `LAVAGEM_DINHEIRO` | Transações de lavagem | ~10% |
-| `AUTOFRAUDE` | Cliente alega fraude falsa | ~12% |
-| `FRAUDE_AMIGAVEL` | Fraude por conhecidos | ~10% |
-| `TRIANGULACAO` | Fraude com intermediários | ~8% |
+| `AUTOFRAUDE` | Cliente alega fraude falsa | ~10% |
+| `FRAUDE_AMIGAVEL` | Fraude por conhecidos | ~7% |
+| `LAVAGEM_DINHEIRO` | Transações de lavagem | ~5% |
+| `TRIANGULACAO` | Fraude com intermediários | ~3% |
+
+---
+
+## 📈 Realismo dos Dados
+
+### Distribuição de Transações
+- **PIX**: 45% (domina no Brasil desde 2021)
+- **Cartão de Crédito**: 25%
+- **Cartão de Débito**: 15%
+- **Boleto**: 8%
+- **TED**: 4%
+- **Saque**: 3%
+
+### Canais
+- **App Mobile**: 60%
+- **Web Banking**: 25%
+- **ATM**: 8%
+- **Agência**: 5%
+- **WhatsApp Pay**: 2%
+
+### Padrões Temporais
+- Mais transações entre 8h-20h
+- Pico às 12h-14h e 18h-20h
+- Madrugada (0h-6h) marcada como `horario_incomum`
+
+### Valores por Categoria (MCC)
+- **Fast Food**: R$ 15-100
+- **Supermercados**: R$ 15-800
+- **Combustível**: R$ 50-500
+- **Eletrônicos**: R$ 100-8.000
+- **Joalherias**: R$ 200-15.000
 
 ---
 
@@ -217,7 +313,7 @@ from pyspark.sql import SparkSession
 spark = SparkSession.builder.appName("FraudAnalysis").getOrCreate()
 
 # Ler transações
-df = spark.read.json("data/transactions_*.json")
+df = spark.read.json("output/transactions_*.json")
 df.printSchema()
 df.show()
 
@@ -232,10 +328,12 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
 # Carregar dados
-df = pd.read_json("data/transactions_00000.json", lines=True)
+df = pd.read_json("output/transactions_00000.json", lines=True)
 
 # Features
-X = df[['valor', 'fraud_score', 'transacoes_ultimas_24h']]
+features = ['valor', 'fraud_score', 'transacoes_ultimas_24h', 
+            'valor_acumulado_24h', 'horario_incomum', 'novo_beneficiario']
+X = df[features]
 y = df['is_fraud']
 
 # Treinar
@@ -265,15 +363,13 @@ Conecte Metabase, PowerBI ou Tableau para criar dashboards de:
 
 ```
 brazilian-fraud-data-generator/
-├── 📄 README.md
-├── 📄 requirements.txt
-├── 📄 generate.py           # Script principal
-├── 📄 LICENSE
-├── 📂 generators/
-│   ├── customers.py         # Gerador de clientes
-│   ├── devices.py           # Gerador de dispositivos
-│   └── transactions.py      # Gerador de transações
-└── 📂 data/                  # Dados gerados (gitignore)
+├── 📄 README.md          # Documentação
+├── 📄 requirements.txt   # Dependências (faker)
+├── 📄 generate.py        # Script principal
+├── 📄 LICENSE            # MIT License
+├── 📂 examples/          # Exemplos de uso
+│   └── README.md
+└── 📂 output/            # Dados gerados (gitignore)
     ├── customers.json
     ├── devices.json
     └── transactions_*.json
@@ -293,8 +389,8 @@ Contribuições são bem-vindas!
 
 ### Ideias para contribuir:
 - [ ] Adicionar mais tipos de transação (DOC, débito automático)
-- [ ] Gerar dados de cartões de crédito
-- [ ] Adicionar padrões temporais realistas
+- [ ] Exportar para CSV/Parquet
+- [ ] Adicionar validação de CPF com dígito verificador
 - [ ] Suporte a outros países da América Latina
 
 ---
@@ -308,7 +404,7 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 ## 👤 Autor
 
 **Abner Fonseca**
-- LinkedIn: [linkedin.com/in/abnerfonseca](https://linkedin.com/in/abnerfonseca)
+- LinkedIn: [linkedin.com/in/abnerfonseca](https://www.linkedin.com/in/abner-fonseca-25658b67)
 - GitHub: [@afborda](https://github.com/afborda)
 
 ---
