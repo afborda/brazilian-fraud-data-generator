@@ -2,131 +2,134 @@
 
 <div align="center">
 
+[![en](https://img.shields.io/badge/lang-en-red.svg)](./README.md)
+[![pt-br](https://img.shields.io/badge/lang-pt--br-green.svg)](./README.pt-BR.md)
+
 ![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)
 ![Faker](https://img.shields.io/badge/Faker-pt__BR-green)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 [![Stars](https://img.shields.io/github/stars/afborda/brazilian-fraud-data-generator?style=social)](https://github.com/afborda/brazilian-fraud-data-generator)
 
-**Gerador de dados sintéticos de transações bancárias brasileiras para estudos de Data Engineering e Machine Learning**
+**Synthetic Brazilian banking transaction data generator for Data Engineering and Machine Learning studies**
 
 [🚀 Quick Start](#-quick-start) •
-[📊 Dados Gerados](#-dados-gerados) •
-[⚙️ Parâmetros](#️-parâmetros) •
-[🎯 Casos de Uso](#-casos-de-uso)
+[📊 Generated Data](#-generated-data) •
+[⚙️ Parameters](#️-parameters) •
+[🎯 Use Cases](#-use-cases)
 
 </div>
 
 ---
 
-## 📋 Sobre
+## 📋 About
 
-Este projeto gera **dados sintéticos realistas** de transações bancárias brasileiras, incluindo:
+This project generates **realistic synthetic data** of Brazilian banking transactions, including:
 
-- ✅ **Clientes** com CPF, nome, endereço, renda (Faker pt_BR)
-- ✅ **Dispositivos** (smartphones, tablets, desktops com fabricantes reais)
-- ✅ **Transações** (PIX, cartão crédito/débito, TED, boleto, saque)
-- ✅ **Fraudes** (8 tipos diferentes com distribuição realista)
-- ✅ **Geolocalização** correlacionada com estado do cliente
-- ✅ **Bancos** reais brasileiros com market share realista
-- ✅ **MCCs** com valores típicos por categoria
-- ✅ **Padrões temporais** (mais transações em horário comercial)
+- ✅ **Customers** with CPF (Brazilian ID), name, address, income (Faker pt_BR)
+- ✅ **Devices** (smartphones, tablets, desktops with real manufacturers)
+- ✅ **Transactions** (PIX, credit/debit cards, wire transfers, bank slips, withdrawals)
+- ✅ **Frauds** (8 different types with realistic distribution)
+- ✅ **Geolocation** correlated with customer's state
+- ✅ **Real Brazilian banks** with realistic market share
+- ✅ **MCCs** with typical values per category
+- ✅ **Temporal patterns** (more transactions during business hours)
 
-### 🎯 Por que foi criado?
+### 🎯 Why was it created?
 
-Estudando **Data Engineering**, precisei de um dataset grande e realista para:
-- Testar pipelines Apache Spark em escala
-- Praticar arquitetura Medallion (Bronze → Silver → Gold)
-- Treinar modelos de detecção de fraude
-- Simular cenários de Big Data (50GB+)
+While studying **Data Engineering**, I needed a large and realistic dataset to:
+- Test Apache Spark pipelines at scale
+- Practice Medallion architecture (Bronze → Silver → Gold)
+- Train fraud detection models
+- Simulate Big Data scenarios (50GB+)
 
-Não encontrei datasets brasileiros de qualidade, então criei este gerador!
+I couldn't find quality Brazilian datasets, so I built this generator!
 
 ---
 
 ## 🚀 Quick Start
 
-### Instalação
+### Installation
 
 ```bash
-# Clone o repositório
+# Clone the repository
 git clone https://github.com/afborda/brazilian-fraud-data-generator.git
 cd brazilian-fraud-data-generator
 
-# Instale as dependências
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Gerar dados
+### Generate data
 
 ```bash
-# Gerar 1GB de dados (teste rápido)
+# Generate 1GB of data (quick test)
 python3 generate.py --size 1GB
 
-# Gerar 10GB de dados
+# Generate 10GB of data
 python3 generate.py --size 10GB --workers 4
 
-# Gerar 50GB de dados (recomendado para Big Data)
+# Generate 50GB of data (recommended for Big Data)
 python3 generate.py --size 50GB --workers 8
 
-# Gerar dados reproduzíveis (mesmo seed = mesmos dados)
+# Generate reproducible data (same seed = same data)
 python3 generate.py --size 1GB --seed 42
 ```
 
-### Resultado
+### Output
 
 ```
 output/
-├── customers.json      # 100K clientes brasileiros
-├── devices.json        # 300K dispositivos
-└── transactions_*.json # Arquivos de ~128MB cada (JSON Lines)
+├── customers.json      # 100K Brazilian customers
+├── devices.json        # 300K devices
+└── transactions_*.json # ~128MB files each (JSON Lines)
 ```
 
 ---
 
-## ⚙️ Parâmetros
+## ⚙️ Parameters
 
-| Parâmetro | Padrão | Descrição |
-|-----------|--------|-----------|
-| `--size` | `1GB` | Tamanho total dos dados (ex: `1GB`, `10GB`, `50GB`) |
-| `--workers` | `CPU cores` | Número de processos paralelos |
-| `--fraud-rate` | `0.007` | Taxa de fraude (0.7% = ~7 a cada 1000) |
-| `--output` | `./output` | Diretório de saída |
-| `--customers` | `100000` | Número de clientes a gerar |
-| `--devices` | `3x customers` | Número de dispositivos a gerar |
-| `--days` | `730` | Dias de histórico (padrão 2 anos) |
-| `--start-date` | - | Data inicial (YYYY-MM-DD) |
-| `--end-date` | - | Data final (YYYY-MM-DD) |
-| `--seed` | - | Seed para reprodutibilidade |
-| `--quiet` | - | Modo silencioso (JSON output) |
-| `--customers-only` | - | Gerar apenas clientes e dispositivos |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--size` | `1GB` | Total data size (e.g., `1GB`, `10GB`, `50GB`) |
+| `--workers` | `CPU cores` | Number of parallel processes |
+| `--fraud-rate` | `0.007` | Fraud rate (0.7% = ~7 per 1000) |
+| `--output` | `./output` | Output directory |
+| `--customers` | `100000` | Number of customers to generate |
+| `--devices` | `3x customers` | Number of devices to generate |
+| `--days` | `730` | Days of history (default 2 years) |
+| `--start-date` | - | Start date (YYYY-MM-DD) |
+| `--end-date` | - | End date (YYYY-MM-DD) |
+| `--seed` | - | Seed for reproducibility |
+| `--quiet` | - | Quiet mode (JSON output) |
+| `--customers-only` | - | Generate only customers and devices |
 
-### Exemplos
+### Examples
 
 ```bash
-# Teste rápido (500MB, 2 workers)
+# Quick test (500MB, 2 workers)
 python3 generate.py --size 500MB --workers 2
 
-# Produção (50GB, máximo de workers, 1% fraude)
+# Production (50GB, max workers, 1% fraud)
 python3 generate.py --size 50GB --workers 10 --fraud-rate 0.01
 
-# Período específico
+# Specific date range
 python3 generate.py --size 5GB --start-date 2024-01-01 --end-date 2024-06-30
 
-# Reproduzível (sempre gera os mesmos dados)
+# Reproducible (always generates the same data)
 python3 generate.py --size 1GB --seed 42
 
-# Para scripts/CI (saída JSON)
+# For scripts/CI (JSON output)
 python3 generate.py --size 1GB --quiet
 
-# Customizado (20GB, 200K clientes)
-python3 generate.py --size 20GB --customers 200000 --output ./meus_dados
+# Customized (20GB, 200K customers)
+python3 generate.py --size 20GB --customers 200000 --output ./my_data
 ```
 
 ---
 
-## 📊 Dados Gerados
+## 📊 Generated Data
 
-### 👥 Clientes (`customers.json`)
+### 👥 Customers (`customers.json`)
 
 ```json
 {
@@ -158,7 +161,7 @@ python3 generate.py --size 20GB --customers 200000 --output ./meus_dados
 }
 ```
 
-### 📱 Dispositivos (`devices.json`)
+### 📱 Devices (`devices.json`)
 
 ```json
 {
@@ -175,7 +178,7 @@ python3 generate.py --size 20GB --customers 200000 --output ./meus_dados
 }
 ```
 
-### 💳 Transações (`transactions_*.json`)
+### 💳 Transactions (`transactions_*.json`)
 
 ```json
 {
@@ -222,112 +225,112 @@ python3 generate.py --size 20GB --customers 200000 --output ./meus_dados
 
 ---
 
-## 🏦 Bancos Suportados
+## 🏦 Supported Banks
 
-Os bancos são selecionados com peso proporcional ao market share real:
+Banks are selected with weight proportional to real market share:
 
-| Código | Banco | Tipo | Peso |
-|--------|-------|------|------|
-| 001 | Banco do Brasil | Público | 15% |
-| 341 | Itaú Unibanco | Privado | 15% |
-| 104 | Caixa Econômica | Público | 14% |
-| 237 | Bradesco | Privado | 12% |
-| 033 | Santander | Privado | 10% |
+| Code | Bank | Type | Weight |
+|------|------|------|--------|
+| 001 | Banco do Brasil | Public | 15% |
+| 341 | Itaú Unibanco | Private | 15% |
+| 104 | Caixa Econômica | Public | 14% |
+| 237 | Bradesco | Private | 12% |
+| 033 | Santander | Private | 10% |
 | 260 | Nubank | Digital | 10% |
 | 077 | Banco Inter | Digital | 5% |
 | 336 | C6 Bank | Digital | 4% |
 | 290 | PagBank | Digital | 3% |
-| ... | +7 outros | ... | ... |
+| ... | +7 others | ... | ... |
 
 ---
 
-## 🚨 Tipos de Fraude
+## 🚨 Fraud Types
 
-O gerador inclui **8 tipos de fraude** com distribuição baseada em dados reais:
+The generator includes **8 fraud types** with distribution based on real data:
 
-| Tipo | Descrição | % do Total |
-|------|-----------|------------|
-| `ENGENHARIA_SOCIAL` | Golpes por telefone/WhatsApp | ~25% |
+| Type | Description | % of Total |
+|------|-------------|------------|
+| `ENGENHARIA_SOCIAL` | Phone/WhatsApp scams | ~25% |
 | `CONTA_TOMADA` | Account takeover | ~20% |
-| `CARTAO_CLONADO` | Cartão físico/dados clonados | ~18% |
-| `IDENTIDADE_FALSA` | Documentos falsos | ~12% |
-| `AUTOFRAUDE` | Cliente alega fraude falsa | ~10% |
-| `FRAUDE_AMIGAVEL` | Fraude por conhecidos | ~7% |
-| `LAVAGEM_DINHEIRO` | Transações de lavagem | ~5% |
-| `TRIANGULACAO` | Fraude com intermediários | ~3% |
+| `CARTAO_CLONADO` | Cloned card/data | ~18% |
+| `IDENTIDADE_FALSA` | Fake documents | ~12% |
+| `AUTOFRAUDE` | Customer claims false fraud | ~10% |
+| `FRAUDE_AMIGAVEL` | Fraud by acquaintances | ~7% |
+| `LAVAGEM_DINHEIRO` | Money laundering | ~5% |
+| `TRIANGULACAO` | Triangulation fraud | ~3% |
 
 ---
 
-## 📈 Realismo dos Dados
+## 📈 Data Realism
 
-### Distribuição de Transações
-- **PIX**: 45% (domina no Brasil desde 2021)
-- **Cartão de Crédito**: 25%
-- **Cartão de Débito**: 15%
-- **Boleto**: 8%
-- **TED**: 4%
-- **Saque**: 3%
+### Transaction Distribution
+- **PIX**: 45% (dominates in Brazil since 2021)
+- **Credit Card**: 25%
+- **Debit Card**: 15%
+- **Bank Slip (Boleto)**: 8%
+- **Wire Transfer (TED)**: 4%
+- **Withdrawal**: 3%
 
-### Canais
-- **App Mobile**: 60%
+### Channels
+- **Mobile App**: 60%
 - **Web Banking**: 25%
 - **ATM**: 8%
-- **Agência**: 5%
+- **Branch**: 5%
 - **WhatsApp Pay**: 2%
 
-### Padrões Temporais
-- Mais transações entre 8h-20h
-- Pico às 12h-14h e 18h-20h
-- Madrugada (0h-6h) marcada como `horario_incomum`
+### Temporal Patterns
+- More transactions between 8am-8pm
+- Peak at 12pm-2pm and 6pm-8pm
+- Late night (0am-6am) marked as `horario_incomum` (unusual time)
 
-### Valores por Categoria (MCC)
+### Values by Category (MCC)
 - **Fast Food**: R$ 15-100
-- **Supermercados**: R$ 15-800
-- **Combustível**: R$ 50-500
-- **Eletrônicos**: R$ 100-8.000
-- **Joalherias**: R$ 200-15.000
+- **Supermarkets**: R$ 15-800
+- **Gas Stations**: R$ 50-500
+- **Electronics**: R$ 100-8,000
+- **Jewelry**: R$ 200-15,000
 
 ---
 
 ## 📈 Performance
 
-Testado em VPS com 8 cores / 24GB RAM:
+Tested on VPS with 8 cores / 24GB RAM:
 
-| Tamanho | Arquivos | Tempo | Velocidade |
-|---------|----------|-------|------------|
+| Size | Files | Time | Speed |
+|------|-------|------|-------|
 | 1 GB | 8 | ~1 min | 17 MB/s |
 | 10 GB | 80 | ~8 min | 21 MB/s |
 | 50 GB | 400 | ~35 min | 24 MB/s |
 
-> 💡 **Dica:** Use `--workers` igual ao número de cores da CPU para máxima performance
+> 💡 **Tip:** Use `--workers` equal to the number of CPU cores for maximum performance
 
 ---
 
-## 🎯 Casos de Uso
+## 🎯 Use Cases
 
-### 1️⃣ Estudar Apache Spark
+### 1️⃣ Study Apache Spark
 
 ```python
 from pyspark.sql import SparkSession
 
 spark = SparkSession.builder.appName("FraudAnalysis").getOrCreate()
 
-# Ler transações
+# Read transactions
 df = spark.read.json("output/transactions_*.json")
 df.printSchema()
 df.show()
 
-# Análise de fraudes
+# Fraud analysis
 df.filter("is_fraud = true").groupBy("fraud_type").count().show()
 ```
 
-### 2️⃣ Treinar modelo de ML
+### 2️⃣ Train ML Model
 
 ```python
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-# Carregar dados
+# Load data
 df = pd.read_json("output/transactions_00000.json", lines=True)
 
 # Features
@@ -336,40 +339,41 @@ features = ['valor', 'fraud_score', 'transacoes_ultimas_24h',
 X = df[features]
 y = df['is_fraud']
 
-# Treinar
+# Train
 model = RandomForestClassifier()
 model.fit(X, y)
 ```
 
-### 3️⃣ Pipeline Medallion
+### 3️⃣ Medallion Pipeline
 
 ```
-Raw (JSON) → Bronze (Parquet) → Silver (Limpo) → Gold (Agregado)
+Raw (JSON) → Bronze (Parquet) → Silver (Clean) → Gold (Aggregated)
    51 GB   →      5 GB        →      5.4 GB    →     2 GB
-                              90% compressão!
+                              90% compression!
 ```
 
-### 4️⃣ Dashboards de BI
+### 4️⃣ BI Dashboards
 
-Conecte Metabase, PowerBI ou Tableau para criar dashboards de:
-- Taxa de fraude por estado
-- Tipos de fraude mais comuns
-- Análise temporal de transações
-- Top merchants suspeitos
+Connect Metabase, PowerBI or Tableau to create dashboards for:
+- Fraud rate by state
+- Most common fraud types
+- Temporal transaction analysis
+- Top suspicious merchants
 
 ---
 
-## 📁 Estrutura do Projeto
+## 📁 Project Structure
 
 ```
 brazilian-fraud-data-generator/
-├── 📄 README.md          # Documentação
-├── 📄 requirements.txt   # Dependências (faker)
-├── 📄 generate.py        # Script principal
+├── 📄 README.md          # Documentation (English)
+├── 📄 README.pt-BR.md    # Documentation (Portuguese)
+├── 📄 requirements.txt   # Dependencies (faker)
+├── 📄 generate.py        # Main script
 ├── 📄 LICENSE            # MIT License
-├── 📂 examples/          # Exemplos de uso
+├── 📂 examples/          # Usage examples
 │   └── README.md
-└── 📂 output/            # Dados gerados (gitignore)
+└── 📂 output/            # Generated data (gitignore)
     ├── customers.json
     ├── devices.json
     └── transactions_*.json
@@ -377,31 +381,31 @@ brazilian-fraud-data-generator/
 
 ---
 
-## 🤝 Contribuindo
+## 🤝 Contributing
 
-Contribuições são bem-vindas! 
+Contributions are welcome!
 
-1. Fork o projeto
-2. Crie uma branch (`git checkout -b feature/nova-feature`)
-3. Commit suas mudanças (`git commit -m 'Add nova feature'`)
-4. Push para a branch (`git push origin feature/nova-feature`)
-5. Abra um Pull Request
+1. Fork the project
+2. Create a branch (`git checkout -b feature/new-feature`)
+3. Commit your changes (`git commit -m 'Add new feature'`)
+4. Push to the branch (`git push origin feature/new-feature`)
+5. Open a Pull Request
 
-### Ideias para contribuir:
-- [ ] Adicionar mais tipos de transação (DOC, débito automático)
-- [ ] Exportar para CSV/Parquet
-- [ ] Adicionar validação de CPF com dígito verificador
-- [ ] Suporte a outros países da América Latina
-
----
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+### Ideas to contribute:
+- [ ] Add more transaction types (DOC, direct debit)
+- [ ] Export to CSV/Parquet
+- [ ] Add CPF validation with check digit
+- [ ] Support for other Latin American countries
 
 ---
 
-## 👤 Autor
+## 📄 License
+
+This project is under the MIT license. See the [LICENSE](LICENSE) file for more details.
+
+---
+
+## 👤 Author
 
 **Abner Fonseca**
 - LinkedIn: [linkedin.com/in/abnerfonseca](https://www.linkedin.com/in/abner-fonseca-25658b67)
@@ -409,14 +413,14 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 
 ---
 
-## ⭐ Gostou?
+## ⭐ Like it?
 
-Se este projeto te ajudou, deixa uma ⭐ no repositório!
+If this project helped you, leave a ⭐ on the repository!
 
 ---
 
 <div align="center">
 
-**Feito com ❤️ para a comunidade de Data Engineering brasileira**
+**Made with ❤️ for the Brazilian Data Engineering community**
 
 </div>
