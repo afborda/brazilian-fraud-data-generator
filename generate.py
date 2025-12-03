@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🇧🇷 BRAZILIAN FRAUD DATA GENERATOR
-===================================
+🇧🇷 BRAZILIAN FRAUD DATA GENERATOR v2.0
+=======================================
 Generate realistic Brazilian financial transaction data for testing,
 development, and machine learning model training.
 
@@ -10,11 +10,15 @@ Features:
 - Configurable fraud patterns
 - Parallel generation for high throughput
 - JSON Lines output format
+- Reproducible data with seed support
 
 Usage:
     python3 generate.py --size 1GB --workers 4 --output ./output
     python3 generate.py --size 50GB --fraud-rate 0.01
+    python3 generate.py --size 1GB --seed 42  # Reproducible
 """
+
+__version__ = "2.0.0"
 
 import json
 import random
@@ -33,112 +37,299 @@ TARGET_FILE_SIZE_MB = 128  # Each file will be ~128MB
 BYTES_PER_TRANSACTION = 1050  # ~1KB per JSON transaction (measured)
 TRANSACTIONS_PER_FILE = (TARGET_FILE_SIZE_MB * 1024 * 1024) // BYTES_PER_TRANSACTION
 
-# Brazilian bank codes (Código COMPE)
-BANK_CODES = [
-    '001',  # Banco do Brasil
-    '033',  # Santander
-    '104',  # Caixa Econômica Federal
-    '237',  # Bradesco
-    '341',  # Itaú
-    '260',  # Nubank
-    '077',  # Inter
-    '336',  # C6 Bank
-    '290',  # PagBank
-    '380',  # PicPay
-    '323',  # Mercado Pago
-    '403',  # Cora
-    '212',  # Banco Original
-]
-
-# MCC codes with categories and risk levels
-MCC_CODES = {
-    '5411': ('Supermercados', 'low'),
-    '5541': ('Postos de Combustível', 'low'),
-    '5812': ('Restaurantes', 'low'),
-    '5814': ('Fast Food', 'low'),
-    '5912': ('Farmácias', 'low'),
-    '5311': ('Lojas de Departamento', 'medium'),
-    '5651': ('Vestuário', 'medium'),
-    '5732': ('Eletrônicos', 'high'),
-    '5944': ('Joalherias', 'high'),
-    '5999': ('Diversos', 'medium'),
-    '7011': ('Hotéis', 'medium'),
-    '4111': ('Transporte', 'low'),
-    '6011': ('Caixa Eletrônico', 'medium'),
-    '7995': ('Apostas/Cassino', 'high'),
+# Brazilian bank codes with names (Código COMPE/ISPB) - Top 25 banks by market share
+BANKS = {
+    '001': {'nome': 'Banco do Brasil', 'tipo': 'publico', 'peso': 15},
+    '033': {'nome': 'Santander Brasil', 'tipo': 'privado', 'peso': 10},
+    '104': {'nome': 'Caixa Econômica Federal', 'tipo': 'publico', 'peso': 14},
+    '237': {'nome': 'Bradesco', 'tipo': 'privado', 'peso': 12},
+    '341': {'nome': 'Itaú Unibanco', 'tipo': 'privado', 'peso': 15},
+    '260': {'nome': 'Nubank', 'tipo': 'digital', 'peso': 10},
+    '077': {'nome': 'Banco Inter', 'tipo': 'digital', 'peso': 5},
+    '336': {'nome': 'C6 Bank', 'tipo': 'digital', 'peso': 4},
+    '290': {'nome': 'PagBank', 'tipo': 'digital', 'peso': 3},
+    '380': {'nome': 'PicPay', 'tipo': 'digital', 'peso': 2},
+    '323': {'nome': 'Mercado Pago', 'tipo': 'digital', 'peso': 2},
+    '403': {'nome': 'Cora', 'tipo': 'digital', 'peso': 1},
+    '212': {'nome': 'Banco Original', 'tipo': 'digital', 'peso': 1},
+    '756': {'nome': 'Sicoob', 'tipo': 'cooperativa', 'peso': 2},
+    '748': {'nome': 'Sicredi', 'tipo': 'cooperativa', 'peso': 2},
+    '422': {'nome': 'Safra', 'tipo': 'privado', 'peso': 1},
+    '070': {'nome': 'BRB', 'tipo': 'publico', 'peso': 1},
 }
 
-# Brazilian merchants
-MERCHANTS = [
-    # Supermarkets
-    'Supermercado Extra', 'Carrefour', 'Pão de Açúcar', 'Assaí Atacadista',
-    # Gas stations
-    'Posto Shell', 'Posto Ipiranga', 'Posto BR',
-    # Food delivery
-    'iFood', 'Rappi', 'Uber Eats',
-    # Fast food
-    'McDonald\'s', 'Burger King', 'Subway', 'Bob\'s',
-    # Pharmacies
-    'Drogasil', 'Droga Raia', 'Pacheco',
-    # Clothing
-    'Renner', 'C&A', 'Riachuelo', 'Zara',
-    # Electronics/Retail
-    'Magazine Luiza', 'Casas Bahia', 'Amazon Brasil', 'Mercado Livre', 'Americanas',
-    # Travel
-    'Hotel Ibis', 'Booking.com', 'Airbnb',
-    # Transport
-    '99', 'Uber', 'Cabify',
-]
+BANK_CODES = list(BANKS.keys())
+BANK_WEIGHTS = [BANKS[code]['peso'] for code in BANK_CODES]
 
-# Transaction types (PIX weighted higher - realistic for Brazil)
-TRANSACTION_TYPES = ['PIX', 'PIX', 'PIX', 'PIX', 'CARTAO_CREDITO', 'CARTAO_CREDITO', 
-                     'CARTAO_DEBITO', 'TED', 'BOLETO', 'SAQUE']
+# MCC codes with categories, risk levels and typical value ranges
+MCC_CODES = {
+    # Alimentação (muito comum)
+    '5411': {'categoria': 'Supermercados', 'risco': 'low', 'valor_min': 15, 'valor_max': 800, 'peso': 20},
+    '5812': {'categoria': 'Restaurantes', 'risco': 'low', 'valor_min': 20, 'valor_max': 300, 'peso': 15},
+    '5814': {'categoria': 'Fast Food', 'risco': 'low', 'valor_min': 15, 'valor_max': 100, 'peso': 12},
+    '5499': {'categoria': 'Conveniência/Mercado', 'risco': 'low', 'valor_min': 5, 'valor_max': 150, 'peso': 8},
+    # Combustível e transporte
+    '5541': {'categoria': 'Postos de Combustível', 'risco': 'low', 'valor_min': 50, 'valor_max': 500, 'peso': 10},
+    '4121': {'categoria': 'Uber/99/Táxi', 'risco': 'low', 'valor_min': 8, 'valor_max': 150, 'peso': 8},
+    '4131': {'categoria': 'Transporte Público', 'risco': 'low', 'valor_min': 4, 'valor_max': 20, 'peso': 5},
+    # Saúde
+    '5912': {'categoria': 'Farmácias', 'risco': 'low', 'valor_min': 10, 'valor_max': 500, 'peso': 6},
+    '8011': {'categoria': 'Médicos/Clínicas', 'risco': 'low', 'valor_min': 100, 'valor_max': 1500, 'peso': 2},
+    # Varejo
+    '5311': {'categoria': 'Lojas de Departamento', 'risco': 'medium', 'valor_min': 30, 'valor_max': 2000, 'peso': 4},
+    '5651': {'categoria': 'Vestuário', 'risco': 'medium', 'valor_min': 50, 'valor_max': 1000, 'peso': 4},
+    '5732': {'categoria': 'Eletrônicos', 'risco': 'high', 'valor_min': 100, 'valor_max': 8000, 'peso': 2},
+    '5944': {'categoria': 'Joalherias', 'risco': 'high', 'valor_min': 200, 'valor_max': 15000, 'peso': 1},
+    # Serviços
+    '4900': {'categoria': 'Utilidades (Água/Luz/Gás)', 'risco': 'low', 'valor_min': 50, 'valor_max': 800, 'peso': 5},
+    '4814': {'categoria': 'Telecomunicações', 'risco': 'low', 'valor_min': 50, 'valor_max': 300, 'peso': 4},
+    '5977': {'categoria': 'Cosméticos/Perfumaria', 'risco': 'medium', 'valor_min': 30, 'valor_max': 500, 'peso': 2},
+    # Alto risco
+    '7995': {'categoria': 'Apostas/Jogos', 'risco': 'high', 'valor_min': 20, 'valor_max': 5000, 'peso': 1},
+    '6011': {'categoria': 'Saque/ATM', 'risco': 'medium', 'valor_min': 20, 'valor_max': 3000, 'peso': 3},
+    # Viagem
+    '7011': {'categoria': 'Hotéis', 'risco': 'medium', 'valor_min': 150, 'valor_max': 2000, 'peso': 1},
+    '4511': {'categoria': 'Companhias Aéreas', 'risco': 'medium', 'valor_min': 200, 'valor_max': 5000, 'peso': 1},
+    # Streaming/Digital
+    '5815': {'categoria': 'Serviços Digitais', 'risco': 'low', 'valor_min': 10, 'valor_max': 100, 'peso': 3},
+}
 
-# Channels
-CHANNELS = ['APP_MOBILE', 'APP_MOBILE', 'APP_MOBILE', 'WEB_BANKING', 'ATM', 'AGENCIA']
+MCC_LIST = list(MCC_CODES.keys())
+MCC_WEIGHTS = [MCC_CODES[mcc]['peso'] for mcc in MCC_LIST]
 
-# Fraud types
-FRAUD_TYPES = [
-    'CARTAO_CLONADO',       # Cloned card
-    'CONTA_TOMADA',         # Account takeover
-    'IDENTIDADE_FALSA',     # Identity fraud
-    'ENGENHARIA_SOCIAL',    # Social engineering
-    'LAVAGEM_DINHEIRO',     # Money laundering
-    'AUTOFRAUDE',           # First-party fraud
-    'FRAUDE_AMIGAVEL',      # Friendly fraud
-    'TRIANGULACAO',         # Triangulation fraud
-]
+# Brazilian merchants with MCC mapping
+MERCHANTS_BY_MCC = {
+    '5411': ['Carrefour', 'Pão de Açúcar', 'Extra', 'Assaí', 'Atacadão', 'Big', 'Zaffari', 'Savegnago', 'Dia', 'Guanabara'],
+    '5812': ['Outback', 'Coco Bambu', 'Madero', 'Applebees', 'Fogo de Chão', 'Paris 6', 'Cosi', 'Lanchonete Local', 'Bar do Zé', 'Restaurante Familiar'],
+    '5814': ['McDonalds', 'Burger King', 'Subway', 'Bobs', 'Habibs', 'Giraffas', 'Spoleto', 'China in Box', 'Pizza Hut', 'KFC'],
+    '5499': ['Am Pm', 'BR Mania', 'Select', 'Oxxo', 'Minuto Pão de Açúcar', 'Carrefour Express', 'Hortifruti', 'Quitanda Local', 'Mercearia', 'Empório'],
+    '5541': ['Shell', 'Ipiranga', 'BR Petrobras', 'Ale', 'Total', 'Repsol', 'Esso', 'Cosan', 'Posto Cidade', 'Auto Posto'],
+    '4121': ['Uber', '99', 'Cabify', 'InDriver', '99 Pop', 'Uber Black', 'Lady Driver', 'Taxi Comum', 'Garupa', 'Buser'],
+    '4131': ['SPTrans', 'RioCard', 'BHTrans', 'Urbs Curitiba', 'MetroSP', 'MetroRio', 'CPTM', 'ViaQuatro', 'CCR Metrô', 'Linha 4'],
+    '5912': ['Drogasil', 'Droga Raia', 'Pacheco', 'Pague Menos', 'Drogaria São Paulo', 'Panvel', 'Venancio', 'Ultrafarma', 'Araújo', 'Nissei'],
+    '8011': ['Fleury', 'Dasa', 'Hermes Pardini', 'Einstein', 'Sírio-Libanês', 'Clínica Popular', 'Dr. Consulta', 'Labi Exames', 'Lavoisier', 'CDB'],
+    '5311': ['Renner', 'C&A', 'Riachuelo', 'Magazine Luiza', 'Casas Bahia', 'Americanas', 'Shoptime', 'Pernambucanas', 'Havan', 'Besni'],
+    '5651': ['Zara', 'Forever 21', 'Marisa', 'Centauro', 'Netshoes', 'Dafiti', 'Arezzo', 'Vivara', 'Farm', 'Animale'],
+    '5732': ['Magazine Luiza', 'Casas Bahia', 'Fast Shop', 'Ponto Frio', 'Amazon', 'Mercado Livre', 'Kabum', 'Terabyte', 'Girafa', 'Saraiva'],
+    '5944': ['Vivara', 'Pandora', 'Monte Carlo', 'HStern', 'Swarovski', 'Natan', 'Tiffany', 'Cartier', 'Joalheria Local', 'Ourives'],
+    '4900': ['Enel', 'Light', 'CPFL', 'Copel', 'Celesc', 'Sabesp', 'Cedae', 'Comgás', 'Naturgy', 'Elektro'],
+    '4814': ['Vivo', 'Claro', 'Tim', 'Oi', 'NET', 'Sky', 'Nextel', 'Algar', 'Sercomtel', 'Brisanet'],
+    '5977': ['O Boticário', 'Natura', 'Sephora', 'MAC', 'Quem Disse Berenice', 'Avon', 'Eudora', 'LOccitane', 'The Body Shop', 'Época Cosméticos'],
+    '7995': ['Bet365', 'Betano', 'Sportingbet', 'Betfair', 'Pixbet', 'Stake', 'Blaze', 'Galera Bet', 'EstrelaBet', 'Novibet'],
+    '6011': ['Banco 24 Horas', 'ATM Bradesco', 'ATM Itaú', 'ATM Santander', 'ATM Caixa', 'ATM BB', 'Saque Nubank', 'Saque Inter', 'Saque PicPay', 'ATM Sicredi'],
+    '7011': ['Ibis', 'Mercure', 'Novotel', 'Quality', 'Comfort', 'Holiday Inn', 'Hilton', 'Grand Hyatt', 'Blue Tree', 'Slaviero'],
+    '4511': ['LATAM', 'GOL', 'Azul', 'Avianca', 'TAP', 'American Airlines', 'Emirates', 'Copa Airlines', 'Air France', 'KLM'],
+    '5815': ['Netflix', 'Spotify', 'Amazon Prime', 'Disney+', 'HBO Max', 'Globoplay', 'Deezer', 'Apple Music', 'YouTube Premium', 'Paramount+'],
+}
 
-# PIX key types
-PIX_KEY_TYPES = ['CPF', 'EMAIL', 'TELEFONE', 'ALEATORIA', 'CNPJ']
+# Transaction types (PIX weighted higher - realistic for Brazil 2024)
+TRANSACTION_TYPES = {
+    'PIX': 45,            # 45% - PIX dominates Brazil
+    'CARTAO_CREDITO': 25, # 25% - Credit card
+    'CARTAO_DEBITO': 15,  # 15% - Debit card
+    'BOLETO': 8,          # 8%  - Bank slip
+    'TED': 4,             # 4%  - Wire transfer
+    'SAQUE': 3,           # 3%  - Cash withdrawal (decreasing)
+}
 
-# Card brands
-CARD_BRANDS = ['VISA', 'MASTERCARD', 'ELO', 'AMEX', 'HIPERCARD']
+TX_TYPES_LIST = list(TRANSACTION_TYPES.keys())
+TX_TYPES_WEIGHTS = list(TRANSACTION_TYPES.values())
+
+# Channels with realistic weights
+CHANNELS = {
+    'APP_MOBILE': 60,    # 60% - Mobile dominates
+    'WEB_BANKING': 25,   # 25% - Desktop banking
+    'ATM': 8,            # 8%  - ATM (decreasing)
+    'AGENCIA': 5,        # 5%  - Branch (rare)
+    'WHATSAPP_PAY': 2,   # 2%  - WhatsApp payments
+}
+
+CHANNELS_LIST = list(CHANNELS.keys())
+CHANNELS_WEIGHTS = list(CHANNELS.values())
+
+# Fraud types with realistic distribution
+FRAUD_TYPES = {
+    'ENGENHARIA_SOCIAL': 25,    # Social engineering - most common
+    'CONTA_TOMADA': 20,         # Account takeover
+    'CARTAO_CLONADO': 18,       # Cloned card
+    'IDENTIDADE_FALSA': 12,     # Identity fraud
+    'AUTOFRAUDE': 10,           # First-party fraud
+    'FRAUDE_AMIGAVEL': 7,       # Friendly fraud
+    'LAVAGEM_DINHEIRO': 5,      # Money laundering
+    'TRIANGULACAO': 3,          # Triangulation fraud
+}
+
+FRAUD_TYPES_LIST = list(FRAUD_TYPES.keys())
+FRAUD_TYPES_WEIGHTS = list(FRAUD_TYPES.values())
+
+# PIX key types with realistic distribution
+PIX_KEY_TYPES = {
+    'CPF': 35,
+    'TELEFONE': 30,
+    'EMAIL': 20,
+    'ALEATORIA': 10,
+    'CNPJ': 5,
+}
+
+PIX_TYPES_LIST = list(PIX_KEY_TYPES.keys())
+PIX_TYPES_WEIGHTS = list(PIX_KEY_TYPES.values())
+
+# Card brands with market share in Brazil
+CARD_BRANDS = {
+    'VISA': 40,
+    'MASTERCARD': 40,
+    'ELO': 15,
+    'HIPERCARD': 3,
+    'AMEX': 2,
+}
+
+BRANDS_LIST = list(CARD_BRANDS.keys())
+BRANDS_WEIGHTS = list(CARD_BRANDS.values())
+
+# Brazilian states with coordinates (centro aproximado) and population weight
+ESTADOS_BR = {
+    'SP': {'lat': -23.55, 'lon': -46.64, 'peso': 22},
+    'RJ': {'lat': -22.91, 'lon': -43.17, 'peso': 8},
+    'MG': {'lat': -19.92, 'lon': -43.94, 'peso': 10},
+    'BA': {'lat': -12.97, 'lon': -38.51, 'peso': 7},
+    'RS': {'lat': -30.03, 'lon': -51.23, 'peso': 6},
+    'PR': {'lat': -25.43, 'lon': -49.27, 'peso': 6},
+    'PE': {'lat': -8.05, 'lon': -34.88, 'peso': 5},
+    'CE': {'lat': -3.72, 'lon': -38.54, 'peso': 4},
+    'PA': {'lat': -1.46, 'lon': -48.50, 'peso': 4},
+    'SC': {'lat': -27.60, 'lon': -48.55, 'peso': 4},
+    'GO': {'lat': -16.68, 'lon': -49.25, 'peso': 4},
+    'MA': {'lat': -2.53, 'lon': -44.27, 'peso': 3},
+    'PB': {'lat': -7.12, 'lon': -34.86, 'peso': 2},
+    'ES': {'lat': -20.32, 'lon': -40.34, 'peso': 2},
+    'AM': {'lat': -3.10, 'lon': -60.02, 'peso': 2},
+    'RN': {'lat': -5.79, 'lon': -35.21, 'peso': 2},
+    'PI': {'lat': -5.09, 'lon': -42.80, 'peso': 2},
+    'AL': {'lat': -9.67, 'lon': -35.74, 'peso': 2},
+    'MT': {'lat': -15.60, 'lon': -56.10, 'peso': 2},
+    'MS': {'lat': -20.44, 'lon': -54.65, 'peso': 1},
+    'DF': {'lat': -15.78, 'lon': -47.93, 'peso': 2},
+    'SE': {'lat': -10.91, 'lon': -37.07, 'peso': 1},
+    'RO': {'lat': -8.76, 'lon': -63.90, 'peso': 1},
+    'TO': {'lat': -10.18, 'lon': -48.33, 'peso': 1},
+    'AC': {'lat': -9.97, 'lon': -67.81, 'peso': 0.5},
+    'AP': {'lat': 0.03, 'lon': -51.05, 'peso': 0.5},
+    'RR': {'lat': 2.82, 'lon': -60.67, 'peso': 0.5},
+}
+
+ESTADOS_LIST = list(ESTADOS_BR.keys())
+ESTADOS_WEIGHTS = [ESTADOS_BR[e]['peso'] for e in ESTADOS_LIST]
+
+# Device types with realistic distribution
+DEVICE_TYPES = {
+    'SMARTPHONE_ANDROID': 55,
+    'SMARTPHONE_IOS': 25,
+    'DESKTOP_WINDOWS': 12,
+    'DESKTOP_MAC': 4,
+    'TABLET_ANDROID': 2,
+    'TABLET_IOS': 2,
+}
+
+DEVICE_TYPES_LIST = list(DEVICE_TYPES.keys())
+DEVICE_TYPES_WEIGHTS = list(DEVICE_TYPES.values())
+
+# Device manufacturers
+DEVICE_MANUFACTURERS = {
+    'SMARTPHONE_ANDROID': ['Samsung', 'Motorola', 'Xiaomi', 'LG', 'ASUS', 'Realme', 'POCO', 'OnePlus'],
+    'SMARTPHONE_IOS': ['Apple'],
+    'DESKTOP_WINDOWS': ['Dell', 'HP', 'Lenovo', 'ASUS', 'Acer', 'Positivo', 'Samsung'],
+    'DESKTOP_MAC': ['Apple'],
+    'TABLET_ANDROID': ['Samsung', 'Xiaomi', 'Lenovo', 'Multilaser'],
+    'TABLET_IOS': ['Apple'],
+}
 
 
 def generate_ip_brazil():
-    """Generate Brazilian IP address"""
-    # Common Brazilian IP prefixes
-    prefix = random.choice(['177.', '187.', '189.', '191.', '200.', '201.'])
+    """Generate Brazilian IP address from common ISP ranges"""
+    # Brazilian IP ranges by major ISPs
+    prefixes = [
+        '177.', '187.', '189.', '191.', '200.', '201.',  # Common
+        '179.', '186.', '188.', '190.', '170.',          # Also common
+        '138.', '143.', '152.', '168.',                  # Corporate/ISP
+    ]
+    prefix = random.choice(prefixes)
     return prefix + '.'.join(str(random.randint(0, 255)) for _ in range(3))
 
 
-def generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fraud_type, fake):
-    """Generate a single transaction"""
-    tx_type = random.choice(TRANSACTION_TYPES)
-    mcc_code = random.choice(list(MCC_CODES.keys()))
-    mcc_cat, mcc_risk = MCC_CODES[mcc_code]
+def generate_realistic_timestamp(start_date, end_date):
+    """Generate timestamp with realistic patterns (more activity during business hours)"""
+    # Pick a random day
+    days_between = (end_date - start_date).days
+    random_day = start_date + timedelta(days=random.randint(0, days_between))
     
-    # Value based on fraud status
+    # Hour distribution (weighted towards business/evening hours)
+    hour_weights = {
+        0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,           # Late night (low)
+        6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,     # Morning (rising)
+        12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,  # Afternoon (peak)
+        18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4  # Evening (declining)
+    }
+    hours = list(hour_weights.keys())
+    weights = list(hour_weights.values())
+    hour = random.choices(hours, weights=weights)[0]
+    
+    minute = random.randint(0, 59)
+    second = random.randint(0, 59)
+    microsecond = random.randint(0, 999999)
+    
+    return random_day.replace(hour=hour, minute=minute, second=second, microsecond=microsecond)
+
+
+def generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fraud_type, customer_state=None):
+    """Generate a single transaction with realistic Brazilian patterns"""
+    
+    # Select MCC based on weights
+    mcc_code = random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
+    mcc_info = MCC_CODES[mcc_code]
+    
+    # Transaction type
+    tx_type = random.choices(TX_TYPES_LIST, weights=TX_TYPES_WEIGHTS)[0]
+    
+    # Value based on MCC category and fraud status
     if is_fraud:
         # Fraudsters tend to make higher value transactions
-        valor = round(random.uniform(500, 15000), 2)
+        if fraud_type in ['LAVAGEM_DINHEIRO', 'TRIANGULACAO']:
+            valor = round(random.uniform(5000, 50000), 2)
+        elif fraud_type in ['CARTAO_CLONADO', 'CONTA_TOMADA']:
+            valor = round(random.uniform(500, 10000), 2)
+        else:
+            valor = round(random.uniform(200, 5000), 2)
     else:
-        # Normal distribution for legitimate transactions
-        valor = round(random.choices(
-            [random.uniform(5, 100), random.uniform(100, 500), random.uniform(500, 2000), random.uniform(2000, 10000)],
-            weights=[50, 30, 15, 5]
-        )[0], 2)
+        # Normal distribution based on MCC typical values
+        valor_min = mcc_info['valor_min']
+        valor_max = mcc_info['valor_max']
+        # Use log-normal for more realistic distribution (more small, fewer large)
+        mean = (valor_min + valor_max) / 3  # Skew towards lower values
+        valor = round(min(max(random.gauss(mean, mean/2), valor_min), valor_max), 2)
+    
+    # Get appropriate merchant for MCC
+    merchants_for_mcc = MERCHANTS_BY_MCC.get(mcc_code, ['Estabelecimento Local'])
+    merchant_name = random.choice(merchants_for_mcc)
+    
+    # Geolocation based on customer state or random
+    if customer_state and customer_state in ESTADOS_BR:
+        estado_info = ESTADOS_BR[customer_state]
+        base_lat, base_lon = estado_info['lat'], estado_info['lon']
+        # Add small random offset (within ~50km)
+        lat = round(base_lat + random.uniform(-0.5, 0.5), 6)
+        lon = round(base_lon + random.uniform(-0.5, 0.5), 6)
+    else:
+        # Random state weighted by population
+        estado = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
+        estado_info = ESTADOS_BR[estado]
+        lat = round(estado_info['lat'] + random.uniform(-1, 1), 6)
+        lon = round(estado_info['lon'] + random.uniform(-1, 1), 6)
+    
+    # Channel selection
+    canal = random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
+    
+    # Bank selection for destination
+    banco_destino = random.choices(BANK_CODES, weights=BANK_WEIGHTS)[0]
     
     tx = {
         'transaction_id': f'TXN_{tx_id:015d}',
@@ -149,33 +340,34 @@ def generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fra
         'tipo': tx_type,
         'valor': valor,
         'moeda': 'BRL',
-        'canal': random.choice(CHANNELS),
+        'canal': canal,
         'ip_address': generate_ip_brazil(),
-        # Brazilian geographical coordinates
-        'geolocalizacao_lat': round(random.uniform(-33.75, 5.27), 6),
-        'geolocalizacao_lon': round(random.uniform(-73.99, -34.79), 6),
+        'geolocalizacao_lat': lat,
+        'geolocalizacao_lon': lon,
         'merchant_id': f'MERCH_{random.randint(1, 100000):06d}',
-        'merchant_name': random.choice(MERCHANTS),
-        'merchant_category': mcc_cat,
+        'merchant_name': merchant_name,
+        'merchant_category': mcc_info['categoria'],
         'mcc_code': mcc_code,
-        'mcc_risk_level': mcc_risk,
+        'mcc_risk_level': mcc_info['risco'],
     }
     
     # Type-specific fields
     if tx_type in ['CARTAO_CREDITO', 'CARTAO_DEBITO']:
+        bandeira = random.choices(BRANDS_LIST, weights=BRANDS_WEIGHTS)[0]
         tx.update({
-            'numero_cartao_hash': hashlib.md5(str(random.random()).encode()).hexdigest()[:16],
-            'bandeira': random.choice(CARD_BRANDS),
+            'numero_cartao_hash': hashlib.sha256(str(random.random()).encode()).hexdigest()[:16],
+            'bandeira': bandeira,
             'tipo_cartao': 'CREDITO' if tx_type == 'CARTAO_CREDITO' else 'DEBITO',
-            'parcelas': random.choice([1, 1, 1, 2, 3, 6, 12]) if tx_type == 'CARTAO_CREDITO' else 1,
-            'entrada_cartao': random.choice(['CHIP', 'CONTACTLESS', 'DIGITADO', 'MAGNETICO']),
-            'cvv_validado': random.choice([True, True, True, False]),
-            'autenticacao_3ds': random.choice([True, False]),
+            'parcelas': random.choices([1, 2, 3, 4, 5, 6, 10, 12], weights=[50, 10, 10, 5, 5, 10, 5, 5])[0] if tx_type == 'CARTAO_CREDITO' else 1,
+            'entrada_cartao': random.choices(['CHIP', 'CONTACTLESS', 'DIGITADO', 'MAGNETICO'], weights=[40, 35, 20, 5])[0],
+            'cvv_validado': random.choices([True, False], weights=[95, 5])[0],
+            'autenticacao_3ds': random.choices([True, False], weights=[70, 30])[0],
             'chave_pix_tipo': None,
             'chave_pix_destino': None,
             'banco_destino': None,
         })
     elif tx_type == 'PIX':
+        pix_tipo = random.choices(PIX_TYPES_LIST, weights=PIX_TYPES_WEIGHTS)[0]
         tx.update({
             'numero_cartao_hash': None,
             'bandeira': None,
@@ -184,9 +376,9 @@ def generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fra
             'entrada_cartao': None,
             'cvv_validado': None,
             'autenticacao_3ds': None,
-            'chave_pix_tipo': random.choice(PIX_KEY_TYPES),
-            'chave_pix_destino': fake.email() if random.random() > 0.5 else fake.cpf(),
-            'banco_destino': random.choice(BANK_CODES),
+            'chave_pix_tipo': pix_tipo,
+            'chave_pix_destino': hashlib.sha256(str(random.random()).encode()).hexdigest()[:32],
+            'banco_destino': banco_destino,
         })
     else:
         tx.update({
@@ -199,20 +391,41 @@ def generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fra
             'autenticacao_3ds': None,
             'chave_pix_tipo': None,
             'chave_pix_destino': None,
-            'banco_destino': random.choice(BANK_CODES) if tx_type in ['TED', 'DOC'] else None,
+            'banco_destino': banco_destino if tx_type in ['TED', 'BOLETO'] else None,
         })
     
     # Risk indicators
+    hour = timestamp.hour
+    horario_incomum = hour < 6 or hour > 23  # Unusual: before 6am or after 11pm
+    
+    # Fraud indicators affect transaction patterns
+    if is_fraud:
+        status = random.choices(
+            ['APROVADA', 'RECUSADA', 'PENDENTE', 'BLOQUEADA'],
+            weights=[60, 25, 10, 5]
+        )[0]
+        fraud_score = round(random.uniform(65, 100), 2)
+        transacoes_24h = random.randint(5, 50)  # Fraudsters do many transactions
+        valor_acumulado = round(random.uniform(2000, 50000), 2)
+    else:
+        status = random.choices(
+            ['APROVADA', 'RECUSADA', 'PENDENTE'],
+            weights=[96, 3, 1]
+        )[0]
+        fraud_score = round(random.uniform(0, 35), 2)
+        transacoes_24h = random.randint(1, 15)
+        valor_acumulado = round(random.uniform(50, 5000), 2)
+    
     tx.update({
-        'distancia_ultima_transacao_km': round(random.uniform(0, 500), 2) if random.random() > 0.7 else None,
-        'tempo_desde_ultima_transacao_min': random.randint(1, 1440) if random.random() > 0.5 else None,
-        'transacoes_ultimas_24h': random.randint(1, 30),
-        'valor_acumulado_24h': round(random.uniform(100, 10000), 2),
-        'horario_incomum': random.random() < 0.1,
-        'novo_beneficiario': random.random() < 0.2,
-        'status': 'APROVADA' if not is_fraud or random.random() > 0.3 else random.choice(['RECUSADA', 'PENDENTE', 'BLOQUEADA']),
-        'motivo_recusa': random.choice(['SALDO_INSUFICIENTE', 'SUSPEITA_FRAUDE', 'LIMITE_EXCEDIDO', 'ERRO_COMUNICACAO']) if random.random() < 0.05 else None,
-        'fraud_score': round(random.uniform(70, 100), 2) if is_fraud else round(random.uniform(0, 30), 2),
+        'distancia_ultima_transacao_km': round(random.uniform(0, 100), 2) if random.random() > 0.5 else None,
+        'tempo_desde_ultima_transacao_min': random.randint(1, 1440) if random.random() > 0.3 else None,
+        'transacoes_ultimas_24h': transacoes_24h,
+        'valor_acumulado_24h': valor_acumulado,
+        'horario_incomum': horario_incomum,
+        'novo_beneficiario': random.random() < (0.7 if is_fraud else 0.15),  # Frauds often go to new beneficiaries
+        'status': status,
+        'motivo_recusa': random.choice(['SALDO_INSUFICIENTE', 'SUSPEITA_FRAUDE', 'LIMITE_EXCEDIDO', 'CARTAO_BLOQUEADO', 'ERRO_CVV']) if status == 'RECUSADA' else None,
+        'fraud_score': fraud_score,
         'is_fraud': is_fraud,
         'fraud_type': fraud_type,
     })
@@ -220,9 +433,63 @@ def generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fra
     return tx
 
 
+def generate_device(device_id, customer_id, fake):
+    """Generate a device with realistic data"""
+    device_type = random.choices(DEVICE_TYPES_LIST, weights=DEVICE_TYPES_WEIGHTS)[0]
+    manufacturers = DEVICE_MANUFACTURERS[device_type]
+    manufacturer = random.choice(manufacturers)
+    
+    # Model names by manufacturer
+    models = {
+        'Samsung': ['Galaxy S23', 'Galaxy S22', 'Galaxy A54', 'Galaxy A34', 'Galaxy M54'],
+        'Motorola': ['Edge 40', 'G84', 'G54', 'E22', 'G32'],
+        'Xiaomi': ['Redmi Note 12', 'Redmi 12C', 'POCO X5', 'Mi 11', 'Redmi Note 11'],
+        'Apple': ['iPhone 15', 'iPhone 14', 'iPhone 13', 'iPhone SE', 'iPad Pro', 'iPad Air', 'MacBook Pro', 'MacBook Air', 'iMac'],
+        'LG': ['K62', 'K52', 'K42', 'Velvet'],
+        'Dell': ['Inspiron 15', 'XPS 13', 'Latitude', 'Vostro'],
+        'HP': ['Pavilion', 'Spectre', 'EliteBook', 'ProBook'],
+        'Lenovo': ['IdeaPad', 'ThinkPad', 'Legion', 'Yoga'],
+        'ASUS': ['ZenBook', 'VivoBook', 'ROG', 'TUF Gaming'],
+        'Acer': ['Aspire', 'Swift', 'Nitro'],
+        'Positivo': ['Motion', 'Vision', 'Twist'],
+        'Multilaser': ['M10', 'M8', 'M7S'],
+        'Realme': ['C55', 'C33', '10 Pro'],
+        'POCO': ['X5 Pro', 'M5', 'F5'],
+        'OnePlus': ['11', 'Nord 3', '10T'],
+    }
+    
+    model = random.choice(models.get(manufacturer, ['Generic']))
+    
+    # OS based on device type
+    if 'ANDROID' in device_type:
+        os_name = f"Android {random.choice(['11', '12', '13', '14'])}"
+    elif 'IOS' in device_type or 'TABLET_IOS' in device_type:
+        os_name = f"iOS {random.choice(['16', '17', '17.1', '17.2'])}"
+    elif 'WINDOWS' in device_type:
+        os_name = f"Windows {random.choice(['10', '11'])}"
+    else:
+        os_name = f"macOS {random.choice(['Sonoma', 'Ventura', 'Monterey'])}"
+    
+    return {
+        'device_id': device_id,
+        'customer_id': customer_id,
+        'tipo': device_type.split('_')[0],
+        'fabricante': manufacturer,
+        'modelo': model,
+        'sistema_operacional': os_name,
+        'fingerprint': hashlib.sha256(f"{device_id}{random.random()}".encode()).hexdigest()[:32],
+        'primeiro_uso': fake.date_between(start_date='-2y', end_date='today').isoformat(),
+        'is_trusted': random.choices([True, False], weights=[85, 15])[0],
+        'is_rooted_jailbroken': random.choices([False, True], weights=[97, 3])[0],
+    }
+
+
 def generate_customer(customer_id, fake):
-    """Generate a single customer"""
+    """Generate a single customer with realistic Brazilian data"""
     created_date = fake.date_time_between(start_date='-5y', end_date='-1m')
+    
+    # State selection weighted by population
+    estado = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
     
     # Risk profile based on account age
     account_age_days = (datetime.now() - created_date).days
@@ -233,6 +500,23 @@ def generate_customer(customer_id, fake):
     else:
         risk_level = random.choices(['ALTO', 'MEDIO', 'BAIXO'], weights=[5, 25, 70])[0]
     
+    # Income distribution (realistic for Brazil)
+    renda = round(random.choices(
+        [random.uniform(1500, 3000), random.uniform(3000, 7000), random.uniform(7000, 15000), random.uniform(15000, 50000)],
+        weights=[40, 35, 18, 7]
+    )[0], 2)
+    
+    # Credit score correlates with income and account age
+    base_score = 300 + (account_age_days / 30) * 5  # Older accounts have better scores
+    if renda > 10000:
+        base_score += 100
+    elif renda > 5000:
+        base_score += 50
+    score = min(900, max(300, int(base_score + random.gauss(100, 50))))
+    
+    # Bank selection weighted
+    banco = random.choices(BANK_CODES, weights=BANK_WEIGHTS)[0]
+    
     return {
         'customer_id': customer_id,
         'nome': fake.name(),
@@ -242,17 +526,21 @@ def generate_customer(customer_id, fake):
         'data_nascimento': fake.date_of_birth(minimum_age=18, maximum_age=80).isoformat(),
         'endereco': {
             'logradouro': fake.street_address(),
+            'bairro': fake.bairro(),
             'cidade': fake.city(),
-            'estado': fake.estado_sigla(),
+            'estado': estado,
             'cep': fake.postcode(),
         },
+        'renda_mensal': renda,
+        'profissao': fake.job(),
         'conta_criada_em': created_date.isoformat(),
-        'tipo_conta': random.choice(['CORRENTE', 'POUPANCA', 'DIGITAL']),
+        'tipo_conta': random.choices(['CORRENTE', 'POUPANCA', 'DIGITAL'], weights=[40, 20, 40])[0],
         'status_conta': random.choices(['ATIVA', 'BLOQUEADA', 'INATIVA'], weights=[95, 3, 2])[0],
-        'limite_credito': round(random.uniform(500, 50000), 2),
-        'score_credito': random.randint(300, 900),
+        'limite_credito': round(renda * random.uniform(2, 8), 2),
+        'score_credito': score,
         'nivel_risco': risk_level,
-        'banco_codigo': random.choice(BANK_CODES),
+        'banco_codigo': banco,
+        'banco_nome': BANKS[banco]['nome'],
         'agencia': f'{random.randint(1, 9999):04d}',
         'numero_conta': f'{random.randint(10000, 999999)}-{random.randint(0, 9)}',
     }
@@ -260,29 +548,36 @@ def generate_customer(customer_id, fake):
 
 def worker_generate_batch(args):
     """Worker that generates a 128MB file"""
-    batch_id, num_transactions, customer_ids, device_ids, start_date, end_date, fraud_rate, output_dir = args
+    batch_id, num_transactions, customer_data, device_ids, start_date, end_date, fraud_rate, output_dir, seed = args
     
-    # Unique seed per worker for different data
-    seed = batch_id * 12345 + int(time.time() * 1000) % 10000
-    random.seed(seed)
-    fake = Faker('pt_BR')
-    Faker.seed(seed)
+    # Deterministic seed per worker for reproducibility
+    if seed is not None:
+        worker_seed = seed + batch_id * 12345
+    else:
+        worker_seed = batch_id * 12345 + int(time.time() * 1000) % 10000
+    
+    random.seed(worker_seed)
     
     output_path = os.path.join(output_dir, f'transactions_{batch_id:05d}.json')
     
     start_time = time.time()
     tx_id_start = batch_id * num_transactions
     
+    # Extract customer IDs and states
+    customer_ids = [c['customer_id'] for c in customer_data]
+    customer_states = {c['customer_id']: c.get('estado') for c in customer_data}
+    
     with open(output_path, 'w', encoding='utf-8') as f:
         for i in range(num_transactions):
             tx_id = tx_id_start + i
             customer_id = random.choice(customer_ids)
+            customer_state = customer_states.get(customer_id)
             device_id = random.choice(device_ids) if device_ids else None
-            timestamp = fake.date_time_between(start_date=start_date, end_date=end_date)
+            timestamp = generate_realistic_timestamp(start_date, end_date)
             is_fraud = random.random() < fraud_rate
-            fraud_type = random.choice(FRAUD_TYPES) if is_fraud else None
+            fraud_type = random.choices(FRAUD_TYPES_LIST, weights=FRAUD_TYPES_WEIGHTS)[0] if is_fraud else None
             
-            tx = generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fraud_type, fake)
+            tx = generate_transaction(tx_id, customer_id, device_id, timestamp, is_fraud, fraud_type, customer_state)
             f.write(json.dumps(tx, ensure_ascii=False) + '\n')
     
     elapsed = time.time() - start_time
@@ -291,36 +586,67 @@ def worker_generate_batch(args):
     return batch_id, num_transactions, file_size_mb, elapsed
 
 
-def generate_base_data(output_dir, num_customers=100000, num_devices=300000):
+def generate_base_data(output_dir, num_customers=100000, num_devices=None, quiet=False, seed=None):
     """Generate base customer and device data"""
+    if seed is not None:
+        random.seed(seed)
+        Faker.seed(seed)
+    
     fake = Faker('pt_BR')
+    
+    # Default devices = 3x customers
+    if num_devices is None:
+        num_devices = num_customers * 3
     
     # Generate customers
     customers_path = os.path.join(output_dir, 'customers.json')
-    print(f"\n👤 Generating {num_customers:,} customers...")
+    if not quiet:
+        print(f"\n👤 Generating {num_customers:,} customers...")
     
-    customer_ids = []
+    customer_data = []
     with open(customers_path, 'w', encoding='utf-8') as f:
         for i in range(1, num_customers + 1):
             customer_id = f'CUST_{i:08d}'
-            customer_ids.append(customer_id)
             customer = generate_customer(customer_id, fake)
+            customer_data.append({
+                'customer_id': customer_id,
+                'estado': customer['endereco']['estado']
+            })
             f.write(json.dumps(customer, ensure_ascii=False) + '\n')
             
-            if i % 10000 == 0:
+            if not quiet and i % 10000 == 0:
                 print(f"   ✓ {i:,} / {num_customers:,}", end='\r')
     
-    print(f"   ✓ {num_customers:,} customers saved to {customers_path}")
+    if not quiet:
+        print(f"   ✓ {num_customers:,} customers saved to {customers_path}")
     
-    # Generate device IDs
-    device_ids = [f'DEV_{i:08d}' for i in range(1, num_devices + 1)]
-    print(f"📱 Generated {num_devices:,} device IDs")
+    # Generate devices and save to file
+    devices_path = os.path.join(output_dir, 'devices.json')
+    if not quiet:
+        print(f"📱 Generating {num_devices:,} devices...")
     
-    return customer_ids, device_ids
+    device_ids = []
+    with open(devices_path, 'w', encoding='utf-8') as f:
+        for i in range(1, num_devices + 1):
+            device_id = f'DEV_{i:08d}'
+            device_ids.append(device_id)
+            # Associate device with a random customer
+            customer_id = customer_data[random.randint(0, len(customer_data) - 1)]['customer_id']
+            device = generate_device(device_id, customer_id, fake)
+            f.write(json.dumps(device, ensure_ascii=False) + '\n')
+            
+            if not quiet and i % 50000 == 0:
+                print(f"   ✓ {i:,} / {num_devices:,}", end='\r')
+    
+    if not quiet:
+        print(f"   ✓ {num_devices:,} devices saved to {devices_path}")
+    
+    return customer_data, device_ids
 
 
 def main():
     import argparse
+    from datetime import date
     
     parser = argparse.ArgumentParser(
         description='🇧🇷 Brazilian Fraud Data Generator - Generate realistic financial transaction data',
@@ -330,9 +656,11 @@ Examples:
   %(prog)s --size 1GB                    Generate 1GB of data
   %(prog)s --size 10GB --workers 8       Generate 10GB using 8 workers
   %(prog)s --size 50GB --fraud-rate 0.01 Generate 50GB with 1%% fraud
+  %(prog)s --seed 42                     Reproducible generation
   %(prog)s --customers-only              Generate only customer base data
+  %(prog)s --start-date 2024-01-01       Start from specific date
 
-GitHub: https://github.com/your-username/brazilian-fraud-data-generator
+GitHub: https://github.com/afborda/brazilian-fraud-data-generator
         """
     )
     parser.add_argument('--size', type=str, default='1GB', 
@@ -345,12 +673,27 @@ GitHub: https://github.com/your-username/brazilian-fraud-data-generator
                         help='Fraud rate (0.0-1.0). Default: 0.007 (0.7%%)')
     parser.add_argument('--customers', type=int, default=100000, 
                         help='Number of unique customers. Default: 100,000')
+    parser.add_argument('--devices', type=int, default=None,
+                        help='Number of devices. Default: 3x customers')
     parser.add_argument('--customers-only', action='store_true',
                         help='Generate only customer base data (no transactions)')
     parser.add_argument('--days', type=int, default=730,
                         help='Number of days of historical data. Default: 730 (2 years)')
+    parser.add_argument('--start-date', type=str, default=None,
+                        help='Start date (YYYY-MM-DD). Default: --days ago from today')
+    parser.add_argument('--end-date', type=str, default=None,
+                        help='End date (YYYY-MM-DD). Default: today')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Random seed for reproducibility')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='Quiet mode (minimal output)')
     
     args = parser.parse_args()
+    
+    # Set global seed if provided
+    if args.seed is not None:
+        random.seed(args.seed)
+        Faker.seed(args.seed)
     
     # Parse target size
     size_str = args.size.upper()
@@ -366,42 +709,70 @@ GitHub: https://github.com/your-username/brazilian-fraud-data-generator
     num_files = max(1, int(target_mb / TARGET_FILE_SIZE_MB))
     total_transactions = num_files * TRANSACTIONS_PER_FILE
     
-    print("=" * 70)
-    print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR")
-    print("=" * 70)
-    print(f"📊 Configuration:")
-    print(f"   • Target size: {target_gb:.1f} GB")
-    print(f"   • Files (128MB each): {num_files:,}")
-    print(f"   • Transactions per file: {TRANSACTIONS_PER_FILE:,}")
-    print(f"   • Total transactions: {total_transactions:,}")
-    print(f"   • Parallel workers: {args.workers}")
-    print(f"   • Fraud rate: {args.fraud_rate*100:.1f}%")
-    print(f"   • Expected frauds: ~{int(total_transactions * args.fraud_rate):,}")
-    print(f"   • Unique customers: {args.customers:,}")
-    print(f"   • Historical days: {args.days}")
-    print(f"   • Output: {os.path.abspath(args.output)}")
-    print("=" * 70)
+    # Parse dates
+    if args.end_date:
+        end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
+    else:
+        end_date = datetime.now()
+    
+    if args.start_date:
+        start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+    else:
+        start_date = end_date - timedelta(days=args.days)
+    
+    if not args.quiet:
+        print("=" * 70)
+        print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR")
+        print("=" * 70)
+        print(f"📊 Configuration:")
+        print(f"   • Target size: {target_gb:.1f} GB")
+        print(f"   • Files (128MB each): {num_files:,}")
+        print(f"   • Transactions per file: {TRANSACTIONS_PER_FILE:,}")
+        print(f"   • Total transactions: {total_transactions:,}")
+        print(f"   • Parallel workers: {args.workers}")
+        print(f"   • Fraud rate: {args.fraud_rate*100:.1f}%")
+        print(f"   • Expected frauds: ~{int(total_transactions * args.fraud_rate):,}")
+        print(f"   • Unique customers: {args.customers:,}")
+        print(f"   • Devices: {args.devices if args.devices else args.customers * 3:,}")
+        print(f"   • Date range: {start_date.date()} to {end_date.date()}")
+        if args.seed is not None:
+            print(f"   • Seed: {args.seed} (reproducible)")
+        print(f"   • Output: {os.path.abspath(args.output)}")
+        print("=" * 70)
     
     os.makedirs(args.output, exist_ok=True)
     
     # Generate or load base data
     customers_path = os.path.join(args.output, 'customers.json')
-    if os.path.exists(customers_path):
-        print(f"\n📂 Loading existing customers from {customers_path}...")
+    devices_path = os.path.join(args.output, 'devices.json')
+    
+    if os.path.exists(customers_path) and os.path.exists(devices_path):
+        if not args.quiet:
+            print(f"\n📂 Loading existing data from {args.output}...")
         with open(customers_path, 'r') as f:
-            customer_ids = [json.loads(line)['customer_id'] for line in f]
-        print(f"   ✓ {len(customer_ids):,} customers loaded")
-        device_ids = [f'DEV_{i:08d}' for i in range(1, 300001)]
+            customer_data = []
+            for line in f:
+                c = json.loads(line)
+                customer_data.append({
+                    'customer_id': c['customer_id'],
+                    'estado': c['endereco']['estado']
+                })
+        if not args.quiet:
+            print(f"   ✓ {len(customer_data):,} customers loaded")
+        
+        with open(devices_path, 'r') as f:
+            device_ids = [json.loads(line)['device_id'] for line in f]
+        if not args.quiet:
+            print(f"   ✓ {len(device_ids):,} devices loaded")
     else:
-        customer_ids, device_ids = generate_base_data(args.output, args.customers)
+        customer_data, device_ids = generate_base_data(
+            args.output, args.customers, args.devices, args.quiet, args.seed
+        )
     
     if args.customers_only:
-        print(f"\n✅ Customer data generated successfully!")
+        if not args.quiet:
+            print(f"\n✅ Customer and device data generated successfully!")
         return
-    
-    # Date range
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=args.days)
     
     # Check for existing transaction files
     existing_files = [f for f in os.listdir(args.output) if f.startswith('transactions_') and f.endswith('.json')]
@@ -415,8 +786,9 @@ GitHub: https://github.com/your-username/brazilian-fraud-data-generator
     current_size_gb = current_size_mb / 1024
     
     if current_size_gb >= target_gb * 0.99:
-        print(f"\n✅ Already have {current_size_gb:.2f} GB generated ({existing_count} files)!")
-        print(f"   Delete existing files to regenerate.")
+        if not args.quiet:
+            print(f"\n✅ Already have {current_size_gb:.2f} GB generated ({existing_count} files)!")
+            print(f"   Delete existing files to regenerate.")
         return
     
     # Calculate remaining files
@@ -424,19 +796,20 @@ GitHub: https://github.com/your-username/brazilian-fraud-data-generator
     remaining_files = int((remaining_gb * 1024) / TARGET_FILE_SIZE_MB) + 1
     start_batch = existing_count
     
-    if existing_count > 0:
+    if not args.quiet and existing_count > 0:
         print(f"\n🔄 Resuming: {current_size_gb:.2f} GB exists ({existing_count} files)")
         print(f"   Remaining: {remaining_gb:.2f} GB ({remaining_files} files)")
     
     # Prepare worker arguments
     batch_args = [
-        (start_batch + i, TRANSACTIONS_PER_FILE, customer_ids, device_ids, 
-         start_date, end_date, args.fraud_rate, args.output)
+        (start_batch + i, TRANSACTIONS_PER_FILE, customer_data, device_ids, 
+         start_date, end_date, args.fraud_rate, args.output, args.seed)
         for i in range(remaining_files)
     ]
     
-    print(f"\n💳 Generating {remaining_files:,} files of ~128MB...")
-    print(f"   🎯 Target: ~{remaining_files * TARGET_FILE_SIZE_MB / 1024:.1f} GB\n")
+    if not args.quiet:
+        print(f"\n💳 Generating {remaining_files:,} files of ~128MB...")
+        print(f"   🎯 Target: ~{remaining_files * TARGET_FILE_SIZE_MB / 1024:.1f} GB\n")
     
     # Execute in parallel
     start_time = time.time()
@@ -448,38 +821,51 @@ GitHub: https://github.com/your-username/brazilian-fraud-data-generator
             completed += 1
             total_mb += file_mb
             
-            # Progress bar
-            pct = (completed / remaining_files) * 100
-            elapsed_total = time.time() - start_time
-            rate_mb_s = total_mb / elapsed_total if elapsed_total > 0 else 0
-            remaining_mb = (remaining_files - completed) * TARGET_FILE_SIZE_MB
-            eta_s = remaining_mb / rate_mb_s if rate_mb_s > 0 else 0
-            
-            bar_width = 40
-            filled = int(bar_width * pct / 100)
-            bar = '█' * filled + '░' * (bar_width - filled)
-            
-            print(f"\r  [{bar}] {pct:5.1f}% | {completed}/{remaining_files} | "
-                  f"{total_mb/1024:.1f}GB | {rate_mb_s:.1f}MB/s | "
-                  f"ETA: {int(eta_s//3600)}h{int((eta_s%3600)//60):02d}m", end='', flush=True)
+            if not args.quiet:
+                # Progress bar
+                pct = (completed / remaining_files) * 100
+                elapsed_total = time.time() - start_time
+                rate_mb_s = total_mb / elapsed_total if elapsed_total > 0 else 0
+                remaining_mb = (remaining_files - completed) * TARGET_FILE_SIZE_MB
+                eta_s = remaining_mb / rate_mb_s if rate_mb_s > 0 else 0
+                
+                bar_width = 40
+                filled = int(bar_width * pct / 100)
+                bar = '█' * filled + '░' * (bar_width - filled)
+                
+                print(f"\r  [{bar}] {pct:5.1f}% | {completed}/{remaining_files} | "
+                      f"{total_mb/1024:.1f}GB | {rate_mb_s:.1f}MB/s | "
+                      f"ETA: {int(eta_s//3600)}h{int((eta_s%3600)//60):02d}m", end='', flush=True)
     
     # Summary
     total_time = time.time() - start_time
     final_size_gb = current_size_gb + (total_mb / 1024)
     total_transactions_generated = remaining_files * TRANSACTIONS_PER_FILE
     
-    print(f"\n\n{'=' * 70}")
-    print("✅ GENERATION COMPLETE!")
-    print("=" * 70)
-    print(f"📁 Output directory: {os.path.abspath(args.output)}")
-    print(f"📊 Files generated: {remaining_files:,} (total: {existing_count + remaining_files:,})")
-    print(f"💳 Transactions: ~{total_transactions_generated:,}")
-    print(f"💾 Total size: {final_size_gb:.2f} GB")
-    print(f"⏱️  Time: {int(total_time//3600)}h {int((total_time%3600)//60)}m {int(total_time%60)}s")
-    print(f"🚀 Speed: {total_mb/total_time:.1f} MB/s")
-    print(f"\n📄 Files created:")
-    print(f"   • customers.json ({args.customers:,} customers)")
-    print(f"   • transactions_XXXXX.json ({remaining_files} files)")
+    if not args.quiet:
+        print(f"\n\n{'=' * 70}")
+        print("✅ GENERATION COMPLETE!")
+        print("=" * 70)
+        print(f"📁 Output directory: {os.path.abspath(args.output)}")
+        print(f"📊 Files generated: {remaining_files:,} (total: {existing_count + remaining_files:,})")
+        print(f"💳 Transactions: ~{total_transactions_generated:,}")
+        print(f"💾 Total size: {final_size_gb:.2f} GB")
+        print(f"⏱️  Time: {int(total_time//3600)}h {int((total_time%3600)//60)}m {int(total_time%60)}s")
+        print(f"🚀 Speed: {total_mb/total_time:.1f} MB/s")
+        print(f"\n📄 Files created:")
+        print(f"   • customers.json ({len(customer_data):,} customers)")
+        print(f"   • devices.json ({len(device_ids):,} devices)")
+        print(f"   • transactions_XXXXX.json ({existing_count + remaining_files} files)")
+    else:
+        # Minimal output for quiet mode
+        print(json.dumps({
+            'status': 'complete',
+            'output_dir': os.path.abspath(args.output),
+            'files': existing_count + remaining_files,
+            'transactions': total_transactions_generated,
+            'size_gb': round(final_size_gb, 2),
+            'time_seconds': round(total_time, 2)
+        }))
 
 
 if __name__ == '__main__':
