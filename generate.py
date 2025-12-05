@@ -18,7 +18,7 @@ Usage:
     python3 generate.py --size 1GB --seed 42  # Reproducible
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 import json
 import random
@@ -56,6 +56,15 @@ BANKS = {
     '748': {'nome': 'Sicredi', 'tipo': 'cooperativa', 'peso': 2},
     '422': {'nome': 'Safra', 'tipo': 'privado', 'peso': 1},
     '070': {'nome': 'BRB', 'tipo': 'publico', 'peso': 1},
+    # Novos bancos adicionados
+    '208': {'nome': 'BTG Pactual', 'tipo': 'privado', 'peso': 2},
+    '655': {'nome': 'Neon', 'tipo': 'digital', 'peso': 2},
+    '280': {'nome': 'Will Bank', 'tipo': 'digital', 'peso': 1},
+    '237': {'nome': 'Next', 'tipo': 'digital', 'peso': 2},
+    '623': {'nome': 'Banco Pan', 'tipo': 'privado', 'peso': 2},
+    '121': {'nome': 'Agibank', 'tipo': 'digital', 'peso': 1},
+    '707': {'nome': 'Daycoval', 'tipo': 'privado', 'peso': 1},
+    '318': {'nome': 'BMG', 'tipo': 'privado', 'peso': 1},
 }
 
 BANK_CODES = list(BANKS.keys())
@@ -92,6 +101,11 @@ MCC_CODES = {
     '4511': {'categoria': 'Companhias Aéreas', 'risco': 'medium', 'valor_min': 200, 'valor_max': 5000, 'peso': 1},
     # Streaming/Digital
     '5815': {'categoria': 'Serviços Digitais', 'risco': 'low', 'valor_min': 10, 'valor_max': 100, 'peso': 3},
+    # Novas categorias
+    '8299': {'categoria': 'Educação/Cursos', 'risco': 'low', 'valor_min': 50, 'valor_max': 3000, 'peso': 3},
+    '5995': {'categoria': 'Pet Shop', 'risco': 'low', 'valor_min': 20, 'valor_max': 800, 'peso': 3},
+    '7941': {'categoria': 'Academias/Fitness', 'risco': 'low', 'valor_min': 50, 'valor_max': 300, 'peso': 4},
+    '5812': {'categoria': 'Delivery/Apps de Comida', 'risco': 'low', 'valor_min': 15, 'valor_max': 200, 'peso': 8},
 }
 
 MCC_LIST = list(MCC_CODES.keys())
@@ -99,37 +113,45 @@ MCC_WEIGHTS = [MCC_CODES[mcc]['peso'] for mcc in MCC_LIST]
 
 # Brazilian merchants with MCC mapping
 MERCHANTS_BY_MCC = {
-    '5411': ['Carrefour', 'Pão de Açúcar', 'Extra', 'Assaí', 'Atacadão', 'Big', 'Zaffari', 'Savegnago', 'Dia', 'Guanabara'],
-    '5812': ['Outback', 'Coco Bambu', 'Madero', 'Applebees', 'Fogo de Chão', 'Paris 6', 'Cosi', 'Lanchonete Local', 'Bar do Zé', 'Restaurante Familiar'],
-    '5814': ['McDonalds', 'Burger King', 'Subway', 'Bobs', 'Habibs', 'Giraffas', 'Spoleto', 'China in Box', 'Pizza Hut', 'KFC'],
-    '5499': ['Am Pm', 'BR Mania', 'Select', 'Oxxo', 'Minuto Pão de Açúcar', 'Carrefour Express', 'Hortifruti', 'Quitanda Local', 'Mercearia', 'Empório'],
-    '5541': ['Shell', 'Ipiranga', 'BR Petrobras', 'Ale', 'Total', 'Repsol', 'Esso', 'Cosan', 'Posto Cidade', 'Auto Posto'],
-    '4121': ['Uber', '99', 'Cabify', 'InDriver', '99 Pop', 'Uber Black', 'Lady Driver', 'Taxi Comum', 'Garupa', 'Buser'],
-    '4131': ['SPTrans', 'RioCard', 'BHTrans', 'Urbs Curitiba', 'MetroSP', 'MetroRio', 'CPTM', 'ViaQuatro', 'CCR Metrô', 'Linha 4'],
-    '5912': ['Drogasil', 'Droga Raia', 'Pacheco', 'Pague Menos', 'Drogaria São Paulo', 'Panvel', 'Venancio', 'Ultrafarma', 'Araújo', 'Nissei'],
-    '8011': ['Fleury', 'Dasa', 'Hermes Pardini', 'Einstein', 'Sírio-Libanês', 'Clínica Popular', 'Dr. Consulta', 'Labi Exames', 'Lavoisier', 'CDB'],
-    '5311': ['Renner', 'C&A', 'Riachuelo', 'Magazine Luiza', 'Casas Bahia', 'Americanas', 'Shoptime', 'Pernambucanas', 'Havan', 'Besni'],
-    '5651': ['Zara', 'Forever 21', 'Marisa', 'Centauro', 'Netshoes', 'Dafiti', 'Arezzo', 'Vivara', 'Farm', 'Animale'],
-    '5732': ['Magazine Luiza', 'Casas Bahia', 'Fast Shop', 'Ponto Frio', 'Amazon', 'Mercado Livre', 'Kabum', 'Terabyte', 'Girafa', 'Saraiva'],
-    '5944': ['Vivara', 'Pandora', 'Monte Carlo', 'HStern', 'Swarovski', 'Natan', 'Tiffany', 'Cartier', 'Joalheria Local', 'Ourives'],
-    '4900': ['Enel', 'Light', 'CPFL', 'Copel', 'Celesc', 'Sabesp', 'Cedae', 'Comgás', 'Naturgy', 'Elektro'],
-    '4814': ['Vivo', 'Claro', 'Tim', 'Oi', 'NET', 'Sky', 'Nextel', 'Algar', 'Sercomtel', 'Brisanet'],
-    '5977': ['O Boticário', 'Natura', 'Sephora', 'MAC', 'Quem Disse Berenice', 'Avon', 'Eudora', 'LOccitane', 'The Body Shop', 'Época Cosméticos'],
-    '7995': ['Bet365', 'Betano', 'Sportingbet', 'Betfair', 'Pixbet', 'Stake', 'Blaze', 'Galera Bet', 'EstrelaBet', 'Novibet'],
-    '6011': ['Banco 24 Horas', 'ATM Bradesco', 'ATM Itaú', 'ATM Santander', 'ATM Caixa', 'ATM BB', 'Saque Nubank', 'Saque Inter', 'Saque PicPay', 'ATM Sicredi'],
-    '7011': ['Ibis', 'Mercure', 'Novotel', 'Quality', 'Comfort', 'Holiday Inn', 'Hilton', 'Grand Hyatt', 'Blue Tree', 'Slaviero'],
-    '4511': ['LATAM', 'GOL', 'Azul', 'Avianca', 'TAP', 'American Airlines', 'Emirates', 'Copa Airlines', 'Air France', 'KLM'],
-    '5815': ['Netflix', 'Spotify', 'Amazon Prime', 'Disney+', 'HBO Max', 'Globoplay', 'Deezer', 'Apple Music', 'YouTube Premium', 'Paramount+'],
+    '5411': ['Carrefour', 'Pão de Açúcar', 'Extra', 'Assaí', 'Atacadão', 'Big', 'Zaffari', 'Savegnago', 'Dia', 'Guanabara', 'Sams Club', 'Costco', 'Makro', 'Mart Minas', 'Supernosso'],
+    '5812': ['Outback', 'Coco Bambu', 'Madero', 'Applebees', 'Fogo de Chão', 'Paris 6', 'Cosi', 'Lanchonete Local', 'Bar do Zé', 'Restaurante Familiar', 'iFood', 'Rappi', 'Uber Eats', '99 Food', 'Zé Delivery'],
+    '5814': ['McDonalds', 'Burger King', 'Subway', 'Bobs', 'Habibs', 'Giraffas', 'Spoleto', 'China in Box', 'Pizza Hut', 'KFC', 'Popeyes', 'Starbucks', 'Jeronimo', 'Ragazzo', 'Vivenda do Camarão'],
+    '5499': ['Am Pm', 'BR Mania', 'Select', 'Oxxo', 'Minuto Pão de Açúcar', 'Carrefour Express', 'Hortifruti', 'Quitanda Local', 'Mercearia', 'Empório', 'Zona Sul', 'St Marche', 'Hirota', 'Natural da Terra'],
+    '5541': ['Shell', 'Ipiranga', 'BR Petrobras', 'Ale', 'Total', 'Repsol', 'Esso', 'Cosan', 'Posto Cidade', 'Auto Posto', 'Vibra Energia', 'Raízen', 'YPF'],
+    '4121': ['Uber', '99', 'Cabify', 'InDriver', '99 Pop', 'Uber Black', 'Lady Driver', 'Taxi Comum', 'Garupa', 'Buser', 'Fretadão', 'ClickBus', 'Blablacar'],
+    '4131': ['SPTrans', 'RioCard', 'BHTrans', 'Urbs Curitiba', 'MetroSP', 'MetroRio', 'CPTM', 'ViaQuatro', 'CCR Metrô', 'Linha 4', 'Bilhete Único', 'TOP', 'BOM'],
+    '5912': ['Drogasil', 'Droga Raia', 'Pacheco', 'Pague Menos', 'Drogaria São Paulo', 'Panvel', 'Venancio', 'Ultrafarma', 'Araújo', 'Nissei', 'Drogal', 'Onofre', 'Drogarias Tamoio'],
+    '8011': ['Fleury', 'Dasa', 'Hermes Pardini', 'Einstein', 'Sírio-Libanês', 'Clínica Popular', 'Dr. Consulta', 'Labi Exames', 'Lavoisier', 'CDB', 'Hapvida', 'NotreDame', 'Unimed'],
+    '5311': ['Renner', 'C&A', 'Riachuelo', 'Magazine Luiza', 'Casas Bahia', 'Americanas', 'Shoptime', 'Pernambucanas', 'Havan', 'Besni', 'Shopee', 'Shein', 'AliExpress', 'Temu', 'Lojas Marisa'],
+    '5651': ['Zara', 'Forever 21', 'Marisa', 'Centauro', 'Netshoes', 'Dafiti', 'Arezzo', 'Vivara', 'Farm', 'Animale', 'Track&Field', 'Osklen', 'Reserva', 'Richards', 'Hering'],
+    '5732': ['Magazine Luiza', 'Casas Bahia', 'Fast Shop', 'Ponto Frio', 'Amazon', 'Mercado Livre', 'Kabum', 'Terabyte', 'Girafa', 'Saraiva', 'Pichau', 'Submarino', 'Extra.com', 'Zoom', 'Buscapé'],
+    '5944': ['Vivara', 'Pandora', 'Monte Carlo', 'HStern', 'Swarovski', 'Natan', 'Tiffany', 'Cartier', 'Joalheria Local', 'Ourives', 'Dryzun', 'Sara Joias', 'Rosana Chinche'],
+    '4900': ['Enel', 'Light', 'CPFL', 'Copel', 'Celesc', 'Sabesp', 'Cedae', 'Comgás', 'Naturgy', 'Elektro', 'Equatorial', 'Energisa', 'Neoenergia', 'EDP', 'CEMIG'],
+    '4814': ['Vivo', 'Claro', 'Tim', 'Oi', 'NET', 'Sky', 'Nextel', 'Algar', 'Sercomtel', 'Brisanet', 'Desktop', 'Sumicity', 'Unifique', 'Ligga', 'Americanet'],
+    '5977': ['O Boticário', 'Natura', 'Sephora', 'MAC', 'Quem Disse Berenice', 'Avon', 'Eudora', 'LOccitane', 'The Body Shop', 'Época Cosméticos', 'Beleza na Web', 'Dermage', 'Granado', 'Phebo'],
+    '7995': ['Bet365', 'Betano', 'Sportingbet', 'Betfair', 'Pixbet', 'Stake', 'Blaze', 'Galera Bet', 'EstrelaBet', 'Novibet', 'Betsson', 'KTO', 'Betnacional', 'Parimatch', 'F12 Bet'],
+    '6011': ['Banco 24 Horas', 'ATM Bradesco', 'ATM Itaú', 'ATM Santander', 'ATM Caixa', 'ATM BB', 'Saque Nubank', 'Saque Inter', 'Saque PicPay', 'ATM Sicredi', 'ATM C6', 'Saque Mercado Pago'],
+    '7011': ['Ibis', 'Mercure', 'Novotel', 'Quality', 'Comfort', 'Holiday Inn', 'Hilton', 'Grand Hyatt', 'Blue Tree', 'Slaviero', 'Booking.com', 'Airbnb', 'Hoteis.com', 'Decolar', 'Hurb'],
+    '4511': ['LATAM', 'GOL', 'Azul', 'Avianca', 'TAP', 'American Airlines', 'Emirates', 'Copa Airlines', 'Air France', 'KLM', 'ITA Airways', 'Voepass', 'Map Linhas Aéreas'],
+    '5815': ['Netflix', 'Spotify', 'Amazon Prime', 'Disney+', 'HBO Max', 'Globoplay', 'Deezer', 'Apple Music', 'YouTube Premium', 'Paramount+', 'Star+', 'Apple TV+', 'Crunchyroll', 'Telecine', 'Twitch'],
+    # Novas categorias de merchants
+    '8299': ['Alura', 'Rocketseat', 'Udemy', 'Coursera', 'Descomplica', 'Hotmart', 'Domestika', 'Skillshare', 'LinkedIn Learning', 'Escola Conquer', 'FIAP', 'Impacta', 'Digital House'],
+    '5995': ['Petz', 'Cobasi', 'Pet Love', 'DogHero', 'Petlove', 'PetShop Local', 'Animale Pet', 'Mundo Animal', 'Casa dos Bichos', 'PetCenter', 'Zee.Dog', 'Bicho Mania'],
+    '7941': ['Smart Fit', 'Bluefit', 'Bio Ritmo', 'Bodytech', 'Selfit', 'Academia Local', 'Crossfit Box', 'Total Pass', 'Gympass', 'Queima Diária', 'Les Mills', 'Velocity'],
 }
 
 # Transaction types (PIX weighted higher - realistic for Brazil 2024)
 TRANSACTION_TYPES = {
-    'PIX': 45,            # 45% - PIX dominates Brazil
-    'CARTAO_CREDITO': 25, # 25% - Credit card
-    'CARTAO_DEBITO': 15,  # 15% - Debit card
-    'BOLETO': 8,          # 8%  - Bank slip
-    'TED': 4,             # 4%  - Wire transfer
+    'PIX': 42,            # 42% - PIX dominates Brazil
+    'CARTAO_CREDITO': 22, # 22% - Credit card
+    'CARTAO_DEBITO': 13,  # 13% - Debit card
+    'BOLETO': 7,          # 7%  - Bank slip
+    'TED': 3,             # 3%  - Wire transfer
     'SAQUE': 3,           # 3%  - Cash withdrawal (decreasing)
+    # Novos tipos de transação
+    'DOC': 1,             # 1%  - DOC transfer (being phased out)
+    'DEBITO_AUTOMATICO': 5, # 5% - Automatic debit (bills, subscriptions)
+    'RECARGA_CELULAR': 4, # 4%  - Mobile phone top-up
 }
 
 TX_TYPES_LIST = list(TRANSACTION_TYPES.keys())
@@ -149,14 +171,20 @@ CHANNELS_WEIGHTS = list(CHANNELS.values())
 
 # Fraud types with realistic distribution
 FRAUD_TYPES = {
-    'ENGENHARIA_SOCIAL': 25,    # Social engineering - most common
-    'CONTA_TOMADA': 20,         # Account takeover
-    'CARTAO_CLONADO': 18,       # Cloned card
-    'IDENTIDADE_FALSA': 12,     # Identity fraud
-    'AUTOFRAUDE': 10,           # First-party fraud
-    'FRAUDE_AMIGAVEL': 7,       # Friendly fraud
-    'LAVAGEM_DINHEIRO': 5,      # Money laundering
+    'ENGENHARIA_SOCIAL': 20,    # Social engineering - most common
+    'CONTA_TOMADA': 15,         # Account takeover
+    'CARTAO_CLONADO': 14,       # Cloned card
+    'IDENTIDADE_FALSA': 10,     # Identity fraud
+    'AUTOFRAUDE': 8,            # First-party fraud
+    'FRAUDE_AMIGAVEL': 5,       # Friendly fraud
+    'LAVAGEM_DINHEIRO': 4,      # Money laundering
     'TRIANGULACAO': 3,          # Triangulation fraud
+    # Novos tipos de fraude
+    'GOLPE_WHATSAPP': 8,        # WhatsApp scams (fake support, fake relatives)
+    'PHISHING': 6,              # Fake emails/sites to steal credentials
+    'SIM_SWAP': 3,              # SIM card swap fraud
+    'BOLETO_FALSO': 2,          # Fake bank slips
+    'QR_CODE_FALSO': 2,         # Fake PIX QR codes
 }
 
 FRAUD_TYPES_LIST = list(FRAUD_TYPES.keys())
@@ -235,11 +263,11 @@ DEVICE_TYPES_WEIGHTS = list(DEVICE_TYPES.values())
 
 # Device manufacturers
 DEVICE_MANUFACTURERS = {
-    'SMARTPHONE_ANDROID': ['Samsung', 'Motorola', 'Xiaomi', 'LG', 'ASUS', 'Realme', 'POCO', 'OnePlus'],
+    'SMARTPHONE_ANDROID': ['Samsung', 'Motorola', 'Xiaomi', 'LG', 'ASUS', 'Realme', 'POCO', 'OnePlus', 'TCL', 'Nokia', 'Huawei', 'Honor', 'Google', 'Nothing', 'Sony'],
     'SMARTPHONE_IOS': ['Apple'],
-    'DESKTOP_WINDOWS': ['Dell', 'HP', 'Lenovo', 'ASUS', 'Acer', 'Positivo', 'Samsung'],
+    'DESKTOP_WINDOWS': ['Dell', 'HP', 'Lenovo', 'ASUS', 'Acer', 'Positivo', 'Samsung', 'MSI', 'Vaio', 'Avell', 'Multilaser'],
     'DESKTOP_MAC': ['Apple'],
-    'TABLET_ANDROID': ['Samsung', 'Xiaomi', 'Lenovo', 'Multilaser'],
+    'TABLET_ANDROID': ['Samsung', 'Xiaomi', 'Lenovo', 'Multilaser', 'TCL', 'Nokia', 'Huawei', 'Positivo'],
     'TABLET_IOS': ['Apple'],
 }
 
@@ -441,21 +469,32 @@ def generate_device(device_id, customer_id, fake):
     
     # Model names by manufacturer
     models = {
-        'Samsung': ['Galaxy S23', 'Galaxy S22', 'Galaxy A54', 'Galaxy A34', 'Galaxy M54'],
-        'Motorola': ['Edge 40', 'G84', 'G54', 'E22', 'G32'],
-        'Xiaomi': ['Redmi Note 12', 'Redmi 12C', 'POCO X5', 'Mi 11', 'Redmi Note 11'],
-        'Apple': ['iPhone 15', 'iPhone 14', 'iPhone 13', 'iPhone SE', 'iPad Pro', 'iPad Air', 'MacBook Pro', 'MacBook Air', 'iMac'],
+        'Samsung': ['Galaxy S24', 'Galaxy S24 Ultra', 'Galaxy S23', 'Galaxy A55', 'Galaxy A35', 'Galaxy M55', 'Galaxy Z Fold 5', 'Galaxy Z Flip 5', 'Galaxy Tab S9'],
+        'Motorola': ['Edge 50', 'Edge 40', 'G84', 'G54', 'Razr 40', 'ThinkPhone', 'Moto G Stylus'],
+        'Xiaomi': ['Xiaomi 14', 'Redmi Note 13', 'Redmi 13C', 'POCO X6', 'Mi 14', 'Redmi Note 12', 'Xiaomi Pad 6'],
+        'Apple': ['iPhone 16', 'iPhone 16 Pro', 'iPhone 15', 'iPhone 15 Pro', 'iPhone SE', 'iPad Pro M4', 'iPad Air M2', 'MacBook Pro M3', 'MacBook Air M3', 'iMac M3'],
         'LG': ['K62', 'K52', 'K42', 'Velvet'],
-        'Dell': ['Inspiron 15', 'XPS 13', 'Latitude', 'Vostro'],
-        'HP': ['Pavilion', 'Spectre', 'EliteBook', 'ProBook'],
-        'Lenovo': ['IdeaPad', 'ThinkPad', 'Legion', 'Yoga'],
-        'ASUS': ['ZenBook', 'VivoBook', 'ROG', 'TUF Gaming'],
-        'Acer': ['Aspire', 'Swift', 'Nitro'],
-        'Positivo': ['Motion', 'Vision', 'Twist'],
-        'Multilaser': ['M10', 'M8', 'M7S'],
-        'Realme': ['C55', 'C33', '10 Pro'],
-        'POCO': ['X5 Pro', 'M5', 'F5'],
-        'OnePlus': ['11', 'Nord 3', '10T'],
+        'Dell': ['Inspiron 16', 'XPS 15', 'XPS 13', 'Latitude 7440', 'Vostro 3520', 'Alienware m16'],
+        'HP': ['Pavilion 15', 'Spectre x360', 'EliteBook 840', 'ProBook 450', 'Omen 16', 'Victus 15'],
+        'Lenovo': ['IdeaPad Slim 5', 'ThinkPad X1 Carbon', 'Legion Pro 5', 'Yoga 9i', 'ThinkBook 14'],
+        'ASUS': ['ZenBook 14', 'VivoBook 15', 'ROG Strix', 'TUF Gaming F15', 'ProArt Studiobook'],
+        'Acer': ['Aspire 5', 'Swift Go 14', 'Nitro 5', 'Predator Helios'],
+        'Positivo': ['Motion Q464C', 'Vision C14', 'Twist Tab'],
+        'Multilaser': ['M10 4G', 'M8 4G', 'Ultra U10'],
+        'Realme': ['12 Pro+', 'C67', 'GT5 Pro', 'Narzo 70'],
+        'POCO': ['X6 Pro', 'M6 Pro', 'F6', 'C65'],
+        'OnePlus': ['12', 'Nord 4', 'Open', '12R'],
+        # Novos fabricantes
+        'TCL': ['40 NxtPaper', '50 SE', 'Tab 10 Gen 2', '30 5G'],
+        'Nokia': ['G42 5G', 'C32', 'XR21', 'T21 Tablet'],
+        'Huawei': ['P60 Pro', 'Mate 60', 'Nova 12', 'MatePad Pro'],
+        'Honor': ['Magic 6 Pro', '90', 'X9b', 'Pad 9'],
+        'Google': ['Pixel 8', 'Pixel 8 Pro', 'Pixel 7a', 'Pixel Tablet'],
+        'Nothing': ['Phone 2', 'Phone 2a', 'Phone 1'],
+        'Sony': ['Xperia 1 V', 'Xperia 5 V', 'Xperia 10 V'],
+        'MSI': ['Stealth 16', 'Raider GE78', 'Katana 15', 'Creator Z17'],
+        'Vaio': ['FE 14', 'FE 15', 'SX14'],
+        'Avell': ['A70', 'C65', 'Storm Two'],
     }
     
     model = random.choice(models.get(manufacturer, ['Generic']))
