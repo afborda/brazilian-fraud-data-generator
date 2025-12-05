@@ -15,6 +15,7 @@
 
 [🚀 Quick Start](#-quick-start) •
 [📡 Streaming Mode](#-streaming-mode) •
+[🚗 Ride-Share Mode](#-ride-share-mode) •
 [🐳 Docker](#-docker) •
 [📊 Data Schema](#-data-schema)
 
@@ -24,18 +25,20 @@
 
 ## 📋 About
 
-Generate **realistic synthetic data** of Brazilian banking transactions with two modes:
+Generate **realistic synthetic data** of Brazilian banking transactions and ride-share trips with two modes:
 
 | Mode | Use Case | Command |
 |------|----------|---------|
 | **📁 Batch** | Generate files for analysis (Spark, ML training) | `python generate.py --size 1GB` |
 | **📡 Streaming** | Real-time data for Kafka, APIs, testing pipelines | `python stream.py --target kafka` |
+| **🚗 Rides** | Generate ride-share data (Uber, 99, etc.) | `python generate.py --type rides` |
 
 ### Features
 
 - ✅ **Valid CPF** with check digits (Faker pt_BR)
 - ✅ **Transactions**: PIX, credit/debit cards, TED, boleto, withdrawals
-- ✅ **13 fraud types** with realistic distribution
+- ✅ **Ride-Share**: Uber, 99, Cabify, InDriver with drivers and rides
+- ✅ **13 fraud types** for transactions + **7 fraud types** for rides
 - ✅ **6 behavioral profiles** (young_digital, traditional_senior, business_owner, etc.)
 - ✅ **25+ real Brazilian banks** with market share weights
 - ✅ **Streaming**: Kafka, Webhooks, stdout
@@ -117,6 +120,7 @@ python stream.py --target webhook \
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `--type` | `transactions` | Data type: `transactions` or `rides` |
 | `--target` | `stdout` | Target: `stdout`, `kafka`, `webhook` |
 | `--rate` | `10` | Events per second |
 | `--max-events` | `∞` | Stop after N events (infinite by default) |
@@ -168,6 +172,7 @@ docker run --network host \
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `--type` | `transactions` | Data type: `transactions`, `rides`, or `all` |
 | `--size` | `1GB` | Total data size (e.g., `500MB`, `10GB`, `50GB`) |
 | `--format` | `jsonl` | Export format: `jsonl`, `csv`, `parquet` |
 | `--workers` | `CPU cores` | Parallel processes |
@@ -267,6 +272,141 @@ docker run --network host \
 
 ---
 
+## 🚗 Ride-Share Mode
+
+Generate synthetic ride-share data similar to Uber, 99, Cabify, and InDriver.
+
+### Supported Apps
+
+| App | Categories | Weight |
+|-----|-----------|--------|
+| **Uber** | UberX, Comfort, Black, Flash | 45% |
+| **99** | Pop, 99Comfort | 35% |
+| **Cabify** | Lite, Cabify, Plus | 10% |
+| **InDriver** | Economy | 10% |
+
+### Batch Mode (Rides)
+
+```bash
+# Generate 1GB of ride data
+python generate.py --size 1GB --type rides
+
+# Generate both transactions and rides
+python generate.py --size 1GB --type all
+
+# Generate with custom fraud rate
+python generate.py --size 500MB --type rides --fraud-rate 0.05
+```
+
+**Output:**
+```
+output/
+├── customers.jsonl    # Passengers
+├── devices.jsonl      # Passenger devices
+├── drivers.jsonl      # Drivers with vehicles
+└── rides_*.jsonl      # ~128MB ride files
+```
+
+### Streaming Mode (Rides)
+
+```bash
+# Stream rides to stdout
+python stream.py --target stdout --type rides --rate 5
+
+# Stream to Kafka
+python stream.py --target kafka --type rides \
+    --kafka-server localhost:9092 \
+    --kafka-topic rides \
+    --rate 100
+```
+
+### Driver Schema
+
+```json
+{
+  "driver_id": "DRV_0000000001",
+  "nome": "João Carlos Silva",
+  "cpf": "123.456.789-09",
+  "cnh_numero": "12345678901",
+  "cnh_categoria": "B",
+  "cnh_validade": "2027-05-15",
+  "vehicle_plate": "ABC1D23",
+  "vehicle_brand": "Hyundai",
+  "vehicle_model": "HB20",
+  "vehicle_year": 2022,
+  "vehicle_color": "Prata",
+  "rating": 4.85,
+  "trips_completed": 1250,
+  "active_apps": ["UBER", "99"],
+  "operating_city": "São Paulo",
+  "operating_state": "SP",
+  "categories_enabled": ["UberX", "Pop", "Comfort"]
+}
+```
+
+### Ride Schema
+
+```json
+{
+  "ride_id": "RIDE_000000000001",
+  "timestamp": "2024-03-15T14:32:45.123456",
+  "app": "UBER",
+  "category": "UberX",
+  "driver_id": "DRV_0000000001",
+  "passenger_id": "CUST_000000000001",
+  "pickup_location": {
+    "lat": -23.5614,
+    "lon": -46.6558,
+    "name": "Av. Paulista",
+    "poi_type": "CENTRO_EMPRESARIAL",
+    "city": "São Paulo",
+    "state": "SP"
+  },
+  "dropoff_location": {
+    "lat": -23.6261,
+    "lon": -46.6564,
+    "name": "Aeroporto de Congonhas",
+    "poi_type": "AEROPORTO",
+    "city": "São Paulo",
+    "state": "SP"
+  },
+  "distance_km": 8.5,
+  "duration_minutes": 25,
+  "base_fare": 18.50,
+  "surge_multiplier": 1.5,
+  "final_fare": 27.75,
+  "tip": 5.00,
+  "payment_method": "PIX",
+  "status": "FINALIZADA",
+  "weather_condition": "RAIN",
+  "is_fraud": false,
+  "fraud_type": null
+}
+```
+
+### Ride Fraud Types (7)
+
+| Type | Description | % |
+|------|-------------|---|
+| `GPS_SPOOFING` | Fake GPS location to increase distance | 25% |
+| `DRIVER_COLLUSION` | Driver-passenger collusion for fake rides | 20% |
+| `SURGE_ABUSE` | Artificial surge pricing manipulation | 15% |
+| `PROMO_ABUSE` | Abusing promotional codes | 15% |
+| `FAKE_RIDE` | Completely fake ride for payout | 10% |
+| `IDENTITY_FRAUD` | Fake driver or passenger identity | 10% |
+| `PAYMENT_FRAUD` | Stolen payment methods | 5% |
+
+### Ride Status Distribution
+
+| Status | % |
+|--------|---|
+| `FINALIZADA` | 85% |
+| `CANCELADA_PASSAGEIRO` | 6% |
+| `CANCELADA_MOTORISTA` | 4% |
+| `SEM_MOTORISTA` | 5% |
+
+---
+
 ## 🎯 Use Cases
 
 ### Apache Spark
@@ -307,12 +447,13 @@ brazilian-fraud-data-generator/
 ├── requirements.txt         # Core dependencies
 ├── requirements-streaming.txt # Kafka/webhook dependencies
 └── src/fraud_generator/
-    ├── generators/          # Data generators
+    ├── generators/          # Customer, Device, Transaction, Driver, Ride
     ├── connections/         # Kafka, Webhook, Stdout
     ├── exporters/           # JSON, CSV, Parquet
     ├── validators/          # CPF validation
-    ├── profiles/            # Behavioral profiles
-    └── config/              # Banks, MCCs, etc.
+    ├── profiles/            # Behavioral profiles (transactions & rides)
+    ├── models/              # Data models (Customer, Transaction, Driver, Ride)
+    └── config/              # Banks, MCCs, Rideshare, Weather
 ```
 
 ---
