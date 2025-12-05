@@ -424,7 +424,6 @@ brazilian-fraud-data-generator/
 ├── 📄 README.pt-BR.md     # Documentation (Portuguese)
 ├── 📄 requirements.txt    # Dependencies
 ├── 📄 generate.py         # Main script (v3.0)
-├── 📄 generate_v2.py      # Legacy script (v2.1)
 ├── 📄 LICENSE             # MIT License
 ├── 📂 src/                # Source modules
 │   └── fraud_generator/

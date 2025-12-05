@@ -423,8 +423,7 @@ brazilian-fraud-data-generator/
 ├── 📄 README.pt-BR.md     # Documentação (Português)
 ├── 📄 requirements.txt    # Dependências
 ├── 📄 generate.py         # Script principal (v3.0)
-├── 📄 generate_v2.py      # Script legado (v2.1)
-├── 📄 LICENSE             # MIT License
+├── 📄 LICENSE             # Licença MIT
 ├── 📂 src/                # Módulos fonte
 │   └── fraud_generator/
 │       ├── config/        # Constantes (bancos, MCCs, etc.)
