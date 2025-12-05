@@ -25,14 +25,24 @@
 
 Este projeto gera **dados sintéticos realistas** de transações bancárias brasileiras, incluindo:
 
-- ✅ **Clientes** com CPF, nome, endereço, renda (Faker pt_BR)
+- ✅ **Clientes** com **CPF válido** (com dígitos verificadores), nome, endereço, renda (Faker pt_BR)
 - ✅ **Dispositivos** (smartphones, tablets, desktops com fabricantes reais)
 - ✅ **Transações** (PIX, cartão crédito/débito, TED, boleto, saque)
-- ✅ **Fraudes** (8 tipos diferentes com distribuição realista)
+- ✅ **Fraudes** (13 tipos diferentes com distribuição realista)
+- ✅ **Perfis Comportamentais** (6 arquétipos de clientes com padrões realistas)
 - ✅ **Geolocalização** correlacionada com estado do cliente
-- ✅ **Bancos** reais brasileiros com market share realista
+- ✅ **Bancos** reais brasileiros com market share realista (25+ bancos)
 - ✅ **MCCs** com valores típicos por categoria
 - ✅ **Padrões temporais** (mais transações em horário comercial)
+- ✅ **Múltiplos formatos de exportação** (JSON Lines, CSV, Parquet)
+
+### 🆕 Novidades da v3.0
+
+- **CPFs válidos** - Todos os CPFs gerados possuem dígitos verificadores corretos
+- **Perfis comportamentais** - Clientes têm padrões de gastos realistas baseados em seu perfil (young_digital, traditional_senior, business_owner, etc.)
+- **Múltiplos formatos** - Exporte para JSON Lines, CSV ou Parquet
+- **Arquitetura modular** - Código limpo com módulos separados para config, geradores, validadores e exportadores
+- **Otimização de memória** - Streaming eficiente para grandes datasets
 
 ### 🎯 Por que foi criado?
 
@@ -57,6 +67,9 @@ cd brazilian-fraud-data-generator
 
 # Instale as dependências
 pip install -r requirements.txt
+
+# Opcional: Para exportação Parquet/CSV
+pip install pandas pyarrow
 ```
 
 ### Gerar dados
@@ -65,8 +78,14 @@ pip install -r requirements.txt
 # Gerar 1GB de dados (teste rápido)
 python3 generate.py --size 1GB
 
-# Gerar 10GB de dados
-python3 generate.py --size 10GB --workers 4
+# Gerar em formato CSV
+python3 generate.py --size 1GB --format csv
+
+# Gerar em formato Parquet (melhor para analytics)
+python3 generate.py --size 1GB --format parquet
+
+# Gerar sem perfis comportamentais (transações aleatórias)
+python3 generate.py --size 1GB --no-profiles
 
 # Gerar 50GB de dados (recomendado para Big Data)
 python3 generate.py --size 50GB --workers 8
@@ -79,9 +98,9 @@ python3 generate.py --size 1GB --seed 42
 
 ```
 output/
-├── customers.json      # 100K clientes brasileiros
-├── devices.json        # 300K dispositivos
-└── transactions_*.json # Arquivos de ~128MB cada (JSON Lines)
+├── customers.jsonl       # Clientes brasileiros com CPF válido
+├── devices.jsonl         # Dispositivos vinculados aos clientes
+└── transactions_*.jsonl  # Arquivos de ~128MB cada (JSON Lines)
 ```
 
 ---
@@ -91,13 +110,13 @@ output/
 | Parâmetro | Padrão | Descrição |
 |-----------|--------|-----------|
 | `--size` | `1GB` | Tamanho total dos dados (ex: `1GB`, `10GB`, `50GB`) |
+| `--format` | `jsonl` | Formato de exportação (`jsonl`, `csv`, `parquet`) |
 | `--workers` | `CPU cores` | Número de processos paralelos |
-| `--fraud-rate` | `0.007` | Taxa de fraude (0.7% = ~7 a cada 1000) |
+| `--fraud-rate` | `0.02` | Taxa de fraude (2% = ~20 a cada 1000) |
 | `--output` | `./output` | Diretório de saída |
-| `--customers` | `100000` | Número de clientes a gerar |
-| `--devices` | `3x customers` | Número de dispositivos a gerar |
-| `--days` | `730` | Dias de histórico (padrão 2 anos) |
-| `--start-date` | - | Data inicial (YYYY-MM-DD) |
+| `--customers` | `auto` | Número de clientes (calculado automaticamente pelo size) |
+| `--no-profiles` | - | Desabilita perfis comportamentais (transações aleatórias) |
+| `--start-date` | `-1 ano` | Data inicial (YYYY-MM-DD) |
 | `--end-date` | - | Data final (YYYY-MM-DD) |
 | `--seed` | - | Seed para reprodutibilidade |
 | `--quiet` | - | Modo silencioso (JSON output) |
@@ -231,33 +250,67 @@ Os bancos são selecionados com peso proporcional ao market share real:
 
 | Código | Banco | Tipo | Peso |
 |--------|-------|------|------|
-| 001 | Banco do Brasil | Público | 15% |
-| 341 | Itaú Unibanco | Privado | 15% |
-| 104 | Caixa Econômica | Público | 14% |
-| 237 | Bradesco | Privado | 12% |
-| 033 | Santander | Privado | 10% |
-| 260 | Nubank | Digital | 10% |
-| 077 | Banco Inter | Digital | 5% |
-| 336 | C6 Bank | Digital | 4% |
-| 290 | PagBank | Digital | 3% |
-| ... | +7 outros | ... | ... |
+| 001 | Banco do Brasil | Público | 12% |
+| 341 | Itaú Unibanco | Privado | 12% |
+| 104 | Caixa Econômica | Público | 12% |
+| 237 | Bradesco | Privado | 10% |
+| 033 | Santander | Privado | 8% |
+| 260 | Nubank | Digital | 15% |
+| 077 | Banco Inter | Digital | 6% |
+| 336 | C6 Bank | Digital | 5% |
+| 290 | PagBank | Digital | 4% |
+| 380 | PicPay | Digital | 3% |
+| 212 | Banco Original | Digital | 2% |
+| ... | +14 outros | ... | ... |
 
 ---
 
 ## 🚨 Tipos de Fraude
 
-O gerador inclui **8 tipos de fraude** com distribuição baseada em dados reais:
+O gerador inclui **13 tipos de fraude** com distribuição baseada em dados reais:
 
 | Tipo | Descrição | % do Total |
 |------|-----------|------------|
-| `ENGENHARIA_SOCIAL` | Golpes por telefone/WhatsApp | ~25% |
-| `CONTA_TOMADA` | Account takeover | ~20% |
-| `CARTAO_CLONADO` | Cartão físico/dados clonados | ~18% |
-| `IDENTIDADE_FALSA` | Documentos falsos | ~12% |
-| `AUTOFRAUDE` | Cliente alega fraude falsa | ~10% |
-| `FRAUDE_AMIGAVEL` | Fraude por conhecidos | ~7% |
-| `LAVAGEM_DINHEIRO` | Transações de lavagem | ~5% |
+| `ENGENHARIA_SOCIAL` | Golpes por telefone/WhatsApp | ~20% |
+| `CONTA_TOMADA` | Account takeover | ~16% |
+| `CARTAO_CLONADO` | Cartão físico/dados clonados | ~15% |
+| `IDENTIDADE_FALSA` | Documentos falsos | ~10% |
+| `AUTOFRAUDE` | Cliente alega fraude falsa | ~8% |
+| `FRAUDE_AMIGAVEL` | Fraude por conhecidos | ~6% |
+| `LAVAGEM_DINHEIRO` | Transações de lavagem | ~4% |
 | `TRIANGULACAO` | Fraude com intermediários | ~3% |
+| `SIM_SWAP` | Fraude de SIM card | ~6% |
+| `PHISHING` | Ataques de phishing | ~5% |
+| `BOLETO_FALSO` | Boleto fraudulento | ~3% |
+| `QR_CODE_FALSO` | QR code fraudulento | ~2% |
+| `DEVICE_SPOOFING` | Fraude de fingerprint | ~2% |
+
+---
+
+## 👤 Perfis Comportamentais
+
+A versão 3.0 introduz **perfis comportamentais** que dão aos clientes padrões de gastos realistas:
+
+| Perfil | % dos Clientes | Características |
+|--------|----------------|-----------------|
+| `young_digital` | 25% | Usa PIX frequentemente, streaming, delivery |
+| `subscription_heavy` | 20% | Muitos gastos recorrentes, serviços digitais |
+| `family_provider` | 22% | Supermercado, contas, educação |
+| `traditional_senior` | 15% | Prefere cartão, farmácias, lojas tradicionais |
+| `business_owner` | 10% | Transações B2B, valores altos, atacado |
+| `high_spender` | 8% | Luxo, viagens, transações de alto valor |
+
+Cada perfil afeta:
+- **Tipos de transação** (preferência PIX vs Cartão)
+- **Categorias de merchants** (preferências de MCC)
+- **Valores das transações** (faixas min/max)
+- **Horários ativos** (quando transacionam)
+- **Frequência de transações** (média mensal)
+
+Para desabilitar perfis e gerar transações aleatórias:
+```bash
+python3 generate.py --size 1GB --no-profiles
+```
 
 ---
 
@@ -366,16 +419,27 @@ Conecte Metabase, PowerBI ou Tableau para criar dashboards de:
 
 ```
 brazilian-fraud-data-generator/
-├── 📄 README.md          # Documentação
-├── 📄 requirements.txt   # Dependências (faker)
-├── 📄 generate.py        # Script principal
-├── 📄 LICENSE            # MIT License
-├── 📂 examples/          # Exemplos de uso
+├── 📄 README.md           # Documentação (Inglês)
+├── 📄 README.pt-BR.md     # Documentação (Português)
+├── 📄 requirements.txt    # Dependências
+├── 📄 generate.py         # Script principal (v3.0)
+├── 📄 generate_v2.py      # Script legado (v2.1)
+├── 📄 LICENSE             # MIT License
+├── 📂 src/                # Módulos fonte
+│   └── fraud_generator/
+│       ├── config/        # Constantes (bancos, MCCs, etc.)
+│       ├── models/        # Modelos de dados (Customer, Device, Transaction)
+│       ├── generators/    # Geradores de dados
+│       ├── validators/    # Validação de CPF
+│       ├── exporters/     # Exportadores JSON, CSV, Parquet
+│       ├── profiles/      # Perfis comportamentais
+│       └── utils/         # Utilitários de streaming
+├── 📂 examples/           # Exemplos de uso
 │   └── README.md
-└── 📂 output/            # Dados gerados (gitignore)
-    ├── customers.json
-    ├── devices.json
-    └── transactions_*.json
+└── 📂 output/             # Dados gerados (gitignore)
+    ├── customers.jsonl
+    ├── devices.jsonl
+    └── transactions_*.jsonl
 ```
 
 ---
@@ -392,9 +456,9 @@ Contribuições são bem-vindas!
 
 ### Ideias para contribuir:
 - [ ] Adicionar mais tipos de transação (DOC, débito automático)
-- [ ] Exportar para CSV/Parquet
-- [ ] Adicionar validação de CPF com dígito verificador
 - [ ] Suporte a outros países da América Latina
+- [ ] Modo de streaming em tempo real
+- [ ] API endpoint para geração sob demanda
 
 ---
 
