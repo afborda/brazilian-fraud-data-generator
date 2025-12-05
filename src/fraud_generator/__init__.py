@@ -13,7 +13,7 @@ Features:
 - Parallel generation for high throughput
 """
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 __author__ = "Abner Fonseca"
 
 from .generators.customer import CustomerGenerator

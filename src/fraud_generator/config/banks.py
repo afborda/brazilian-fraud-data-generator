@@ -26,7 +26,6 @@ BANKS = {
     '208': {'nome': 'BTG Pactual', 'tipo': 'privado', 'peso': 2},
     '655': {'nome': 'Neon', 'tipo': 'digital', 'peso': 2},
     '280': {'nome': 'Will Bank', 'tipo': 'digital', 'peso': 1},
-    '237': {'nome': 'Next', 'tipo': 'digital', 'peso': 2},
     '623': {'nome': 'Banco Pan', 'tipo': 'privado', 'peso': 2},
     '121': {'nome': 'Agibank', 'tipo': 'digital', 'peso': 1},
     '707': {'nome': 'Daycoval', 'tipo': 'privado', 'peso': 1},
