@@ -32,7 +32,7 @@ Usage:
     python3 generate.py --size 1GB --seed 42 --output ./output
 """
 
-__version__ = "3.0.1"
+__version__ = "3.1.0"
 
 import argparse
 import json

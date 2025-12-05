@@ -50,3 +50,16 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Docker
+.docker/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Parquet files
+*.parquet
+
+# JSONL output files
+*.jsonl
