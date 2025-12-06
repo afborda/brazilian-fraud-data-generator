@@ -7,6 +7,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
+[![Docker Hub](https://img.shields.io/docker/v/afborda/brazilian-fraud-data-generator?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/afborda/brazilian-fraud-data-generator)
+[![Docker Pulls](https://img.shields.io/docker/pulls/afborda/brazilian-fraud-data-generator?logo=docker)](https://hub.docker.com/r/afborda/brazilian-fraud-data-generator)
 ![Kafka](https://img.shields.io/badge/Kafka-Streaming-231F20?logo=apachekafka&logoColor=white)
 ![MinIO](https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue)
@@ -138,14 +140,42 @@ pip install -r requirements-streaming.txt
 
 ### 🔹 Docker Mode
 
+#### Using Docker Hub (Recommended)
+
 ```bash
-# Batch: Generate 1GB
-docker run -v $(pwd)/output:/output ghcr.io/afborda/fraud-generator \
-    python3 generate.py --size 1GB --output /output
+# Pull the latest version
+docker pull afborda/brazilian-fraud-data-generator:latest
+
+# Generate 1GB of transactions
+docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+    generate.py --size 1GB --output /output
+
+# Generate in Parquet format
+docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+    generate.py --size 500MB --output /output --format parquet
+
+# Generate ride-share data
+docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+    generate.py --size 1GB --type rides --output /output
 
 # Streaming to Kafka
-docker run --network host ghcr.io/afborda/fraud-generator \
-    python3 stream.py --target kafka --kafka-server localhost:9092 --rate 100
+docker run --rm --network host afborda/brazilian-fraud-data-generator:latest \
+    stream.py --target kafka --kafka-server localhost:9092 --rate 100
+```
+
+#### Using Local Build
+
+```bash
+# Build the image locally
+docker build -t fraud-generator .
+
+# Batch: Generate 1GB
+docker run --rm -v $(pwd)/output:/output fraud-generator \
+    generate.py --size 1GB --output /output
+
+# Streaming to Kafka
+docker run --rm --network host fraud-generator \
+    stream.py --target kafka --kafka-server localhost:9092 --rate 100
 ```
 
 ### 🔹 MinIO/S3 Direct Upload
