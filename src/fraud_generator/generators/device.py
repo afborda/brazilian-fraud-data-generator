@@ -88,7 +88,7 @@ class DeviceGenerator:
         ).hexdigest()[:32]
         
         # First use date
-        primeiro_uso = self.fake.date_between(start_date='-2y', end_date='today')
+        first_use = self.fake.date_between(start_date='-2y', end_date='today')
         
         # Trust and security status
         is_trusted = random.choices([True, False], weights=[85, 15])[0]
@@ -97,12 +97,12 @@ class DeviceGenerator:
         return {
             'device_id': device_id,
             'customer_id': customer_id,
-            'tipo': get_device_category(device_type),
-            'fabricante': manufacturer,
-            'modelo': model,
-            'sistema_operacional': os_name,
+            'type': get_device_category(device_type),
+            'manufacturer': manufacturer,
+            'model': model,
+            'operating_system': os_name,
             'fingerprint': fingerprint,
-            'primeiro_uso': primeiro_uso.isoformat(),
+            'first_use': first_use.isoformat(),
             'is_trusted': is_trusted,
             'is_rooted_jailbroken': is_rooted,
         }

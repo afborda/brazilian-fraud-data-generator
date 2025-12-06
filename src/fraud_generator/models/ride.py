@@ -68,12 +68,12 @@ class Driver:
     
     Attributes:
         driver_id: Unique identifier for the driver
-        nome: Full name
+        name: Full name
         cpf: CPF number (valid)
-        cnh_numero: CNH (driver's license) number - 11 digits
-        cnh_categoria: CNH category (B, AB, C, D, E)
-        cnh_validade: CNH expiration date
-        telefone: Phone number
+        cnh_number: CNH (driver's license) number - 11 digits
+        cnh_category: CNH category (B, AB, C, D, E)
+        cnh_expiration: CNH expiration date
+        phone: Phone number
         email: Email address
         vehicle_plate: Vehicle license plate (Mercosul or old format)
         vehicle_brand: Vehicle brand (e.g., 'Hyundai', 'Chevrolet')
@@ -90,12 +90,12 @@ class Driver:
         is_active: Whether driver is currently active
     """
     driver_id: str
-    nome: str
+    name: str  # nome
     cpf: str
-    cnh_numero: str
-    cnh_categoria: str
-    cnh_validade: date
-    telefone: str
+    cnh_number: str  # cnh_numero
+    cnh_category: str  # cnh_categoria
+    cnh_expiration: date  # cnh_validade
+    phone: str  # telefone
     email: str
     vehicle_plate: str
     vehicle_brand: str
@@ -115,12 +115,12 @@ class Driver:
         """Convert to dictionary suitable for JSON serialization."""
         return {
             'driver_id': self.driver_id,
-            'nome': self.nome,
+            'name': self.name,
             'cpf': self.cpf,
-            'cnh_numero': self.cnh_numero,
-            'cnh_categoria': self.cnh_categoria,
-            'cnh_validade': self.cnh_validade.isoformat() if isinstance(self.cnh_validade, date) else self.cnh_validade,
-            'telefone': self.telefone,
+            'cnh_number': self.cnh_number,
+            'cnh_category': self.cnh_category,
+            'cnh_expiration': self.cnh_expiration.isoformat() if isinstance(self.cnh_expiration, date) else self.cnh_expiration,
+            'phone': self.phone,
             'email': self.email,
             'vehicle_plate': self.vehicle_plate,
             'vehicle_brand': self.vehicle_brand,
@@ -145,9 +145,9 @@ class Driver:
     def from_dict(cls, data: Dict[str, Any]) -> 'Driver':
         """Create Driver from dictionary."""
         # Handle date conversions
-        cnh_validade = data.get('cnh_validade')
-        if isinstance(cnh_validade, str):
-            cnh_validade = date.fromisoformat(cnh_validade)
+        cnh_expiration = data.get('cnh_expiration')
+        if isinstance(cnh_expiration, str):
+            cnh_expiration = date.fromisoformat(cnh_expiration)
         
         registration_date = data.get('registration_date')
         if isinstance(registration_date, str):
@@ -155,12 +155,12 @@ class Driver:
         
         return cls(
             driver_id=data['driver_id'],
-            nome=data['nome'],
+            name=data['name'],
             cpf=data['cpf'],
-            cnh_numero=data['cnh_numero'],
-            cnh_categoria=data['cnh_categoria'],
-            cnh_validade=cnh_validade,
-            telefone=data['telefone'],
+            cnh_number=data['cnh_number'],
+            cnh_category=data['cnh_category'],
+            cnh_expiration=cnh_expiration,
+            phone=data['phone'],
             email=data['email'],
             vehicle_plate=data['vehicle_plate'],
             vehicle_brand=data['vehicle_brand'],

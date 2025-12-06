@@ -162,18 +162,18 @@ def select_pois(state: str, city: Optional[str] = None) -> Tuple[Dict, Dict]:
     if len(pois) < 2:
         # Fallback: create synthetic POIs
         return (
-            {'nome': 'Origem', 'tipo': 'CENTRO', 'lat': -23.55, 'lon': -46.64},
-            {'nome': 'Destino', 'tipo': 'SHOPPING', 'lat': -23.56, 'lon': -46.65},
+            {'name': 'Origin', 'type': 'CENTER', 'lat': -23.55, 'lon': -46.64},
+            {'name': 'Destination', 'type': 'SHOPPING', 'lat': -23.56, 'lon': -46.65},
         )
     
     # Select pickup POI
     pickup = random.choice(pois)
     
     # Select dropoff POI (different from pickup, preferably different type)
-    available_dropoffs = [p for p in pois if p['nome'] != pickup['nome']]
+    available_dropoffs = [p for p in pois if p['name'] != pickup['name']]
     
     # Prefer different POI type
-    different_type = [p for p in available_dropoffs if p['tipo'] != pickup['tipo']]
+    different_type = [p for p in available_dropoffs if p['type'] != pickup['type']]
     if different_type:
         dropoff = random.choice(different_type)
     else:
@@ -293,8 +293,8 @@ class RideGenerator:
         pickup_location = {
             'lat': pickup_poi['lat'],
             'lon': pickup_poi['lon'],
-            'name': pickup_poi['nome'],
-            'poi_type': pickup_poi['tipo'],
+            'name': pickup_poi['name'],
+            'poi_type': pickup_poi['type'],
             'city': city,
             'state': passenger_state,
         }
@@ -302,8 +302,8 @@ class RideGenerator:
         dropoff_location = {
             'lat': dropoff_poi['lat'],
             'lon': dropoff_poi['lon'],
-            'name': dropoff_poi['nome'],
-            'poi_type': dropoff_poi['tipo'],
+            'name': dropoff_poi['name'],
+            'poi_type': dropoff_poi['type'],
             'city': city,
             'state': passenger_state,
         }
@@ -346,7 +346,7 @@ class RideGenerator:
         driver_rating = None
         passenger_rating = None
         
-        if status == 'FINALIZADA':
+        if status == 'COMPLETED':
             # Full ride flow
             wait_time_minutes = random.randint(2, 15)
             accept_datetime = request_datetime + timedelta(seconds=random.randint(10, 60))
@@ -357,27 +357,27 @@ class RideGenerator:
             driver_rating = random.choices([5, 4, 3, 2, 1], weights=[70, 20, 5, 3, 2], k=1)[0]
             passenger_rating = random.choices([5, 4, 3, 2, 1], weights=[75, 18, 4, 2, 1], k=1)[0]
             
-        elif status == 'CANCELADA_PASSAGEIRO':
+        elif status == 'CANCELLED_PASSENGER':
             accept_datetime = request_datetime + timedelta(seconds=random.randint(10, 60))
             wait_time_minutes = random.randint(1, 10)
-            cancellation_reason = get_random_cancellation_reason('PASSAGEIRO')
+            cancellation_reason = get_random_cancellation_reason('PASSENGER')
             # Zero fare for cancelled
             fare_data = {'base_fare': 0, 'final_fare': 0, 'driver_pay': 0, 'platform_fee': 0}
             
-        elif status == 'CANCELADA_MOTORISTA':
+        elif status == 'CANCELLED_DRIVER':
             accept_datetime = request_datetime + timedelta(seconds=random.randint(10, 60))
             wait_time_minutes = random.randint(1, 5)
-            cancellation_reason = get_random_cancellation_reason('MOTORISTA')
+            cancellation_reason = get_random_cancellation_reason('DRIVER')
             fare_data = {'base_fare': 0, 'final_fare': 0, 'driver_pay': 0, 'platform_fee': 0}
             
-        elif status == 'SEM_MOTORISTA':
+        elif status == 'NO_DRIVER':
             wait_time_minutes = random.randint(5, 15)
-            cancellation_reason = 'Nenhum motorista disponível'
+            cancellation_reason = 'No driver available'
             fare_data = {'base_fare': 0, 'final_fare': 0, 'driver_pay': 0, 'platform_fee': 0}
         
         # Tip (only for completed rides, ~20% give tips)
         tip = 0.0
-        if status == 'FINALIZADA' and random.random() < 0.20:
+        if status == 'COMPLETED' and random.random() < 0.20:
             # Tip is typically 10-20% of fare
             tip = round(fare_data['final_fare'] * random.uniform(0.10, 0.25), 2)
         

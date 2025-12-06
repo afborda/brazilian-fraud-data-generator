@@ -12,25 +12,25 @@ from typing import Dict, List, Any, Optional
 
 RIDESHARE_APPS = {
     'UBER': {
-        'categorias': ['UberX', 'Comfort', 'Black', 'Flash'],
-        'peso': 45
+        'categories': ['UberX', 'Comfort', 'Black', 'Flash'],
+        'weight': 45
     },
     '99': {
-        'categorias': ['Pop', '99Comfort', 'Black'],
-        'peso': 35
+        'categories': ['Pop', '99Comfort', 'Black'],
+        'weight': 35
     },
     'CABIFY': {
-        'categorias': ['Lite', 'Cabify', 'Plus'],
-        'peso': 10
+        'categories': ['Lite', 'Cabify', 'Plus'],
+        'weight': 10
     },
     'INDRIVER': {
-        'categorias': ['Economy', 'Comfort'],
-        'peso': 10
+        'categories': ['Economy', 'Comfort'],
+        'weight': 10
     },
 }
 
 APPS_LIST = list(RIDESHARE_APPS.keys())
-APPS_WEIGHTS = [RIDESHARE_APPS[app]['peso'] for app in APPS_LIST]
+APPS_WEIGHTS = [RIDESHARE_APPS[app]['weight'] for app in APPS_LIST]
 
 # =============================================================================
 # POIS POR CAPITAL (Simplified - Top 5 capitals with 6-8 POIs each)
@@ -39,55 +39,55 @@ APPS_WEIGHTS = [RIDESHARE_APPS[app]['peso'] for app in APPS_LIST]
 POIS_POR_CAPITAL = {
     # São Paulo
     'SP': [
-        {'nome': 'Aeroporto de Congonhas', 'tipo': 'AEROPORTO', 'lat': -23.6261, 'lon': -46.6564},
-        {'nome': 'Aeroporto de Guarulhos', 'tipo': 'AEROPORTO', 'lat': -23.4356, 'lon': -46.4731},
-        {'nome': 'Shopping Ibirapuera', 'tipo': 'SHOPPING', 'lat': -23.6098, 'lon': -46.6653},
-        {'nome': 'Hospital das Clínicas', 'tipo': 'HOSPITAL', 'lat': -23.5558, 'lon': -46.6696},
-        {'nome': 'USP Cidade Universitária', 'tipo': 'UNIVERSIDADE', 'lat': -23.5587, 'lon': -46.7317},
-        {'nome': 'Estádio do Morumbi', 'tipo': 'ESTADIO', 'lat': -23.6003, 'lon': -46.7222},
-        {'nome': 'Av. Paulista', 'tipo': 'CENTRO_EMPRESARIAL', 'lat': -23.5614, 'lon': -46.6558},
-        {'nome': 'Rodoviária do Tietê', 'tipo': 'RODOVIARIA', 'lat': -23.5167, 'lon': -46.6250},
+        {'name': 'Aeroporto de Congonhas', 'type': 'AIRPORT', 'lat': -23.6261, 'lon': -46.6564},
+        {'name': 'Aeroporto de Guarulhos', 'type': 'AIRPORT', 'lat': -23.4356, 'lon': -46.4731},
+        {'name': 'Shopping Ibirapuera', 'type': 'SHOPPING', 'lat': -23.6098, 'lon': -46.6653},
+        {'name': 'Hospital das Clínicas', 'type': 'HOSPITAL', 'lat': -23.5558, 'lon': -46.6696},
+        {'name': 'USP Cidade Universitária', 'type': 'UNIVERSITY', 'lat': -23.5587, 'lon': -46.7317},
+        {'name': 'Estádio do Morumbi', 'type': 'STADIUM', 'lat': -23.6003, 'lon': -46.7222},
+        {'name': 'Av. Paulista', 'type': 'BUSINESS_CENTER', 'lat': -23.5614, 'lon': -46.6558},
+        {'name': 'Rodoviária do Tietê', 'type': 'BUS_STATION', 'lat': -23.5167, 'lon': -46.6250},
     ],
     # Rio de Janeiro
     'RJ': [
-        {'nome': 'Aeroporto Santos Dumont', 'tipo': 'AEROPORTO', 'lat': -22.9104, 'lon': -43.1631},
-        {'nome': 'Aeroporto Galeão', 'tipo': 'AEROPORTO', 'lat': -22.8089, 'lon': -43.2436},
-        {'nome': 'Shopping Rio Sul', 'tipo': 'SHOPPING', 'lat': -22.9511, 'lon': -43.1775},
-        {'nome': 'Maracanã', 'tipo': 'ESTADIO', 'lat': -22.9121, 'lon': -43.2302},
-        {'nome': 'Praia de Copacabana', 'tipo': 'PRAIA', 'lat': -22.9711, 'lon': -43.1822},
-        {'nome': 'Centro Histórico', 'tipo': 'CENTRO_HISTORICO', 'lat': -22.9068, 'lon': -43.1729},
-        {'nome': 'Rodoviária Novo Rio', 'tipo': 'RODOVIARIA', 'lat': -22.8986, 'lon': -43.2092},
-        {'nome': 'UFRJ', 'tipo': 'UNIVERSIDADE', 'lat': -22.8625, 'lon': -43.2236},
+        {'name': 'Aeroporto Santos Dumont', 'type': 'AIRPORT', 'lat': -22.9104, 'lon': -43.1631},
+        {'name': 'Aeroporto Galeão', 'type': 'AIRPORT', 'lat': -22.8089, 'lon': -43.2436},
+        {'name': 'Shopping Rio Sul', 'type': 'SHOPPING', 'lat': -22.9511, 'lon': -43.1775},
+        {'name': 'Maracanã', 'type': 'STADIUM', 'lat': -22.9121, 'lon': -43.2302},
+        {'name': 'Praia de Copacabana', 'type': 'BEACH', 'lat': -22.9711, 'lon': -43.1822},
+        {'name': 'Centro Histórico', 'type': 'HISTORIC_CENTER', 'lat': -22.9068, 'lon': -43.1729},
+        {'name': 'Rodoviária Novo Rio', 'type': 'BUS_STATION', 'lat': -22.8986, 'lon': -43.2092},
+        {'name': 'UFRJ', 'type': 'UNIVERSITY', 'lat': -22.8625, 'lon': -43.2236},
     ],
     # Minas Gerais (Belo Horizonte)
     'MG': [
-        {'nome': 'Aeroporto de Confins', 'tipo': 'AEROPORTO', 'lat': -19.6244, 'lon': -43.9719},
-        {'nome': 'Shopping Diamond Mall', 'tipo': 'SHOPPING', 'lat': -19.9314, 'lon': -43.9342},
-        {'nome': 'Mineirão', 'tipo': 'ESTADIO', 'lat': -19.8658, 'lon': -43.9708},
-        {'nome': 'UFMG', 'tipo': 'UNIVERSIDADE', 'lat': -19.8698, 'lon': -43.9644},
-        {'nome': 'Praça da Liberdade', 'tipo': 'CENTRO_HISTORICO', 'lat': -19.9319, 'lon': -43.9381},
-        {'nome': 'Rodoviária de BH', 'tipo': 'RODOVIARIA', 'lat': -19.9225, 'lon': -43.9306},
-        {'nome': 'Hospital Felício Rocho', 'tipo': 'HOSPITAL', 'lat': -19.9358, 'lon': -43.9356},
+        {'name': 'Aeroporto de Confins', 'type': 'AIRPORT', 'lat': -19.6244, 'lon': -43.9719},
+        {'name': 'Shopping Diamond Mall', 'type': 'SHOPPING', 'lat': -19.9314, 'lon': -43.9342},
+        {'name': 'Mineirão', 'type': 'STADIUM', 'lat': -19.8658, 'lon': -43.9708},
+        {'name': 'UFMG', 'type': 'UNIVERSITY', 'lat': -19.8698, 'lon': -43.9644},
+        {'name': 'Praça da Liberdade', 'type': 'HISTORIC_CENTER', 'lat': -19.9319, 'lon': -43.9381},
+        {'name': 'Rodoviária de BH', 'type': 'BUS_STATION', 'lat': -19.9225, 'lon': -43.9306},
+        {'name': 'Hospital Felício Rocho', 'type': 'HOSPITAL', 'lat': -19.9358, 'lon': -43.9356},
     ],
     # Bahia (Salvador)
     'BA': [
-        {'nome': 'Aeroporto de Salvador', 'tipo': 'AEROPORTO', 'lat': -12.9086, 'lon': -38.3225},
-        {'nome': 'Shopping Barra', 'tipo': 'SHOPPING', 'lat': -13.0092, 'lon': -38.5311},
-        {'nome': 'Arena Fonte Nova', 'tipo': 'ESTADIO', 'lat': -12.9786, 'lon': -38.5042},
-        {'nome': 'Pelourinho', 'tipo': 'CENTRO_HISTORICO', 'lat': -12.9714, 'lon': -38.5103},
-        {'nome': 'Praia de Itapuã', 'tipo': 'PRAIA', 'lat': -12.9394, 'lon': -38.3567},
-        {'nome': 'Rodoviária de Salvador', 'tipo': 'RODOVIARIA', 'lat': -12.9558, 'lon': -38.4336},
-        {'nome': 'UFBA', 'tipo': 'UNIVERSIDADE', 'lat': -13.0019, 'lon': -38.5083},
+        {'name': 'Aeroporto de Salvador', 'type': 'AIRPORT', 'lat': -12.9086, 'lon': -38.3225},
+        {'name': 'Shopping Barra', 'type': 'SHOPPING', 'lat': -13.0092, 'lon': -38.5311},
+        {'name': 'Arena Fonte Nova', 'type': 'STADIUM', 'lat': -12.9786, 'lon': -38.5042},
+        {'name': 'Pelourinho', 'type': 'HISTORIC_CENTER', 'lat': -12.9714, 'lon': -38.5103},
+        {'name': 'Praia de Itapuã', 'type': 'BEACH', 'lat': -12.9394, 'lon': -38.3567},
+        {'name': 'Rodoviária de Salvador', 'type': 'BUS_STATION', 'lat': -12.9558, 'lon': -38.4336},
+        {'name': 'UFBA', 'type': 'UNIVERSITY', 'lat': -13.0019, 'lon': -38.5083},
     ],
     # Distrito Federal (Brasília)
     'DF': [
-        {'nome': 'Aeroporto JK', 'tipo': 'AEROPORTO', 'lat': -15.8697, 'lon': -47.9172},
-        {'nome': 'Shopping Conjunto Nacional', 'tipo': 'SHOPPING', 'lat': -15.7900, 'lon': -47.8828},
-        {'nome': 'Estádio Mané Garrincha', 'tipo': 'ESTADIO', 'lat': -15.7836, 'lon': -47.8989},
-        {'nome': 'UnB', 'tipo': 'UNIVERSIDADE', 'lat': -15.7631, 'lon': -47.8700},
-        {'nome': 'Esplanada dos Ministérios', 'tipo': 'CENTRO_EMPRESARIAL', 'lat': -15.7989, 'lon': -47.8644},
-        {'nome': 'Rodoviária do Plano Piloto', 'tipo': 'RODOVIARIA', 'lat': -15.7942, 'lon': -47.8822},
-        {'nome': 'Parque da Cidade', 'tipo': 'PARQUE', 'lat': -15.8083, 'lon': -47.9017},
+        {'name': 'Aeroporto JK', 'type': 'AIRPORT', 'lat': -15.8697, 'lon': -47.9172},
+        {'name': 'Shopping Conjunto Nacional', 'type': 'SHOPPING', 'lat': -15.7900, 'lon': -47.8828},
+        {'name': 'Estádio Mané Garrincha', 'type': 'STADIUM', 'lat': -15.7836, 'lon': -47.8989},
+        {'name': 'UnB', 'type': 'UNIVERSITY', 'lat': -15.7631, 'lon': -47.8700},
+        {'name': 'Esplanada dos Ministérios', 'type': 'BUSINESS_CENTER', 'lat': -15.7989, 'lon': -47.8644},
+        {'name': 'Rodoviária do Plano Piloto', 'type': 'BUS_STATION', 'lat': -15.7942, 'lon': -47.8822},
+        {'name': 'Parque da Cidade', 'type': 'PARK', 'lat': -15.8083, 'lon': -47.9017},
     ],
 }
 
@@ -101,18 +101,18 @@ CAPITAL_POR_ESTADO = {
 }
 
 POI_TYPES = [
-    'AEROPORTO', 'SHOPPING', 'RODOVIARIA', 'HOSPITAL', 'UNIVERSIDADE',
-    'ESTADIO', 'CENTRO_EMPRESARIAL', 'TERMINAL_ONIBUS', 'PARQUE',
-    'PRAIA', 'CENTRO_HISTORICO', 'HOTEL', 'FEIRA', 'MERCADO'
+    'AIRPORT', 'SHOPPING', 'BUS_STATION', 'HOSPITAL', 'UNIVERSITY',
+    'STADIUM', 'BUSINESS_CENTER', 'BUS_TERMINAL', 'PARK',
+    'BEACH', 'HISTORIC_CENTER', 'HOTEL', 'FAIR', 'MARKET'
 ]
 
 # =============================================================================
 # VEHICLES
 # =============================================================================
 
-CORES_VEICULOS = [
-    'Branco', 'Prata', 'Preto', 'Cinza', 'Vermelho',
-    'Azul', 'Marrom', 'Bege', 'Verde'
+VEHICLE_COLORS = [
+    'White', 'Silver', 'Black', 'Gray', 'Red',
+    'Blue', 'Brown', 'Beige', 'Green'
 ]
 
 # Category hierarchy: Pop/UberX < Comfort < Black
@@ -209,44 +209,44 @@ PLATFORM_FEE_PERCENT = {
 # =============================================================================
 
 RIDE_STATUS = [
-    'SOLICITADA',
-    'ACEITA',
-    'EM_ANDAMENTO',
-    'FINALIZADA',
-    'CANCELADA_PASSAGEIRO',
-    'CANCELADA_MOTORISTA',
-    'SEM_MOTORISTA',
+    'REQUESTED',
+    'ACCEPTED',
+    'IN_PROGRESS',
+    'COMPLETED',
+    'CANCELLED_PASSENGER',
+    'CANCELLED_DRIVER',
+    'NO_DRIVER',
 ]
 
 RIDE_STATUS_WEIGHTS = {
-    'SOLICITADA': 0,  # Transient state
-    'ACEITA': 0,      # Transient state
-    'EM_ANDAMENTO': 0, # Transient state
-    'FINALIZADA': 85,
-    'CANCELADA_PASSAGEIRO': 6,
-    'CANCELADA_MOTORISTA': 4,
-    'SEM_MOTORISTA': 5,
+    'REQUESTED': 0,  # Transient state
+    'ACCEPTED': 0,      # Transient state
+    'IN_PROGRESS': 0, # Transient state
+    'COMPLETED': 85,
+    'CANCELLED_PASSENGER': 6,
+    'CANCELLED_DRIVER': 4,
+    'NO_DRIVER': 5,
 }
 
-FINAL_STATUS_LIST = ['FINALIZADA', 'CANCELADA_PASSAGEIRO', 'CANCELADA_MOTORISTA', 'SEM_MOTORISTA']
+FINAL_STATUS_LIST = ['COMPLETED', 'CANCELLED_PASSENGER', 'CANCELLED_DRIVER', 'NO_DRIVER']
 FINAL_STATUS_WEIGHTS = [RIDE_STATUS_WEIGHTS[s] for s in FINAL_STATUS_LIST]
 
 CANCELLATION_REASONS = {
-    'PASSAGEIRO': [
-        'Tempo de espera muito longo',
-        'Mudança de planos',
-        'Encontrei outra carona',
-        'Preço muito alto',
-        'Erro ao solicitar',
-        'Motorista muito distante',
+    'PASSENGER': [
+        'Wait time too long',
+        'Change of plans',
+        'Found another ride',
+        'Price too high',
+        'Request error',
+        'Driver too far',
     ],
-    'MOTORISTA': [
-        'Passageiro não apareceu',
-        'Local perigoso',
-        'Destino muito distante',
-        'Passageiro cancelou no local',
-        'Veículo com problema',
-        'Emergência pessoal',
+    'DRIVER': [
+        'Passenger did not show up',
+        'Unsafe location',
+        'Destination too far',
+        'Passenger cancelled at location',
+        'Vehicle problem',
+        'Personal emergency',
     ],
 }
 
@@ -255,10 +255,10 @@ CANCELLATION_REASONS = {
 # =============================================================================
 
 RIDESHARE_FRAUD_TYPES = {
-    'CORRIDA_FANTASMA': 15,        # Driver starts/finishes without passenger
+    'GHOST_RIDE': 15,              # Driver starts/finishes without passenger
     'GPS_SPOOFING': 20,            # Location manipulation
     'SURGE_ABUSE': 15,             # Creating artificial demand
-    'CONTA_MULTIPLA_DRIVER': 12,   # Same driver, multiple accounts
+    'MULTI_ACCOUNT_DRIVER': 12,    # Same driver, multiple accounts
     'PROMO_ABUSE': 18,             # Creating accounts for promotions
     'RATING_FRAUD': 10,            # Rating manipulation
     'SPLIT_FARE_FRAUD': 10,        # Fraud in shared rides
@@ -273,10 +273,10 @@ FRAUD_TYPES_WEIGHTS = list(RIDESHARE_FRAUD_TYPES.values())
 
 PAYMENT_METHODS = {
     'PIX': 30,
-    'CARTAO_CREDITO': 35,
-    'CARTAO_DEBITO': 15,
-    'DINHEIRO': 15,
-    'VOUCHER_CORPORATIVO': 5,
+    'CREDIT_CARD': 35,
+    'DEBIT_CARD': 15,
+    'CASH': 15,
+    'CORPORATE_VOUCHER': 5,
 }
 
 PAYMENT_METHODS_LIST = list(PAYMENT_METHODS.keys())
@@ -290,7 +290,7 @@ PAYMENT_METHODS_WEIGHTS = list(PAYMENT_METHODS.values())
 def get_app_categories(app: str) -> List[str]:
     """Get available categories for a rideshare app."""
     if app in RIDESHARE_APPS:
-        return RIDESHARE_APPS[app]['categorias']
+        return RIDESHARE_APPS[app]['categories']
     return ['Economy']
 
 
@@ -339,7 +339,7 @@ def get_random_vehicle(category_min: Optional[str] = None) -> Dict[str, Any]:
         'marca': vehicle['marca'],
         'modelo': vehicle['modelo'],
         'ano': random.choice(VEHICLE_YEARS),
-        'cor': random.choice(CORES_VEICULOS),
+        'cor': random.choice(VEHICLE_COLORS),
         'categoria_min': vehicle['categoria_min'],
     }
 
