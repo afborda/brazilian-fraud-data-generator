@@ -148,18 +148,18 @@ class TransactionGenerator:
             'session_id': f'SESS_{tx_id}',
             'device_id': device_id,
             'timestamp': timestamp.isoformat(),
-            'tipo': tx_type,
-            'valor': valor,
-            'moeda': 'BRL',
-            'canal': canal,
+            'type': tx_type,
+            'amount': valor,
+            'currency': 'BRL',
+            'channel': canal,
             'ip_address': generate_ip_brazil(),
-            'geolocalizacao_lat': lat,
-            'geolocalizacao_lon': lon,
+            'geolocation_lat': lat,
+            'geolocation_lon': lon,
             'merchant_id': f'MERCH_{random.randint(1, 100000):06d}',
             'merchant_name': merchant_name,
-            'merchant_category': mcc_info['categoria'],
+            'merchant_category': mcc_info['category'],
             'mcc_code': mcc_code,
-            'mcc_risk_level': mcc_info['risco'],
+            'mcc_risk_level': mcc_info['risk'],
         }
         
         # Add type-specific fields
@@ -199,7 +199,7 @@ class TransactionGenerator:
             timestamp = self._generate_timestamp(
                 start_date,
                 end_date,
-                getattr(customer_idx, 'perfil', None)
+                getattr(customer_idx, 'behavioral_profile', None)
             )
             
             tx_id = f"{start_tx_id + i:015d}"
@@ -209,8 +209,8 @@ class TransactionGenerator:
                 customer_id=customer_idx.customer_id,
                 device_id=device_idx.device_id,
                 timestamp=timestamp,
-                customer_state=getattr(customer_idx, 'estado', None),
-                customer_profile=getattr(customer_idx, 'perfil', None),
+                customer_state=getattr(customer_idx, 'state', None),
+                customer_profile=getattr(customer_idx, 'behavioral_profile', None),
             )
     
     def _calculate_value(
@@ -224,16 +224,16 @@ class TransactionGenerator:
         if is_fraud:
             return self._calculate_fraud_value(fraud_type)
         
-        mcc_range = (mcc_info['valor_min'], mcc_info['valor_max'])
+        mcc_range = (mcc_info['min_value'], mcc_info['max_value'])
         
         if self.use_profiles and customer_profile:
             return get_transaction_value_for_profile(customer_profile, mcc_range)
         
         # Default value calculation
-        valor_min, valor_max = mcc_range
-        mean = (valor_min + valor_max) / 3
-        valor = random.gauss(mean, mean / 2)
-        return round(min(max(valor, valor_min), valor_max), 2)
+        min_value, max_value = mcc_range
+        mean = (min_value + max_value) / 3
+        value = random.gauss(mean, mean / 2)
+        return round(min(max(value, min_value), max_value), 2)
     
     def _calculate_fraud_value(self, fraud_type: Optional[str]) -> float:
         """Calculate fraud transaction value."""
@@ -274,46 +274,46 @@ class TransactionGenerator:
         banco_destino: str
     ) -> None:
         """Add transaction type-specific fields."""
-        if tx_type in ['CARTAO_CREDITO', 'CARTAO_DEBITO']:
-            bandeira = random.choices(BRANDS_LIST, weights=BRANDS_WEIGHTS)[0]
+        if tx_type in ['CREDIT_CARD', 'DEBIT_CARD']:
+            card_brand = random.choices(BRANDS_LIST, weights=BRANDS_WEIGHTS)[0]
             tx.update({
-                'numero_cartao_hash': generate_random_hash(16),
-                'bandeira': bandeira,
-                'tipo_cartao': 'CREDITO' if tx_type == 'CARTAO_CREDITO' else 'DEBITO',
-                'parcelas': random.choices(INSTALLMENT_LIST, weights=INSTALLMENT_WEIGHTS)[0] if tx_type == 'CARTAO_CREDITO' else 1,
-                'entrada_cartao': random.choices(CARD_ENTRY_LIST, weights=CARD_ENTRY_WEIGHTS)[0],
-                'cvv_validado': random.choices([True, False], weights=[95, 5])[0],
-                'autenticacao_3ds': random.choices([True, False], weights=[70, 30])[0],
-                'chave_pix_tipo': None,
-                'chave_pix_destino': None,
-                'banco_destino': None,
+                'card_number_hash': generate_random_hash(16),
+                'card_brand': card_brand,
+                'card_type': 'CREDIT' if tx_type == 'CREDIT_CARD' else 'DEBIT',
+                'installments': random.choices(INSTALLMENT_LIST, weights=INSTALLMENT_WEIGHTS)[0] if tx_type == 'CREDIT_CARD' else 1,
+                'card_entry': random.choices(CARD_ENTRY_LIST, weights=CARD_ENTRY_WEIGHTS)[0],
+                'cvv_validated': random.choices([True, False], weights=[95, 5])[0],
+                'auth_3ds': random.choices([True, False], weights=[70, 30])[0],
+                'pix_key_type': None,
+                'pix_key_destination': None,
+                'destination_bank': None,
             })
         elif tx_type == 'PIX':
-            pix_tipo = random.choices(PIX_TYPES_LIST, weights=PIX_TYPES_WEIGHTS)[0]
+            pix_key_type = random.choices(PIX_TYPES_LIST, weights=PIX_TYPES_WEIGHTS)[0]
             tx.update({
-                'numero_cartao_hash': None,
-                'bandeira': None,
-                'tipo_cartao': None,
-                'parcelas': None,
-                'entrada_cartao': None,
-                'cvv_validado': None,
-                'autenticacao_3ds': None,
-                'chave_pix_tipo': pix_tipo,
-                'chave_pix_destino': generate_random_hash(32),
-                'banco_destino': banco_destino,
+                'card_number_hash': None,
+                'card_brand': None,
+                'card_type': None,
+                'installments': None,
+                'card_entry': None,
+                'cvv_validated': None,
+                'auth_3ds': None,
+                'pix_key_type': pix_key_type,
+                'pix_key_destination': generate_random_hash(32),
+                'destination_bank': banco_destino,
             })
         else:
             tx.update({
-                'numero_cartao_hash': None,
-                'bandeira': None,
-                'tipo_cartao': None,
-                'parcelas': None,
-                'entrada_cartao': None,
-                'cvv_validado': None,
-                'autenticacao_3ds': None,
-                'chave_pix_tipo': None,
-                'chave_pix_destino': None,
-                'banco_destino': banco_destino if tx_type in ['TED', 'BOLETO', 'DOC'] else None,
+                'card_number_hash': None,
+                'card_brand': None,
+                'card_type': None,
+                'installments': None,
+                'card_entry': None,
+                'cvv_validated': None,
+                'auth_3ds': None,
+                'pix_key_type': None,
+                'pix_key_destination': None,
+                'destination_bank': banco_destino if tx_type in ['TED', 'BOLETO', 'DOC'] else None,
             })
     
     def _add_risk_indicators(
@@ -325,34 +325,34 @@ class TransactionGenerator:
     ) -> None:
         """Add risk indicators to transaction."""
         hour = timestamp.hour
-        horario_incomum = hour < 6 or hour > 23
+        unusual_time = hour < 6 or hour > 23
         
         if is_fraud:
             status = random.choices(
-                ['APROVADA', 'RECUSADA', 'PENDENTE', 'BLOQUEADA'],
+                ['APPROVED', 'DECLINED', 'PENDING', 'BLOCKED'],
                 weights=[60, 25, 10, 5]
             )[0]
             fraud_score = round(random.uniform(65, 100), 2)
-            transacoes_24h = random.randint(5, 50)
-            valor_acumulado = round(random.uniform(2000, 50000), 2)
+            transactions_24h = random.randint(5, 50)
+            accumulated_amount = round(random.uniform(2000, 50000), 2)
         else:
             status = random.choices(
-                ['APROVADA', 'RECUSADA', 'PENDENTE'],
+                ['APPROVED', 'DECLINED', 'PENDING'],
                 weights=[96, 3, 1]
             )[0]
             fraud_score = round(random.uniform(0, 35), 2)
-            transacoes_24h = random.randint(1, 15)
-            valor_acumulado = round(random.uniform(50, 5000), 2)
+            transactions_24h = random.randint(1, 15)
+            accumulated_amount = round(random.uniform(50, 5000), 2)
         
         tx.update({
-            'distancia_ultima_transacao_km': round(random.uniform(0, 100), 2) if random.random() > 0.5 else None,
-            'tempo_desde_ultima_transacao_min': random.randint(1, 1440) if random.random() > 0.3 else None,
-            'transacoes_ultimas_24h': transacoes_24h,
-            'valor_acumulado_24h': valor_acumulado,
-            'horario_incomum': horario_incomum,
-            'novo_beneficiario': random.random() < (0.7 if is_fraud else 0.15),
+            'distance_from_last_txn_km': round(random.uniform(0, 100), 2) if random.random() > 0.5 else None,
+            'time_since_last_txn_min': random.randint(1, 1440) if random.random() > 0.3 else None,
+            'transactions_last_24h': transactions_24h,
+            'accumulated_amount_24h': accumulated_amount,
+            'unusual_time': unusual_time,
+            'new_beneficiary': random.random() < (0.7 if is_fraud else 0.15),
             'status': status,
-            'motivo_recusa': random.choice(REFUSAL_REASONS) if status == 'RECUSADA' else None,
+            'refusal_reason': random.choice(REFUSAL_REASONS) if status == 'DECLINED' else None,
             'fraud_score': fraud_score,
             'is_fraud': is_fraud,
             'fraud_type': fraud_type,

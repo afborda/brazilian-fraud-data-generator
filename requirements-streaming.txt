@@ -1,0 +1,18 @@
+# Brazilian Fraud Data Generator - Streaming Dependencies
+# ========================================================
+# Install with: pip install -r requirements-streaming.txt
+
+# Kafka support
+kafka-python>=2.0.2
+
+# HTTP/Webhook support
+requests>=2.31.0
+
+# Optional: Better async HTTP
+# httpx>=0.26.0
+
+# Optional: PostgreSQL support
+# psycopg2-binary>=2.9.9
+
+# Optional: AWS S3 support  
+boto3>=1.34.0

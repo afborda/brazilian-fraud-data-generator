@@ -5,8 +5,12 @@ Utilities package for Brazilian Fraud Data Generator.
 from .streaming import (
     CustomerIndex,
     DeviceIndex,
+    DriverIndex,
+    RideIndex,
     create_customer_index,
     create_device_index,
+    create_driver_index,
+    create_ride_index,
     BatchGenerator,
     batch_iterator,
     chunked_range,
@@ -25,11 +29,17 @@ from .helpers import (
 )
 
 __all__ = [
-    # Streaming
+    # Streaming - Customer/Device
     'CustomerIndex',
     'DeviceIndex',
     'create_customer_index',
     'create_device_index',
+    # Streaming - Driver/Ride
+    'DriverIndex',
+    'RideIndex',
+    'create_driver_index',
+    'create_ride_index',
+    # Streaming - Utils
     'BatchGenerator',
     'batch_iterator',
     'chunked_range',

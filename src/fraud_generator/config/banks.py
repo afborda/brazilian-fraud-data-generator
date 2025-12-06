@@ -5,48 +5,48 @@ Contains bank codes, names, types and market share weights.
 
 # Brazilian bank codes with names (Código COMPE/ISPB) - Top 25 banks by market share
 BANKS = {
-    '001': {'nome': 'Banco do Brasil', 'tipo': 'publico', 'peso': 15},
-    '033': {'nome': 'Santander Brasil', 'tipo': 'privado', 'peso': 10},
-    '104': {'nome': 'Caixa Econômica Federal', 'tipo': 'publico', 'peso': 14},
-    '237': {'nome': 'Bradesco', 'tipo': 'privado', 'peso': 12},
-    '341': {'nome': 'Itaú Unibanco', 'tipo': 'privado', 'peso': 15},
-    '260': {'nome': 'Nubank', 'tipo': 'digital', 'peso': 10},
-    '077': {'nome': 'Banco Inter', 'tipo': 'digital', 'peso': 5},
-    '336': {'nome': 'C6 Bank', 'tipo': 'digital', 'peso': 4},
-    '290': {'nome': 'PagBank', 'tipo': 'digital', 'peso': 3},
-    '380': {'nome': 'PicPay', 'tipo': 'digital', 'peso': 2},
-    '323': {'nome': 'Mercado Pago', 'tipo': 'digital', 'peso': 2},
-    '403': {'nome': 'Cora', 'tipo': 'digital', 'peso': 1},
-    '212': {'nome': 'Banco Original', 'tipo': 'digital', 'peso': 1},
-    '756': {'nome': 'Sicoob', 'tipo': 'cooperativa', 'peso': 2},
-    '748': {'nome': 'Sicredi', 'tipo': 'cooperativa', 'peso': 2},
-    '422': {'nome': 'Safra', 'tipo': 'privado', 'peso': 1},
-    '070': {'nome': 'BRB', 'tipo': 'publico', 'peso': 1},
-    # Novos bancos adicionados
-    '208': {'nome': 'BTG Pactual', 'tipo': 'privado', 'peso': 2},
-    '655': {'nome': 'Neon', 'tipo': 'digital', 'peso': 2},
-    '280': {'nome': 'Will Bank', 'tipo': 'digital', 'peso': 1},
-    '623': {'nome': 'Banco Pan', 'tipo': 'privado', 'peso': 2},
-    '121': {'nome': 'Agibank', 'tipo': 'digital', 'peso': 1},
-    '707': {'nome': 'Daycoval', 'tipo': 'privado', 'peso': 1},
-    '318': {'nome': 'BMG', 'tipo': 'privado', 'peso': 1},
+    '001': {'name': 'Banco do Brasil', 'type': 'public', 'weight': 15},
+    '033': {'name': 'Santander Brasil', 'type': 'private', 'weight': 10},
+    '104': {'name': 'Caixa Econômica Federal', 'type': 'public', 'weight': 14},
+    '237': {'name': 'Bradesco', 'type': 'private', 'weight': 12},
+    '341': {'name': 'Itaú Unibanco', 'type': 'private', 'weight': 15},
+    '260': {'name': 'Nubank', 'type': 'digital', 'weight': 10},
+    '077': {'name': 'Banco Inter', 'type': 'digital', 'weight': 5},
+    '336': {'name': 'C6 Bank', 'type': 'digital', 'weight': 4},
+    '290': {'name': 'PagBank', 'type': 'digital', 'weight': 3},
+    '380': {'name': 'PicPay', 'type': 'digital', 'weight': 2},
+    '323': {'name': 'Mercado Pago', 'type': 'digital', 'weight': 2},
+    '403': {'name': 'Cora', 'type': 'digital', 'weight': 1},
+    '212': {'name': 'Banco Original', 'type': 'digital', 'weight': 1},
+    '756': {'name': 'Sicoob', 'type': 'cooperative', 'weight': 2},
+    '748': {'name': 'Sicredi', 'type': 'cooperative', 'weight': 2},
+    '422': {'name': 'Safra', 'type': 'private', 'weight': 1},
+    '070': {'name': 'BRB', 'type': 'public', 'weight': 1},
+    # Additional banks
+    '208': {'name': 'BTG Pactual', 'type': 'private', 'weight': 2},
+    '655': {'name': 'Neon', 'type': 'digital', 'weight': 2},
+    '280': {'name': 'Will Bank', 'type': 'digital', 'weight': 1},
+    '623': {'name': 'Banco Pan', 'type': 'private', 'weight': 2},
+    '121': {'name': 'Agibank', 'type': 'digital', 'weight': 1},
+    '707': {'name': 'Daycoval', 'type': 'private', 'weight': 1},
+    '318': {'name': 'BMG', 'type': 'private', 'weight': 1},
 }
 
 # Pre-computed lists for weighted random selection
 BANK_CODES = list(BANKS.keys())
-BANK_WEIGHTS = [BANKS[code]['peso'] for code in BANK_CODES]
+BANK_WEIGHTS = [BANKS[code]['weight'] for code in BANK_CODES]
 
 
 def get_bank_info(code: str) -> dict:
     """Get bank information by code."""
-    return BANKS.get(code, {'nome': 'Banco Desconhecido', 'tipo': 'outro', 'peso': 1})
+    return BANKS.get(code, {'name': 'Unknown Bank', 'type': 'other', 'weight': 1})
 
 
 def get_bank_name(code: str) -> str:
     """Get bank name by code."""
-    return BANKS.get(code, {}).get('nome', 'Banco Desconhecido')
+    return BANKS.get(code, {}).get('name', 'Unknown Bank')
 
 
 def get_bank_type(code: str) -> str:
     """Get bank type by code."""
-    return BANKS.get(code, {}).get('tipo', 'outro')
+    return BANKS.get(code, {}).get('type', 'other')
