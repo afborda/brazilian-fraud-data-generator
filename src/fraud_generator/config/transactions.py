@@ -5,14 +5,14 @@ Configuration module for transaction types, fraud types, and payment methods.
 # Transaction types (PIX weighted higher - realistic for Brazil 2024)
 TRANSACTION_TYPES = {
     'PIX': 42,            # 42% - PIX dominates Brazil
-    'CARTAO_CREDITO': 22, # 22% - Credit card
-    'CARTAO_DEBITO': 13,  # 13% - Debit card
-    'BOLETO': 7,          # 7%  - Bank slip
-    'TED': 3,             # 3%  - Wire transfer
-    'SAQUE': 3,           # 3%  - Cash withdrawal (decreasing)
-    'DOC': 1,             # 1%  - DOC transfer (being phased out)
-    'DEBITO_AUTOMATICO': 5, # 5% - Automatic debit (bills, subscriptions)
-    'RECARGA_CELULAR': 4, # 4%  - Mobile phone top-up
+    'CREDIT_CARD': 22,    # 22% - Credit card
+    'DEBIT_CARD': 13,     # 13% - Debit card
+    'BOLETO': 7,          # 7%  - Bank slip (Brazilian term)
+    'TED': 3,             # 3%  - Wire transfer (Brazilian term)
+    'WITHDRAWAL': 3,      # 3%  - Cash withdrawal (decreasing)
+    'DOC': 1,             # 1%  - DOC transfer (Brazilian term, being phased out)
+    'AUTO_DEBIT': 5,      # 5%  - Automatic debit (bills, subscriptions)
+    'MOBILE_TOPUP': 4,    # 4%  - Mobile phone top-up
 }
 
 TX_TYPES_LIST = list(TRANSACTION_TYPES.keys())
@@ -20,10 +20,10 @@ TX_TYPES_WEIGHTS = list(TRANSACTION_TYPES.values())
 
 # Channels with realistic weights
 CHANNELS = {
-    'APP_MOBILE': 60,    # 60% - Mobile dominates
+    'MOBILE_APP': 60,    # 60% - Mobile dominates
     'WEB_BANKING': 25,   # 25% - Desktop banking
     'ATM': 8,            # 8%  - ATM (decreasing)
-    'AGENCIA': 5,        # 5%  - Branch (rare)
+    'BRANCH': 5,         # 5%  - Branch (rare)
     'WHATSAPP_PAY': 2,   # 2%  - WhatsApp payments
 }
 
@@ -76,32 +76,32 @@ BRANDS_WEIGHTS = list(CARD_BRANDS.values())
 
 # Transaction status codes
 TRANSACTION_STATUS = {
-    'APROVADA': 'Transaction approved',
-    'RECUSADA': 'Transaction declined',
-    'PENDENTE': 'Transaction pending',
-    'BLOQUEADA': 'Transaction blocked',
-    'CANCELADA': 'Transaction cancelled',
-    'ESTORNADA': 'Transaction reversed',
+    'APPROVED': 'Transaction approved',
+    'DECLINED': 'Transaction declined',
+    'PENDING': 'Transaction pending',
+    'BLOCKED': 'Transaction blocked',
+    'CANCELLED': 'Transaction cancelled',
+    'REVERSED': 'Transaction reversed',
 }
 
 # Refusal reasons
 REFUSAL_REASONS = [
-    'SALDO_INSUFICIENTE',
-    'SUSPEITA_FRAUDE',
-    'LIMITE_EXCEDIDO',
-    'CARTAO_BLOQUEADO',
-    'ERRO_CVV',
-    'CARTAO_VENCIDO',
-    'SENHA_INVALIDA',
-    'CONTA_BLOQUEADA',
+    'INSUFFICIENT_BALANCE',
+    'FRAUD_SUSPECT',
+    'LIMIT_EXCEEDED',
+    'CARD_BLOCKED',
+    'CVV_ERROR',
+    'CARD_EXPIRED',
+    'INVALID_PIN',
+    'ACCOUNT_BLOCKED',
 ]
 
 # Card entry methods
 CARD_ENTRY_METHODS = {
     'CHIP': 40,
     'CONTACTLESS': 35,
-    'DIGITADO': 20,
-    'MAGNETICO': 5,
+    'MANUAL': 20,
+    'MAGNETIC': 5,
 }
 
 CARD_ENTRY_LIST = list(CARD_ENTRY_METHODS.keys())

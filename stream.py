@@ -77,14 +77,14 @@ def generate_base_data(num_customers: int, use_profiles: bool, seed: Optional[in
         
         customer_idx = CustomerIndex(
             customer_id=customer['customer_id'],
-            estado=customer['endereco']['estado'],
-            perfil=customer.get('perfil_comportamental'),
-            banco_codigo=customer.get('banco_codigo'),
-            nivel_risco=customer.get('nivel_risco'),
+            state=customer['address']['state'],
+            profile=customer.get('behavioral_profile'),
+            bank_code=customer.get('bank_code'),
+            risk_level=customer.get('risk_level'),
         )
         customers.append(customer_idx)
         
-        profile = customer.get('perfil_comportamental')
+        profile = customer.get('behavioral_profile')
         for device in device_gen.generate_for_customer(
             customer_id,
             profile,
@@ -177,8 +177,8 @@ def run_streaming(
             customer_id=customer.customer_id,
             device_id=device.device_id,
             timestamp=timestamp,
-            customer_state=customer.estado,
-            customer_profile=customer.perfil,
+            customer_state=customer.state,
+            customer_profile=customer.profile,
         )
         
         # Send to target
@@ -238,7 +238,7 @@ def run_rides_streaming(
         passenger = random.choice(customers)
         
         # Select driver from same state if possible
-        state_drivers = drivers_by_state.get(passenger.estado, [])
+        state_drivers = drivers_by_state.get(passenger.state, [])
         if state_drivers:
             driver = random.choice(state_drivers)
         else:
@@ -252,8 +252,8 @@ def run_rides_streaming(
             driver_id=driver.driver_id,
             passenger_id=passenger.customer_id,
             timestamp=timestamp,
-            passenger_state=passenger.estado,
-            passenger_profile=passenger.perfil,
+            passenger_state=passenger.state,
+            passenger_profile=passenger.profile,
         )
         
         # Send to target

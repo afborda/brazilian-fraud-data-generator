@@ -14,10 +14,10 @@ class CustomerIndex(NamedTuple):
     Memory usage: ~50-80 bytes vs ~800+ bytes for full Customer object.
     """
     customer_id: str
-    estado: str
-    perfil: Optional[str]
-    banco_codigo: Optional[str] = None
-    nivel_risco: Optional[str] = None
+    state: str
+    profile: Optional[str]
+    bank_code: Optional[str] = None
+    risk_level: Optional[str] = None
 
 
 class DeviceIndex(NamedTuple):
@@ -51,10 +51,10 @@ def create_customer_index(customer_dict: Dict[str, Any]) -> CustomerIndex:
     """Create a CustomerIndex from a customer dictionary."""
     return CustomerIndex(
         customer_id=customer_dict['customer_id'],
-        estado=customer_dict.get('endereco', {}).get('estado', 'SP'),
-        perfil=customer_dict.get('perfil_comportamental'),
-        banco_codigo=customer_dict.get('banco_codigo'),
-        nivel_risco=customer_dict.get('nivel_risco'),
+        state=customer_dict.get('address', {}).get('state', 'SP'),
+        profile=customer_dict.get('behavioral_profile'),
+        bank_code=customer_dict.get('bank_code'),
+        risk_level=customer_dict.get('risk_level'),
     )
 
 
@@ -212,13 +212,13 @@ class BatchGenerator:
         """Get drivers who use a specific app."""
         return [d for d in self.driver_index if app in d.active_apps]
     
-    def get_customers_by_state(self, estado: str) -> List[CustomerIndex]:
+    def get_customers_by_state(self, state: str) -> List[CustomerIndex]:
         """Get customers from a specific state."""
-        return [c for c in self.customer_index if c.estado == estado]
+        return [c for c in self.customer_index if c.state == state]
     
     def get_customers_by_profile(self, profile: str) -> List[CustomerIndex]:
         """Get customers with a specific profile."""
-        return [c for c in self.customer_index if c.perfil == profile]
+        return [c for c in self.customer_index if c.profile == profile]
     
     def clear(self) -> None:
         """Clear all indexes to free memory."""

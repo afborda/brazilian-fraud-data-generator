@@ -20,7 +20,7 @@ from ..config.rideshare import (
     APPS_LIST,
     VEICULOS_POPULARES,
     VEHICLE_YEARS,
-    CORES_VEICULOS,
+    VEHICLE_COLORS,
     CATEGORY_HIERARCHY,
     get_app_categories,
     get_available_states,
@@ -37,15 +37,15 @@ def generate_cnh() -> Dict[str, Any]:
     
     Returns:
         Dict with:
-            - numero: 11-digit CNH number
-            - categoria: Category (B, AB, C, D, E)
-            - validade: Expiration date (1-5 years from now)
+            - number: 11-digit CNH number
+            - category: Category (B, AB, C, D, E)
+            - expiration: Expiration date (1-5 years from now)
     """
     # CNH number: 11 random digits
-    numero = ''.join(random.choices(string.digits, k=11))
+    number = ''.join(random.choices(string.digits, k=11))
     
     # Category distribution (most drivers have B or AB)
-    categoria = random.choices(
+    category = random.choices(
         ['B', 'AB', 'C', 'D', 'E'],
         weights=[60, 25, 8, 5, 2],
         k=1
@@ -53,12 +53,12 @@ def generate_cnh() -> Dict[str, Any]:
     
     # Expiration date: 1-5 years from now
     years_until_expiry = random.randint(1, 5)
-    validade = date.today() + timedelta(days=years_until_expiry * 365)
+    expiration = date.today() + timedelta(days=years_until_expiry * 365)
     
     return {
-        'numero': numero,
-        'categoria': categoria,
-        'validade': validade,
+        'number': number,
+        'category': category,
+        'expiration': expiration,
     }
 
 
@@ -135,7 +135,7 @@ def select_vehicle_for_categories(categories: List[str]) -> Dict[str, Any]:
         'marca': vehicle['marca'],
         'modelo': vehicle['modelo'],
         'ano': random.choice(VEHICLE_YEARS),
-        'cor': random.choice(CORES_VEICULOS),
+        'cor': random.choice(VEHICLE_COLORS),
         'categoria_min': vehicle['categoria_min'],
     }
 
@@ -245,12 +245,12 @@ class DriverGenerator:
         operating_city = cities[0]  # Usually the capital/main city
         
         # Generate personal info
-        nome = self.fake.name()
+        name = self.fake.name()
         cpf = generate_valid_cpf(formatted=True)
         cnh_data = generate_cnh()
         
         # Contact info
-        telefone = self.fake.phone_number()
+        phone = self.fake.phone_number()
         email = self.fake.email()
         
         # Active apps (1-3 apps)
@@ -317,12 +317,12 @@ class DriverGenerator:
         
         return {
             'driver_id': driver_id,
-            'nome': nome,
+            'name': name,
             'cpf': cpf,
-            'cnh_numero': cnh_data['numero'],
-            'cnh_categoria': cnh_data['categoria'],
-            'cnh_validade': cnh_data['validade'].isoformat(),
-            'telefone': telefone,
+            'cnh_number': cnh_data['number'],
+            'cnh_category': cnh_data['category'],
+            'cnh_expiration': cnh_data['expiration'].isoformat(),
+            'phone': phone,
             'email': email,
             'vehicle_plate': vehicle_plate,
             'vehicle_brand': vehicle['marca'],

@@ -169,8 +169,8 @@ def worker_generate_batch(args: tuple) -> str:
                     customer_id=customer.customer_id,
                     device_id=device.device_id,
                     timestamp=timestamp,
-                    customer_state=customer.estado,
-                    customer_profile=customer.perfil,
+                    customer_state=customer.state,
+                    customer_profile=customer.profile,
                 )
                 
                 # Write directly to file - no memory accumulation!
@@ -208,8 +208,8 @@ def worker_generate_batch(args: tuple) -> str:
                 customer_id=customer.customer_id,
                 device_id=device.device_id,
                 timestamp=timestamp,
-                customer_state=customer.estado,
-                customer_profile=customer.perfil,
+                customer_state=customer.state,
+                customer_profile=customer.profile,
             )
             transactions.append(tx)
         
@@ -277,7 +277,7 @@ def worker_generate_rides_batch(args: tuple) -> str:
                 passenger = random.choice(customer_idx_list)
                 
                 # Select driver from same state if possible
-                state_drivers = drivers_by_state.get(passenger.estado, [])
+                state_drivers = drivers_by_state.get(passenger.state, [])
                 if state_drivers:
                     driver = random.choice(state_drivers)
                 else:
@@ -306,8 +306,8 @@ def worker_generate_rides_batch(args: tuple) -> str:
                     driver_id=driver.driver_id,
                     passenger_id=passenger.customer_id,
                     timestamp=timestamp,
-                    passenger_state=passenger.estado,
-                    passenger_profile=passenger.perfil,
+                    passenger_state=passenger.state,
+                    passenger_profile=passenger.profile,
                 )
                 
                 # Write directly to file - no memory accumulation!
@@ -324,7 +324,7 @@ def worker_generate_rides_batch(args: tuple) -> str:
             passenger = random.choice(customer_idx_list)
             
             # Select driver from same state if possible
-            state_drivers = drivers_by_state.get(passenger.estado, [])
+            state_drivers = drivers_by_state.get(passenger.state, [])
             if state_drivers:
                 driver = random.choice(state_drivers)
             else:
@@ -353,8 +353,8 @@ def worker_generate_rides_batch(args: tuple) -> str:
                 driver_id=driver.driver_id,
                 passenger_id=passenger.customer_id,
                 timestamp=timestamp,
-                passenger_state=passenger.estado,
-                passenger_profile=passenger.perfil,
+                passenger_state=passenger.state,
+                passenger_profile=passenger.profile,
             )
             rides.append(ride)
         
@@ -396,15 +396,15 @@ def generate_customers_and_devices(
         # Create index (for pickling to workers)
         customer_idx = CustomerIndex(
             customer_id=customer['customer_id'],
-            estado=customer['endereco']['estado'],
-            perfil=customer.get('perfil_comportamental'),
-            banco_codigo=customer.get('banco_codigo'),
-            nivel_risco=customer.get('nivel_risco'),
+            state=customer['address']['state'],
+            profile=customer.get('behavioral_profile'),
+            bank_code=customer.get('bank_code'),
+            risk_level=customer.get('risk_level'),
         )
         customer_indexes.append(tuple(customer_idx))
         
         # Generate devices for customer
-        profile = customer.get('perfil_comportamental')
+        profile = customer.get('behavioral_profile')
         for device in device_gen.generate_for_customer(
             customer_id,
             profile,
@@ -803,8 +803,8 @@ Available formats: """ + ", ".join(list_formats())
                         customer_id=customer.customer_id,
                         device_id=device.device_id,
                         timestamp=timestamp,
-                        customer_state=customer.estado,
-                        customer_profile=customer.perfil,
+                        customer_state=customer.state,
+                        customer_profile=customer.profile,
                     )
                     transactions.append(tx)
                 
@@ -919,8 +919,8 @@ Available formats: """ + ", ".join(list_formats())
                         customer_id=customer.customer_id,
                         driver_id=driver.driver_id,
                         timestamp=timestamp,
-                        customer_state=customer.estado,
-                        customer_profile=customer.perfil,
+                        customer_state=customer.state,
+                        customer_profile=customer.profile,
                     )
                     rides.append(ride)
                 
