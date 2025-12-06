@@ -48,6 +48,7 @@ import sys
 import time
 import random
 import multiprocessing as mp
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any, Optional
 from functools import partial
@@ -456,6 +457,185 @@ def generate_drivers(
     return driver_indexes, driver_data
 
 
+def minio_generate_transaction_batch(
+    batch_id: int,
+    num_transactions: int,
+    customer_indexes: List[tuple],
+    device_indexes: List[tuple],
+    start_date: datetime,
+    end_date: datetime,
+    fraud_rate: float,
+    use_profiles: bool,
+    seed: Optional[int],
+) -> List[Dict[str, Any]]:
+    """
+    Generate a batch of transactions in memory (for MinIO upload).
+    
+    Returns:
+        List of transaction dictionaries
+    """
+    # Deterministic seed per batch
+    if seed is not None:
+        worker_seed = seed + batch_id * 12345
+    else:
+        worker_seed = batch_id * 12345 + int(time.time() * 1000) % 10000
+    
+    random.seed(worker_seed)
+    
+    # Reconstruct indexes
+    customer_idx_list = [CustomerIndex(*c) for c in customer_indexes]
+    device_idx_list = [DeviceIndex(*d) for d in device_indexes]
+    
+    # Build customer-device pairs
+    customer_device_map = {}
+    for device in device_idx_list:
+        if device.customer_id not in customer_device_map:
+            customer_device_map[device.customer_id] = []
+        customer_device_map[device.customer_id].append(device)
+    
+    pairs = []
+    for customer in customer_idx_list:
+        devices = customer_device_map.get(customer.customer_id, [])
+        if devices:
+            for device in devices:
+                pairs.append((customer, device))
+    
+    if not pairs:
+        pairs = [(customer_idx_list[0], device_idx_list[0])]
+    
+    # Generate transactions
+    tx_generator = TransactionGenerator(
+        fraud_rate=fraud_rate,
+        use_profiles=use_profiles,
+        seed=worker_seed
+    )
+    
+    transactions = []
+    start_tx_id = batch_id * num_transactions
+    
+    for i in range(num_transactions):
+        customer, device = random.choice(pairs)
+        
+        # Generate timestamp with realistic distribution
+        days_between = (end_date - start_date).days
+        random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+        
+        hour_weights = {
+            0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
+            6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
+            12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
+            18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
+        }
+        hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
+        timestamp = random_day.replace(
+            hour=hour,
+            minute=random.randint(0, 59),
+            second=random.randint(0, 59),
+            microsecond=random.randint(0, 999999)
+        )
+        
+        tx = tx_generator.generate(
+            tx_id=f"{start_tx_id + i:015d}",
+            customer_id=customer.customer_id,
+            device_id=device.device_id,
+            timestamp=timestamp,
+            customer_state=customer.state,
+            customer_profile=customer.profile,
+        )
+        transactions.append(tx)
+    
+    return transactions
+
+
+def minio_generate_ride_batch(
+    batch_id: int,
+    num_rides: int,
+    customer_indexes: List[tuple],
+    driver_indexes: List[tuple],
+    start_date: datetime,
+    end_date: datetime,
+    fraud_rate: float,
+    use_profiles: bool,
+    seed: Optional[int],
+) -> List[Dict[str, Any]]:
+    """
+    Generate a batch of rides in memory (for MinIO upload).
+    
+    Returns:
+        List of ride dictionaries
+    """
+    # Deterministic seed per batch
+    if seed is not None:
+        worker_seed = seed + batch_id * 54321
+    else:
+        worker_seed = batch_id * 54321 + int(time.time() * 1000) % 10000
+    
+    random.seed(worker_seed)
+    
+    # Reconstruct indexes
+    customer_idx_list = [CustomerIndex(*c) for c in customer_indexes]
+    driver_idx_list = [DriverIndex(*d) for d in driver_indexes]
+    
+    # Build state-based driver lookup
+    drivers_by_state = {}
+    for driver in driver_idx_list:
+        state = driver.operating_state
+        if state not in drivers_by_state:
+            drivers_by_state[state] = []
+        drivers_by_state[state].append(driver)
+    
+    # Generate rides
+    ride_generator = RideGenerator(
+        fraud_rate=fraud_rate,
+        use_profiles=use_profiles,
+        seed=worker_seed
+    )
+    
+    rides = []
+    start_ride_id = batch_id * num_rides
+    
+    for i in range(num_rides):
+        # Select random passenger
+        passenger = random.choice(customer_idx_list)
+        
+        # Select driver from same state if possible
+        state_drivers = drivers_by_state.get(passenger.state, [])
+        if state_drivers:
+            driver = random.choice(state_drivers)
+        else:
+            driver = random.choice(driver_idx_list)
+        
+        # Generate timestamp with realistic distribution
+        days_between = (end_date - start_date).days
+        random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+        
+        hour_weights = {
+            0: 3, 1: 2, 2: 1, 3: 1, 4: 1, 5: 2,
+            6: 5, 7: 8, 8: 12, 9: 10, 10: 8, 11: 8,
+            12: 10, 13: 8, 14: 7, 15: 7, 16: 8, 17: 12,
+            18: 14, 19: 12, 20: 10, 21: 8, 22: 8, 23: 5
+        }
+        hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
+        timestamp = random_day.replace(
+            hour=hour,
+            minute=random.randint(0, 59),
+            second=random.randint(0, 59),
+            microsecond=random.randint(0, 999999)
+        )
+        
+        ride = ride_generator.generate(
+            ride_id=f"RIDE_{start_ride_id + i:012d}",
+            driver_id=driver.driver_id,
+            passenger_id=passenger.customer_id,
+            timestamp=timestamp,
+            passenger_state=passenger.state,
+            passenger_profile=passenger.profile,
+        )
+        rides.append(ride)
+    
+    return rides
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="🇧🇷 Brazilian Fraud Data Generator v3.2.0",
@@ -601,10 +781,21 @@ Available formats: """ + ", ".join(list_formats())
         print("   Install with: pip install boto3")
         sys.exit(1)
     
-    # Validate format (MinIO only supports jsonl)
-    if use_minio and args.format != 'jsonl':
-        print(f"⚠️  MinIO output only supports JSONL format. Ignoring --format {args.format}")
-        args.format = 'jsonl'
+    # Validate format for MinIO (supports jsonl, csv, parquet)
+    if use_minio:
+        supported_minio_formats = ('jsonl', 'csv', 'parquet')
+        if args.format not in supported_minio_formats:
+            print(f"⚠️  MinIO output supports: {', '.join(supported_minio_formats)}. Ignoring --format {args.format}")
+            args.format = 'jsonl'
+        # Check parquet dependencies for MinIO
+        if args.format == 'parquet':
+            try:
+                import pyarrow
+                import pandas
+            except ImportError:
+                print("❌ Parquet format requires pyarrow and pandas.")
+                print("   Install with: pip install pyarrow pandas")
+                sys.exit(1)
     
     # Validate format
     if not use_minio and not is_format_available(args.format):
@@ -671,6 +862,7 @@ Available formats: """ + ", ".join(list_formats())
             access_key=args.minio_access_key,
             secret_key=args.minio_secret_key,
             partition_by_date=not args.no_date_partition,
+            output_format=args.format,  # Pass the format to MinIO exporter
         )
         output_dir = None  # Not used for MinIO
         exporter = minio_exporter
@@ -732,11 +924,11 @@ Available formats: """ + ", ".join(list_formats())
     
     # Save customer and device data
     if use_minio:
-        # Upload to MinIO
-        exporter.export_batch(customer_data, 'customers.jsonl')
-        exporter.export_batch(device_data, 'devices.jsonl')
-        print(f"   💾 Uploaded: customers.jsonl to MinIO")
-        print(f"   💾 Uploaded: devices.jsonl to MinIO")
+        # Upload to MinIO (exporter will handle correct extension)
+        exporter.export_batch(customer_data, 'customers')
+        exporter.export_batch(device_data, 'devices')
+        print(f"   💾 Uploaded: customers{exporter.extension} to MinIO")
+        print(f"   💾 Uploaded: devices{exporter.extension} to MinIO")
     else:
         # Save locally
         customers_path = os.path.join(args.output, f'customers{exporter.extension}')
@@ -755,66 +947,35 @@ Available formats: """ + ", ".join(list_formats())
         phase2_start = time.time()
         
         if use_minio:
-            # For MinIO, generate and upload directly (no multiprocessing for now)
-            # TODO: Add multiprocessing support for MinIO
-            for batch_id in range(num_files):
-                # Generate in memory
-                tx_generator = TransactionGenerator(
+            # For MinIO, use ThreadPoolExecutor for parallel generation + upload
+            def generate_and_upload_tx_batch(batch_id: int) -> str:
+                """Generate transactions and upload to MinIO."""
+                transactions = minio_generate_transaction_batch(
+                    batch_id=batch_id,
+                    num_transactions=TRANSACTIONS_PER_FILE,
+                    customer_indexes=customer_indexes,
+                    device_indexes=device_indexes,
+                    start_date=start_date,
+                    end_date=end_date,
                     fraud_rate=args.fraud_rate,
                     use_profiles=use_profiles,
-                    seed=args.seed + batch_id * 12345 if args.seed else None
+                    seed=args.seed,
                 )
-                
-                customer_idx_list = [CustomerIndex(*c) for c in customer_indexes]
-                device_idx_list = [DeviceIndex(*d) for d in device_indexes]
-                
-                # Build pairs
-                customer_device_map = {}
-                for device in device_idx_list:
-                    if device.customer_id not in customer_device_map:
-                        customer_device_map[device.customer_id] = []
-                    customer_device_map[device.customer_id].append(device)
-                
-                pairs = []
-                for customer in customer_idx_list:
-                    devices = customer_device_map.get(customer.customer_id, [])
-                    if devices:
-                        for device in devices:
-                            pairs.append((customer, device))
-                
-                if not pairs:
-                    pairs = [(customer_idx_list[0], device_idx_list[0])]
-                
-                transactions = []
-                start_tx_id = batch_id * TRANSACTIONS_PER_FILE
-                
-                for i in range(TRANSACTIONS_PER_FILE):
-                    customer, device = random.choice(pairs)
-                    days_between = (end_date - start_date).days
-                    random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
-                    timestamp = random_day.replace(
-                        hour=random.randint(6, 23),
-                        minute=random.randint(0, 59),
-                        second=random.randint(0, 59)
-                    )
-                    
-                    tx = tx_generator.generate(
-                        tx_id=f"{start_tx_id + i:015d}",
-                        customer_id=customer.customer_id,
-                        device_id=device.device_id,
-                        timestamp=timestamp,
-                        customer_state=customer.state,
-                        customer_profile=customer.profile,
-                    )
-                    transactions.append(tx)
-                
-                # Upload to MinIO
-                filename = f'transactions_{batch_id:05d}.jsonl'
+                filename = f'transactions_{batch_id:05d}'
                 exporter.export_batch(transactions, filename)
-                tx_results.append(filename)
-                
-                progress = (batch_id + 1) / num_files * 100
-                print(f"\r   Progress: {progress:.1f}% ({batch_id + 1}/{num_files} files)", end='', flush=True)
+                return filename
+            
+            # Use ThreadPoolExecutor for parallel I/O
+            max_workers = min(workers, num_files, 8)  # Limit concurrent uploads
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(generate_and_upload_tx_batch, i): i for i in range(num_files)}
+                completed = 0
+                for future in as_completed(futures):
+                    filename = future.result()
+                    tx_results.append(filename)
+                    completed += 1
+                    progress = completed / num_files * 100
+                    print(f"\r   Progress: {progress:.1f}% ({completed}/{num_files} files)", end='', flush=True)
             
             print()
         else:
@@ -838,13 +999,13 @@ Available formats: """ + ", ".join(list_formats())
                 worker_args.append(args_tuple)
             
             # Generate in parallel
-        with mp.Pool(workers) as pool:
-            for i, result in enumerate(pool.imap_unordered(worker_generate_batch, worker_args)):
-                tx_results.append(result)
-                progress = (i + 1) / num_files * 100
-                print(f"\r   Progress: {progress:.1f}% ({i + 1}/{num_files} files)", end='', flush=True)
-        
-        print()  # New line after progress
+            with mp.Pool(workers) as pool:
+                for i, result in enumerate(pool.imap_unordered(worker_generate_batch, worker_args)):
+                    tx_results.append(result)
+                    progress = (i + 1) / num_files * 100
+                    print(f"\r   Progress: {progress:.1f}% ({i + 1}/{num_files} files)", end='', flush=True)
+            
+            print()  # New line after progress
         phase2_time = time.time() - phase2_start
         print(f"   ⏱️  Time: {format_duration(phase2_time)}")
     
@@ -865,8 +1026,8 @@ Available formats: """ + ", ".join(list_formats())
         
         # Save driver data
         if use_minio:
-            exporter.export_batch(driver_data, 'drivers.jsonl')
-            print(f"   💾 Uploaded: drivers.jsonl to MinIO")
+            exporter.export_batch(driver_data, 'drivers')
+            print(f"   💾 Uploaded: drivers{exporter.extension} to MinIO")
         else:
             drivers_path = os.path.join(args.output, f'drivers{exporter.extension}')
             exporter.export_batch(driver_data, drivers_path)
@@ -883,54 +1044,35 @@ Available formats: """ + ", ".join(list_formats())
         phase4_start = time.time()
         
         if use_minio:
-            # For MinIO, generate and upload directly (no multiprocessing)
-            from src.fraud_generator.generators.transaction import RideGenerator
-            
-            for batch_id in range(num_files):
-                ride_generator = RideGenerator(
+            # For MinIO, use ThreadPoolExecutor for parallel generation + upload
+            def generate_and_upload_ride_batch(batch_id: int) -> str:
+                """Generate rides and upload to MinIO."""
+                rides = minio_generate_ride_batch(
+                    batch_id=batch_id,
+                    num_rides=RIDES_PER_FILE,
+                    customer_indexes=customer_indexes,
+                    driver_indexes=driver_indexes,
+                    start_date=start_date,
+                    end_date=end_date,
                     fraud_rate=args.fraud_rate,
                     use_profiles=use_profiles,
-                    seed=args.seed + batch_id * 54321 if args.seed else None
+                    seed=args.seed,
                 )
-                
-                customer_idx_list = [CustomerIndex(*c) for c in customer_indexes]
-                driver_idx_list = [DriverIndex(*d) for d in driver_indexes]
-                
-                # Build pairs
-                pairs = [(c, d) for c in customer_idx_list for d in driver_idx_list[:10]]
-                if not pairs:
-                    pairs = [(customer_idx_list[0], driver_idx_list[0])]
-                
-                rides = []
-                start_ride_id = batch_id * RIDES_PER_FILE
-                
-                for i in range(RIDES_PER_FILE):
-                    customer, driver = random.choice(pairs)
-                    days_between = (end_date - start_date).days
-                    random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
-                    timestamp = random_day.replace(
-                        hour=random.randint(6, 23),
-                        minute=random.randint(0, 59),
-                        second=random.randint(0, 59)
-                    )
-                    
-                    ride = ride_generator.generate(
-                        ride_id=f"R{start_ride_id + i:015d}",
-                        customer_id=customer.customer_id,
-                        driver_id=driver.driver_id,
-                        timestamp=timestamp,
-                        customer_state=customer.state,
-                        customer_profile=customer.profile,
-                    )
-                    rides.append(ride)
-                
-                # Upload to MinIO
-                filename = f'rides_{batch_id:05d}.jsonl'
+                filename = f'rides_{batch_id:05d}'
                 exporter.export_batch(rides, filename)
-                ride_results.append(filename)
-                
-                progress = (batch_id + 1) / num_files * 100
-                print(f"\r   Progress: {progress:.1f}% ({batch_id + 1}/{num_files} files)", end='', flush=True)
+                return filename
+            
+            # Use ThreadPoolExecutor for parallel I/O
+            max_workers = min(workers, num_files, 8)  # Limit concurrent uploads
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(generate_and_upload_ride_batch, i): i for i in range(num_files)}
+                completed = 0
+                for future in as_completed(futures):
+                    filename = future.result()
+                    ride_results.append(filename)
+                    completed += 1
+                    progress = completed / num_files * 100
+                    print(f"\r   Progress: {progress:.1f}% ({completed}/{num_files} files)", end='', flush=True)
             
             print()
         else:
