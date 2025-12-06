@@ -2,12 +2,15 @@
 MinIO Exporter for Brazilian Fraud Data Generator.
 
 Uploads data directly to MinIO/S3-compatible storage.
+Supports JSONL, CSV, and Parquet formats.
 """
 
+import csv
+import io
 import json
 import os
 from datetime import datetime
-from typing import List, Dict, Any, Iterator, Optional
+from typing import List, Dict, Any, Iterator, Optional, Literal
 from urllib.parse import urlparse
 
 try:
@@ -18,12 +21,31 @@ try:
 except ImportError:
     BOTO3_AVAILABLE = False
 
+# Optional dependencies for additional formats
+try:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    PYARROW_AVAILABLE = True
+except ImportError:
+    PYARROW_AVAILABLE = False
+
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+
 from .base import ExporterProtocol
 
 
 def is_minio_available() -> bool:
     """Check if MinIO/S3 dependencies are available."""
     return BOTO3_AVAILABLE
+
+
+def is_minio_parquet_available() -> bool:
+    """Check if MinIO Parquet export is available."""
+    return BOTO3_AVAILABLE and PYARROW_AVAILABLE and PANDAS_AVAILABLE
 
 
 def parse_minio_url(url: str) -> tuple:
@@ -50,8 +72,10 @@ class MinIOExporter(ExporterProtocol):
     - Direct upload to MinIO buckets
     - Partitioning by date (YYYY/MM/DD)
     - Automatic bucket creation
-    - JSONL format for Spark compatibility
+    - Multiple formats: JSONL, CSV, Parquet
     """
+    
+    SUPPORTED_FORMATS = ('jsonl', 'csv', 'parquet')
     
     def __init__(
         self,
@@ -63,6 +87,7 @@ class MinIOExporter(ExporterProtocol):
         partition_by_date: bool = True,
         region: str = "us-east-1",
         secure: bool = False,
+        output_format: str = "jsonl",
     ):
         """
         Initialize MinIO exporter.
@@ -76,6 +101,7 @@ class MinIOExporter(ExporterProtocol):
             partition_by_date: If True, adds YYYY/MM/DD to path
             region: AWS region (ignored by MinIO but required)
             secure: Use HTTPS
+            output_format: Output format ('jsonl', 'csv', 'parquet')
         """
         if not BOTO3_AVAILABLE:
             raise ImportError(
@@ -83,6 +109,18 @@ class MinIOExporter(ExporterProtocol):
                 "Install it with: pip install boto3"
             )
         
+        # Validate format
+        if output_format not in self.SUPPORTED_FORMATS:
+            raise ValueError(f"Unsupported format: {output_format}. Supported: {self.SUPPORTED_FORMATS}")
+        
+        # Check Parquet dependencies
+        if output_format == 'parquet' and not is_minio_parquet_available():
+            raise ImportError(
+                "pyarrow and pandas are required for Parquet export. "
+                "Install with: pip install pyarrow pandas"
+            )
+        
+        self._output_format = output_format
         self.endpoint_url = endpoint_url or os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
         self.access_key = access_key or os.getenv("MINIO_ROOT_USER") or os.getenv("MINIO_ACCESS_KEY", "minioadmin")
         self.secret_key = secret_key or os.getenv("MINIO_ROOT_PASSWORD") or os.getenv("MINIO_SECRET_KEY", "minioadmin")
@@ -110,11 +148,13 @@ class MinIOExporter(ExporterProtocol):
     
     @property
     def extension(self) -> str:
-        return '.jsonl'
+        extensions = {'jsonl': '.jsonl', 'csv': '.csv', 'parquet': '.parquet'}
+        return extensions[self._output_format]
     
     @property
     def format_name(self) -> str:
-        return 'MinIO (JSONL)'
+        names = {'jsonl': 'MinIO (JSONL)', 'csv': 'MinIO (CSV)', 'parquet': 'MinIO (Parquet)'}
+        return names[self._output_format]
     
     def _ensure_bucket(self):
         """Create bucket if it doesn't exist."""
@@ -162,6 +202,116 @@ class MinIOExporter(ExporterProtocol):
         """For MinIO, just ensure bucket exists."""
         self._ensure_bucket()
     
+    def _flatten_dict(
+        self,
+        d: Dict[str, Any],
+        parent_key: str = '',
+        sep: str = '_'
+    ) -> Dict[str, Any]:
+        """Flatten nested dictionary for CSV/Parquet formats."""
+        items = []
+        for k, v in d.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self._flatten_dict(v, new_key, sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
+    
+    def _export_jsonl(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
+        """Export data as JSONL format."""
+        if append:
+            try:
+                response = self.client.get_object(Bucket=self.bucket, Key=object_key)
+                existing_content = response['Body'].read().decode('utf-8')
+                existing_lines = existing_content.strip().split('\n') if existing_content.strip() else []
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
+                    existing_lines = []
+                else:
+                    raise
+            
+            new_lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':')) for record in data]
+            all_lines = existing_lines + new_lines
+            body = '\n'.join(all_lines) + '\n'
+        else:
+            lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':'), default=str) for record in data]
+            body = '\n'.join(lines) + '\n'
+        
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=object_key,
+            Body=body.encode('utf-8'),
+            ContentType='application/x-ndjson',
+        )
+        return len(data)
+    
+    def _export_csv(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
+        """Export data as CSV format."""
+        if not data:
+            return 0
+        
+        # Flatten nested dicts
+        flat_data = [self._flatten_dict(record) for record in data]
+        
+        # Get all columns
+        all_columns = set()
+        for record in flat_data:
+            all_columns.update(record.keys())
+        columns = sorted(all_columns)
+        
+        # Write to buffer
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction='ignore')
+        
+        if not append:
+            writer.writeheader()
+        
+        for record in flat_data:
+            writer.writerow(record)
+        
+        body = buffer.getvalue()
+        
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=object_key,
+            Body=body.encode('utf-8'),
+            ContentType='text/csv',
+        )
+        return len(data)
+    
+    def _export_parquet(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
+        """Export data as Parquet format."""
+        if not data:
+            return 0
+        
+        # Flatten nested dicts
+        flat_data = [self._flatten_dict(record) for record in data]
+        
+        # Convert to pandas DataFrame
+        df = pd.DataFrame(flat_data)
+        
+        # Convert datetime columns
+        for col in df.columns:
+            if 'timestamp' in col.lower() or 'date' in col.lower() or col.endswith('_at'):
+                try:
+                    df[col] = pd.to_datetime(df[col])
+                except (ValueError, TypeError):
+                    pass
+        
+        # Write to buffer
+        buffer = io.BytesIO()
+        df.to_parquet(buffer, engine='pyarrow', compression='snappy', index=False)
+        buffer.seek(0)
+        
+        self.client.put_object(
+            Bucket=self.bucket,
+            Key=object_key,
+            Body=buffer.getvalue(),
+            ContentType='application/octet-stream',
+        )
+        return len(data)
+    
     def export_batch(
         self,
         data: List[Dict[str, Any]],
@@ -169,12 +319,12 @@ class MinIOExporter(ExporterProtocol):
         append: bool = False
     ) -> int:
         """
-        Export a batch of records to MinIO as JSONL.
+        Export a batch of records to MinIO.
         
         Args:
             data: List of records to export
             output_path: Object key or full path
-            append: If True, download existing and append (expensive!)
+            append: If True, download existing and append (expensive, JSONL only)
             
         Returns:
             Number of records exported
@@ -187,42 +337,21 @@ class MinIOExporter(ExporterProtocol):
         else:
             filename = output_path
         
-        # Ensure .jsonl extension
-        if not filename.endswith('.jsonl'):
-            filename = filename.rsplit('.', 1)[0] + '.jsonl'
+        # Ensure correct extension
+        base_name = filename.rsplit('.', 1)[0] if '.' in filename else filename
+        filename = f"{base_name}{self.extension}"
         
         object_key = self._get_object_key(filename)
         
-        # Handle append (download, merge, upload)
-        if append:
-            try:
-                response = self.client.get_object(Bucket=self.bucket, Key=object_key)
-                existing_content = response['Body'].read().decode('utf-8')
-                existing_lines = existing_content.strip().split('\n') if existing_content.strip() else []
-            except ClientError as e:
-                if e.response['Error']['Code'] == 'NoSuchKey':
-                    existing_lines = []
-                else:
-                    raise
-            
-            # Merge
-            new_lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':')) for record in data]
-            all_lines = existing_lines + new_lines
-            body = '\n'.join(all_lines) + '\n'
+        # Export based on format
+        if self._output_format == 'jsonl':
+            return self._export_jsonl(data, object_key, append)
+        elif self._output_format == 'csv':
+            return self._export_csv(data, object_key, append)
+        elif self._output_format == 'parquet':
+            return self._export_parquet(data, object_key, append)
         else:
-            # Normal export
-            lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':'), default=str) for record in data]
-            body = '\n'.join(lines) + '\n'
-        
-        # Upload to MinIO
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=object_key,
-            Body=body.encode('utf-8'),
-            ContentType='application/x-ndjson',
-        )
-        
-        return len(data)
+            raise ValueError(f"Unsupported format: {self._output_format}")
     
     def export_stream(
         self,
