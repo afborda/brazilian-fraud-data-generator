@@ -8,47 +8,29 @@
 ![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
 ![Kafka](https://img.shields.io/badge/Kafka-Streaming-231F20?logo=apachekafka&logoColor=white)
+![MinIO](https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-[![Stars](https://img.shields.io/github/stars/afborda/brazilian-fraud-data-generator?style=social)](https://github.com/afborda/brazilian-fraud-data-generator)
 
-**Synthetic Brazilian banking transaction data generator for Data Engineering and Machine Learning**
-
-[🚀 Quick Start](#-quick-start) •
-[📡 Streaming Mode](#-streaming-mode) •
-[🚗 Ride-Share Mode](#-ride-share-mode) •
-[🐳 Docker](#-docker) •
-[📊 Data Schema](#-data-schema)
+**Generate realistic Brazilian banking and ride-share data for Data Engineering & ML**
 
 </div>
 
 ---
 
-## 📋 About
+## 🎯 What is this?
 
-Generate **realistic synthetic data** of Brazilian banking transactions and ride-share trips with two modes:
+A tool to generate **synthetic Brazilian data** for:
+- 🏦 **Banking transactions** (PIX, cards, TED, boleto)
+- 🚗 **Ride-share trips** (Uber, 99, Cabify, InDriver)
+- 🔴 **Fraud detection** training and testing
 
-| Mode | Use Case | Command |
-|------|----------|---------|
-| **📁 Batch** | Generate files for analysis (Spark, ML training) | `python generate.py --size 1GB` |
-| **📡 Streaming** | Real-time data for Kafka, APIs, testing pipelines | `python stream.py --target kafka` |
-| **🚗 Rides** | Generate ride-share data (Uber, 99, etc.) | `python generate.py --type rides` |
-
-### Features
-
-- ✅ **Valid CPF** with check digits (Faker pt_BR)
-- ✅ **Transactions**: PIX, credit/debit cards, TED, boleto, withdrawals
-- ✅ **Ride-Share**: Uber, 99, Cabify, InDriver with drivers and rides
-- ✅ **13 fraud types** for transactions + **7 fraud types** for rides
-- ✅ **6 behavioral profiles** (young_digital, traditional_senior, business_owner, etc.)
-- ✅ **25+ real Brazilian banks** with market share weights
-- ✅ **Streaming**: Kafka, Webhooks, stdout
-- ✅ **Docker ready**: One command to run with Kafka
+Perfect for: **Data pipelines**, **Spark jobs**, **Kafka streaming**, **ML models**, **API testing**
 
 ---
 
-## 🚀 Quick Start
+## 🚀 5-Minute Quick Start
 
-### Installation
+### 1️⃣ Install
 
 ```bash
 git clone https://github.com/afborda/brazilian-fraud-data-generator.git
@@ -56,139 +38,141 @@ cd brazilian-fraud-data-generator
 pip install -r requirements.txt
 ```
 
-### Batch Mode (Generate Files)
+### 2️⃣ Generate Your First Data
 
 ```bash
-# Generate 1GB of data
-python generate.py --size 1GB
-
-# Generate in Parquet format
-python generate.py --size 1GB --format parquet
-
-# Generate 50GB with 8 workers
-python generate.py --size 50GB --workers 8
+# Generate 100MB of transactions
+python3 generate.py --size 100MB --output ./my_data
 ```
 
-**Output:**
+**That's it!** Check your `./my_data` folder:
 ```
-output/
-├── customers.jsonl       # Customers with valid CPF
-├── devices.jsonl         # Devices linked to customers
-└── transactions_*.jsonl  # ~128MB files each
+my_data/
+├── customers.jsonl       # 👥 Customers with valid CPFs
+├── devices.jsonl         # 📱 Devices per customer  
+└── transactions_00000.jsonl  # 💳 Transactions (~128MB each)
 ```
 
 ---
 
-## 📡 Streaming Mode
+## 📖 Data Types: Banking vs Ride-Share
 
-Stream transactions in real-time to different targets.
+This generator supports **two different types** of data:
 
-### Install Streaming Dependencies
+| Type | Command | What it generates | Fraud types |
+|------|---------|-------------------|-------------|
+| 💳 **Banking** | `--type transactions` | PIX, cards, TED, boleto | Card cloning, account takeover, social engineering |
+| 🚗 **Ride-Share** | `--type rides` | Uber, 99, Cabify, InDriver trips | GPS spoofing, fake rides, driver collusion |
+| 🔄 **Both** | `--type all` | All of the above | All fraud types |
 
+### Output Files by Type
+
+```bash
+# Banking (default): --type transactions
+output/
+├── customers.jsonl          # 👥 Bank customers
+├── devices.jsonl            # 📱 Customer devices
+└── transactions_*.jsonl     # 💳 Banking transactions
+
+# Ride-Share: --type rides
+output/
+├── customers.jsonl          # 👥 Passengers
+├── devices.jsonl            # 📱 Passenger devices
+├── drivers.jsonl            # 🚘 Drivers with vehicles
+└── rides_*.jsonl            # 🚗 Ride-share trips
+
+# Both: --type all
+output/
+├── customers.jsonl          # 👥 Customers/Passengers
+├── devices.jsonl            # 📱 Devices
+├── drivers.jsonl            # 🚘 Drivers
+├── transactions_*.jsonl     # 💳 Banking transactions
+└── rides_*.jsonl            # 🚗 Ride-share trips
+```
+
+---
+
+## 📖 Usage Examples
+
+### 🔹 Batch Mode (Generate Files)
+
+| Goal | Command |
+|------|---------|
+| Generate 1GB of transactions | `python3 generate.py --size 1GB` |
+| Generate in CSV format | `python3 generate.py --size 500MB --format csv` |
+| Generate in Parquet | `python3 generate.py --size 1GB --format parquet` |
+| Generate ride-share data | `python3 generate.py --size 1GB --type rides` |
+| Generate both (transactions + rides) | `python3 generate.py --size 1GB --type all` |
+| Higher fraud rate (5%) | `python3 generate.py --size 1GB --fraud-rate 0.05` |
+| Reproducible data (seed) | `python3 generate.py --size 1GB --seed 42` |
+| Faster with 8 workers | `python3 generate.py --size 10GB --workers 8` |
+
+### 🔹 Streaming Mode (Real-time)
+
+First, install streaming dependencies:
 ```bash
 pip install -r requirements-streaming.txt
 ```
 
-### Stream to stdout (Debug)
+| Goal | Command |
+|------|---------|
+| Test in terminal (5/sec) | `python3 stream.py --target stdout --rate 5` |
+| Stream to Kafka | `python3 stream.py --target kafka --kafka-server localhost:9092 --rate 100` |
+| Stream rides to Kafka | `python3 stream.py --target kafka --type rides --kafka-topic rides --rate 50` |
+| Stream to REST API | `python3 stream.py --target webhook --webhook-url http://api:8080/ingest` |
+| Limited events (1000) | `python3 stream.py --target stdout --max-events 1000` |
 
-```bash
-# 5 events per second
-python stream.py --target stdout --rate 5
+#### 📊 Understanding `--rate` (Events per Second)
 
-# Limit to 100 events
-python stream.py --target stdout --rate 10 --max-events 100
+| Rate | Meaning | Use Case |
+|------|---------|----------|
+| `--rate 1` | 1 event/sec (1 per 1000ms) | Debug/Testing |
+| `--rate 10` | 10 events/sec (1 per 100ms) | Development |
+| `--rate 100` | 100 events/sec (1 per 10ms) | Production |
+| `--rate 1000` | 1000 events/sec (1 per 1ms) | Stress test |
+
+**Real-time output shows actual throughput:**
+```
+📊 Events: 1,000 | Rate: 99.6/s | Errors: 0
 ```
 
-### Stream to Kafka
+### 🔹 Docker Mode
 
 ```bash
-python stream.py --target kafka \
-    --kafka-server localhost:9092 \
-    --kafka-topic transactions \
-    --rate 100
+# Batch: Generate 1GB
+docker run -v $(pwd)/output:/output ghcr.io/afborda/fraud-generator \
+    python3 generate.py --size 1GB --output /output
+
+# Streaming to Kafka
+docker run --network host ghcr.io/afborda/fraud-generator \
+    python3 stream.py --target kafka --kafka-server localhost:9092 --rate 100
 ```
 
-### Stream to Webhook/REST API
+### 🔹 MinIO/S3 Direct Upload
+
+Upload directly to MinIO or S3-compatible storage:
 
 ```bash
-python stream.py --target webhook \
-    --webhook-url http://localhost:8080/api/ingest \
-    --rate 50
-```
+# Upload to MinIO bucket
+python3 generate.py --size 1GB \
+    --output minio://fraud-data/raw \
+    --minio-endpoint http://localhost:9000 \
+    --minio-access-key minioadmin \
+    --minio-secret-key minioadmin
 
-### Streaming Parameters
+# Or use environment variables
+export MINIO_ENDPOINT=http://localhost:9000
+export MINIO_ROOT_USER=minioadmin
+export MINIO_ROOT_PASSWORD=minioadmin
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--type` | `transactions` | Data type: `transactions` or `rides` |
-| `--target` | `stdout` | Target: `stdout`, `kafka`, `webhook` |
-| `--rate` | `10` | Events per second |
-| `--max-events` | `∞` | Stop after N events (infinite by default) |
-| `--customers` | `100` | Number of customers in pool |
-| `--fraud-rate` | `0.02` | Fraud rate (2%) |
-| `--kafka-server` | - | Kafka bootstrap server |
-| `--kafka-topic` | `transactions` | Kafka topic name |
-| `--webhook-url` | - | Webhook endpoint URL |
-
----
-
-## 🐳 Docker
-
-### Quick Start with Docker Compose
-
-```bash
-# Start Kafka + Generator
-docker-compose up -d
-
-# View streaming logs
-docker-compose logs -f fraud-generator
-
-# Stop
-docker-compose down
-```
-
-### Docker Run (Batch Mode)
-
-```bash
-# Generate 1GB of data
-docker run -v $(pwd)/output:/output \
-    fraud-generator:latest \
-    python generate.py --size 1GB --output /output
-```
-
-### Docker Run (Streaming to Kafka)
-
-```bash
-docker run --network host \
-    fraud-generator:latest \
-    python stream.py --target kafka \
-    --kafka-server localhost:9092 \
-    --rate 100
+python3 generate.py --size 1GB --output minio://fraud-data/raw
 ```
 
 ---
 
-## ⚙️ Batch Parameters
+## 📊 What Data is Generated?
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--type` | `transactions` | Data type: `transactions`, `rides`, or `all` |
-| `--size` | `1GB` | Total data size (e.g., `500MB`, `10GB`, `50GB`) |
-| `--format` | `jsonl` | Export format: `jsonl`, `csv`, `parquet` |
-| `--workers` | `CPU cores` | Parallel processes |
-| `--fraud-rate` | `0.02` | Fraud rate (2%) |
-| `--output` | `./output` | Output directory |
-| `--customers` | `auto` | Number of customers |
-| `--no-profiles` | - | Disable behavioral profiles |
-| `--seed` | - | Seed for reproducibility |
-| `--start-date` | `-1 year` | Start date (YYYY-MM-DD) |
-| `--end-date` | `today` | End date (YYYY-MM-DD) |
-
----
-
-## �� Data Schema
-
-### Customer
+### 👥 Customers
 
 ```json
 {
@@ -199,239 +183,246 @@ docker run --network host \
   "telefone": "(11) 98765-4321",
   "data_nascimento": "1985-03-15",
   "endereco": {
-    "logradouro": "Rua das Flores, 123",
     "cidade": "São Paulo",
     "estado": "SP",
     "cep": "01310-100"
   },
   "renda_mensal": 5500.00,
-  "banco_codigo": "260",
   "banco_nome": "Nubank",
   "perfil_comportamental": "young_digital"
 }
 ```
 
-### Transaction
+### 💳 Transactions
 
 ```json
 {
   "transaction_id": "TXN_000000000000001",
   "customer_id": "CUST_000000000001",
-  "device_id": "DEV_000000000001",
-  "timestamp": "2024-03-15T14:32:45.123456",
+  "timestamp": "2024-03-15T14:32:45",
   "tipo": "PIX",
   "valor": 150.00,
-  "canal": "APP_MOBILE",
   "merchant_name": "Carrefour",
-  "mcc_code": "5411",
   "is_fraud": false,
   "fraud_type": null,
   "fraud_score": 12.5
 }
 ```
 
----
+### 🚗 Rides
 
-## 🏦 Banks & Fraud Types
-
-### Supported Banks (25+)
-
-| Bank | Type | Weight |
-|------|------|--------|
-| Nubank | Digital | 15% |
-| Banco do Brasil | Public | 15% |
-| Itaú | Private | 15% |
-| Caixa | Public | 14% |
-| Bradesco | Private | 12% |
-| Santander | Private | 10% |
-| Inter, C6, PagBank... | Digital | ... |
-
-### Fraud Types (13)
-
-| Type | Description | % |
-|------|-------------|---|
-| `ENGENHARIA_SOCIAL` | Phone/WhatsApp scams | 20% |
-| `CONTA_TOMADA` | Account takeover | 16% |
-| `CARTAO_CLONADO` | Cloned card | 15% |
-| `IDENTIDADE_FALSA` | Fake documents | 10% |
-| `SIM_SWAP` | SIM card fraud | 6% |
-| ... | 8 more types | ... |
-
----
-
-## 👤 Behavioral Profiles
-
-| Profile | % | Characteristics |
-|---------|---|-----------------|
-| `young_digital` | 25% | PIX, streaming, delivery apps |
-| `family_provider` | 22% | Supermarket, utilities, education |
-| `subscription_heavy` | 20% | Recurring charges, digital services |
-| `traditional_senior` | 15% | Card payments, pharmacies |
-| `business_owner` | 10% | B2B, high values, wholesale |
-| `high_spender` | 8% | Luxury, travel, high-value |
-
----
-
-## 🚗 Ride-Share Mode
-
-Generate synthetic ride-share data similar to Uber, 99, Cabify, and InDriver.
-
-### Supported Apps
-
-| App | Categories | Weight |
-|-----|-----------|--------|
-| **Uber** | UberX, Comfort, Black, Flash | 45% |
-| **99** | Pop, 99Comfort | 35% |
-| **Cabify** | Lite, Cabify, Plus | 10% |
-| **InDriver** | Economy | 10% |
-
-### Batch Mode (Rides)
-
-```bash
-# Generate 1GB of ride data
-python generate.py --size 1GB --type rides
-
-# Generate both transactions and rides
-python generate.py --size 1GB --type all
-
-# Generate with custom fraud rate
-python generate.py --size 500MB --type rides --fraud-rate 0.05
+```json
+{
+  "ride_id": "RIDE_000000000001",
+  "timestamp": "2024-03-15T14:32:45",
+  "app": "UBER",
+  "category": "UberX",
+  "driver_id": "DRV_0000000001",
+  "passenger_id": "CUST_000000000001",
+  "pickup_location": { "city": "São Paulo", "state": "SP" },
+  "dropoff_location": { "city": "São Paulo", "state": "SP" },
+  "distance_km": 8.5,
+  "final_fare": 27.75,
+  "payment_method": "PIX",
+  "is_fraud": false
+}
 ```
 
-**Output:**
-```
-output/
-├── customers.jsonl    # Passengers
-├── devices.jsonl      # Passenger devices
-├── drivers.jsonl      # Drivers with vehicles
-└── rides_*.jsonl      # ~128MB ride files
-```
-
-### Streaming Mode (Rides)
-
-```bash
-# Stream rides to stdout
-python stream.py --target stdout --type rides --rate 5
-
-# Stream to Kafka
-python stream.py --target kafka --type rides \
-    --kafka-server localhost:9092 \
-    --kafka-topic rides \
-    --rate 100
-```
-
-### Driver Schema
+### 🚘 Drivers
 
 ```json
 {
   "driver_id": "DRV_0000000001",
   "nome": "João Carlos Silva",
-  "cpf": "123.456.789-09",
-  "cnh_numero": "12345678901",
-  "cnh_categoria": "B",
-  "cnh_validade": "2027-05-15",
+  "cpf": "987.654.321-00",
   "vehicle_plate": "ABC1D23",
-  "vehicle_brand": "Hyundai",
   "vehicle_model": "HB20",
-  "vehicle_year": 2022,
-  "vehicle_color": "Prata",
   "rating": 4.85,
-  "trips_completed": 1250,
   "active_apps": ["UBER", "99"],
-  "operating_city": "São Paulo",
-  "operating_state": "SP",
-  "categories_enabled": ["UberX", "Pop", "Comfort"]
+  "operating_city": "São Paulo"
 }
 ```
-
-### Ride Schema
-
-```json
-{
-  "ride_id": "RIDE_000000000001",
-  "timestamp": "2024-03-15T14:32:45.123456",
-  "app": "UBER",
-  "category": "UberX",
-  "driver_id": "DRV_0000000001",
-  "passenger_id": "CUST_000000000001",
-  "pickup_location": {
-    "lat": -23.5614,
-    "lon": -46.6558,
-    "name": "Av. Paulista",
-    "poi_type": "CENTRO_EMPRESARIAL",
-    "city": "São Paulo",
-    "state": "SP"
-  },
-  "dropoff_location": {
-    "lat": -23.6261,
-    "lon": -46.6564,
-    "name": "Aeroporto de Congonhas",
-    "poi_type": "AEROPORTO",
-    "city": "São Paulo",
-    "state": "SP"
-  },
-  "distance_km": 8.5,
-  "duration_minutes": 25,
-  "base_fare": 18.50,
-  "surge_multiplier": 1.5,
-  "final_fare": 27.75,
-  "tip": 5.00,
-  "payment_method": "PIX",
-  "status": "FINALIZADA",
-  "weather_condition": "RAIN",
-  "is_fraud": false,
-  "fraud_type": null
-}
-```
-
-### Ride Fraud Types (7)
-
-| Type | Description | % |
-|------|-------------|---|
-| `GPS_SPOOFING` | Fake GPS location to increase distance | 25% |
-| `DRIVER_COLLUSION` | Driver-passenger collusion for fake rides | 20% |
-| `SURGE_ABUSE` | Artificial surge pricing manipulation | 15% |
-| `PROMO_ABUSE` | Abusing promotional codes | 15% |
-| `FAKE_RIDE` | Completely fake ride for payout | 10% |
-| `IDENTITY_FRAUD` | Fake driver or passenger identity | 10% |
-| `PAYMENT_FRAUD` | Stolen payment methods | 5% |
-
-### Ride Status Distribution
-
-| Status | % |
-|--------|---|
-| `FINALIZADA` | 85% |
-| `CANCELADA_PASSAGEIRO` | 6% |
-| `CANCELADA_MOTORISTA` | 4% |
-| `SEM_MOTORISTA` | 5% |
 
 ---
 
-## 🎯 Use Cases
+## 🔴 Fraud Types
+
+### Transaction Frauds (13 types)
+
+| Type | Description |
+|------|-------------|
+| `ENGENHARIA_SOCIAL` | Phone/WhatsApp scams |
+| `CONTA_TOMADA` | Account takeover |
+| `CARTAO_CLONADO` | Cloned card |
+| `IDENTIDADE_FALSA` | Fake documents |
+| `SIM_SWAP` | SIM card fraud |
+| `TESTE_CARTAO` | Card testing |
+| `LAVAGEM_DINHEIRO` | Money laundering |
+| ... | + 6 more |
+
+### Ride Frauds (7 types)
+
+| Type | Description |
+|------|-------------|
+| `GPS_SPOOFING` | Fake GPS to increase distance |
+| `DRIVER_COLLUSION` | Driver-passenger fake rides |
+| `SURGE_ABUSE` | Artificial surge pricing |
+| `PROMO_ABUSE` | Promotional code abuse |
+| `FAKE_RIDE` | Fake ride for payout |
+| `IDENTITY_FRAUD` | Fake driver/passenger identity |
+| `PAYMENT_FRAUD` | Stolen payment methods |
+
+---
+
+## ⚙️ All Parameters
+
+### generate.py (Batch Mode)
+
+```bash
+python3 generate.py --help
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--size`, `-s` | `1GB` | Target size: `100MB`, `1GB`, `50GB` |
+| `--type`, `-t` | `transactions` | `transactions`, `rides`, or `all` |
+| `--output`, `-o` | `./output` | Output dir or `minio://bucket/prefix` |
+| `--format`, `-f` | `jsonl` | `jsonl`, `csv`, `parquet` |
+| `--fraud-rate`, `-r` | `0.02` | Fraud rate (0.0 to 1.0) |
+| `--workers`, `-w` | `CPU cores` | Parallel workers |
+| `--seed` | None | Seed for reproducibility |
+| `--customers`, `-c` | Auto | Number of customers |
+| `--start-date` | -1 year | Start date (YYYY-MM-DD) |
+| `--end-date` | today | End date (YYYY-MM-DD) |
+| `--no-profiles` | - | Disable behavioral profiles |
+| `--minio-endpoint` | env | MinIO/S3 endpoint URL |
+| `--minio-access-key` | env | MinIO access key |
+| `--minio-secret-key` | env | MinIO secret key |
+
+### stream.py (Streaming Mode)
+
+```bash
+python3 stream.py --help
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--target`, `-t` | Required | `stdout`, `kafka`, `webhook` |
+| `--type` | `transactions` | `transactions` or `rides` |
+| `--rate`, `-r` | `10` | Events per second |
+| `--max-events`, `-n` | ∞ | Stop after N events |
+| `--customers`, `-c` | `1000` | Customer pool size |
+| `--fraud-rate` | `0.02` | Fraud rate |
+| `--kafka-server` | `localhost:9092` | Kafka bootstrap server |
+| `--kafka-topic` | `transactions` | Kafka topic |
+| `--webhook-url` | - | Webhook endpoint |
+| `--quiet`, `-q` | - | Suppress progress output |
+
+---
+
+## 🐳 Docker Compose (Full Stack)
+
+Run with Kafka included:
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+
+  fraud-generator:
+    build: .
+    depends_on: [kafka]
+    command: >
+      python3 stream.py 
+        --target kafka 
+        --kafka-server kafka:29092 
+        --kafka-topic transactions 
+        --rate 10
+```
+
+```bash
+docker-compose up -d
+docker-compose logs -f fraud-generator
+```
+
+---
+
+## 🔌 Integration Examples
 
 ### Apache Spark
 
 ```python
+# Read generated data
 df = spark.read.json("output/transactions_*.jsonl")
-df.filter("is_fraud = true").groupBy("fraud_type").count().show()
+
+# Analyze frauds
+df.filter("is_fraud = true") \
+  .groupBy("fraud_type") \
+  .count() \
+  .show()
 ```
 
-### Kafka Consumer
+### Kafka Consumer (Python)
 
 ```python
 from kafka import KafkaConsumer
-consumer = KafkaConsumer('transactions', bootstrap_servers='localhost:9092')
-for msg in consumer:
-    print(msg.value)
+import json
+
+consumer = KafkaConsumer(
+    'transactions',
+    bootstrap_servers='localhost:9092',
+    value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+)
+
+for message in consumer:
+    tx = message.value
+    if tx['is_fraud']:
+        print(f"🚨 FRAUD: {tx['transaction_id']} - {tx['fraud_type']}")
 ```
 
-### ML Training
+### Pandas / ML Training
 
 ```python
 import pandas as pd
+from sklearn.model_selection import train_test_split
+
+# Load data
 df = pd.read_json("output/transactions_00000.jsonl", lines=True)
+
+# Prepare features
 X = df[['valor', 'fraud_score', 'horario_incomum']]
 y = df['is_fraud']
+
+# Split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+```
+
+### MinIO + Spark (Data Lake)
+
+```python
+# Configure Spark for MinIO
+spark = SparkSession.builder \
+    .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") \
+    .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
+    .config("spark.hadoop.fs.s3a.secret.key", "minioadmin") \
+    .getOrCreate()
+
+# Read from MinIO
+df = spark.read.json("s3a://fraud-data/raw/transactions_*.jsonl")
 ```
 
 ---
@@ -440,21 +431,48 @@ y = df['is_fraud']
 
 ```
 brazilian-fraud-data-generator/
-├── generate.py              # Batch mode script
-├── stream.py                # Streaming mode script
-├── Dockerfile               # Docker image
-├── docker-compose.yml       # Kafka + Generator setup
-├── requirements.txt         # Core dependencies
-├── requirements-streaming.txt # Kafka/webhook dependencies
+├── generate.py              # 📁 Batch generation script
+├── stream.py                # 📡 Streaming script
+├── Dockerfile               # 🐳 Docker image
+├── docker-compose.yml       # 🐳 Full stack with Kafka
+├── requirements.txt         # 📦 Core dependencies
+├── requirements-streaming.txt # 📦 Kafka/webhook deps
+│
 └── src/fraud_generator/
     ├── generators/          # Customer, Device, Transaction, Driver, Ride
+    ├── exporters/           # JSON, CSV, Parquet, MinIO
     ├── connections/         # Kafka, Webhook, Stdout
-    ├── exporters/           # JSON, CSV, Parquet
     ├── validators/          # CPF validation
-    ├── profiles/            # Behavioral profiles (transactions & rides)
-    ├── models/              # Data models (Customer, Transaction, Driver, Ride)
-    └── config/              # Banks, MCCs, Rideshare, Weather
+    ├── profiles/            # Behavioral profiles
+    └── config/              # Banks, MCCs, Geography
 ```
+
+---
+
+## 🏦 Supported Banks (25+)
+
+| Bank | Type | Share |
+|------|------|-------|
+| Nubank | Digital | 15% |
+| Banco do Brasil | Public | 15% |
+| Itaú | Private | 15% |
+| Caixa | Public | 14% |
+| Bradesco | Private | 12% |
+| Santander | Private | 10% |
+| Inter, C6, PagBank, Original... | Digital | ... |
+
+---
+
+## 👤 Behavioral Profiles
+
+| Profile | % | Behavior |
+|---------|---|----------|
+| `young_digital` | 25% | PIX, streaming, delivery apps |
+| `family_provider` | 22% | Supermarket, utilities, education |
+| `subscription_heavy` | 20% | Recurring, digital services |
+| `traditional_senior` | 15% | Cards, pharmacies |
+| `business_owner` | 10% | B2B, high values |
+| `high_spender` | 8% | Luxury, travel |
 
 ---
 
@@ -472,8 +490,8 @@ MIT License - See [LICENSE](LICENSE)
 
 <div align="center">
 
-**Made with ❤️ for the Brazilian Data Engineering community**
+⭐ **Star this repo if it helped you-rf /home/ubuntu/Estudos/brazilian-fraud-data-generator/test_output* ⭐
 
-⭐ Star this repo if it helped you!
+Made with ❤️ for the Brazilian Data Engineering community
 
 </div>
