@@ -59,7 +59,10 @@ from fraud_generator.generators import (
     CustomerGenerator, DeviceGenerator, TransactionGenerator,
     DriverGenerator, RideGenerator,
 )
-from fraud_generator.exporters import get_exporter, list_formats, is_format_available
+from fraud_generator.exporters import (
+    get_exporter, list_formats, is_format_available,
+    get_minio_exporter, is_minio_url, MINIO_AVAILABLE,
+)
 from fraud_generator.utils import (
     CustomerIndex, DeviceIndex, DriverIndex,
     parse_size, format_size, format_duration,
@@ -74,11 +77,13 @@ TRANSACTIONS_PER_FILE = (TARGET_FILE_SIZE_MB * 1024 * 1024) // BYTES_PER_TRANSAC
 BYTES_PER_RIDE = 1200  # ~1.2KB per JSON ride
 RIDES_PER_FILE = (TARGET_FILE_SIZE_MB * 1024 * 1024) // BYTES_PER_RIDE
 RIDES_PER_DRIVER = 50  # Average rides per driver
+STREAM_FLUSH_EVERY = 5000  # Flush to disk every N records (memory optimization)
 
 
 def worker_generate_batch(args: tuple) -> str:
     """
     Worker that generates a batch file with transactions.
+    Uses streaming write for memory efficiency - doesn't accumulate all records in memory.
     
     Args:
         args: Tuple of (batch_id, num_transactions, customer_indexes, device_indexes,
@@ -127,44 +132,89 @@ def worker_generate_batch(args: tuple) -> str:
         seed=worker_seed
     )
     
-    transactions = []
-    start_tx_id = batch_id * num_transactions
-    
-    for i in range(num_transactions):
-        customer, device = random.choice(pairs)
-        
-        # Generate timestamp
-        days_between = (end_date - start_date).days
-        random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
-        
-        hour_weights = {
-            0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
-            6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
-            12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
-            18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
-        }
-        hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
-        timestamp = random_day.replace(
-            hour=hour,
-            minute=random.randint(0, 59),
-            second=random.randint(0, 59),
-            microsecond=random.randint(0, 999999)
-        )
-        
-        tx = tx_generator.generate(
-            tx_id=f"{start_tx_id + i:015d}",
-            customer_id=customer.customer_id,
-            device_id=device.device_id,
-            timestamp=timestamp,
-            customer_state=customer.estado,
-            customer_profile=customer.perfil,
-        )
-        transactions.append(tx)
-    
-    # Export
+    # Determine output format
     exporter = get_exporter(format_name)
     output_path = os.path.join(output_dir, f'transactions_{batch_id:05d}{exporter.extension}')
-    exporter.export_batch(transactions, output_path)
+    
+    start_tx_id = batch_id * num_transactions
+    
+    # For JSONL format: stream directly to file (memory efficient)
+    # For other formats: accumulate (required by format)
+    if format_name == 'jsonl':
+        # STREAMING MODE - write directly to file, don't accumulate in memory
+        with open(output_path, 'w', encoding='utf-8', buffering=65536) as f:
+            for i in range(num_transactions):
+                customer, device = random.choice(pairs)
+                
+                # Generate timestamp
+                days_between = (end_date - start_date).days
+                random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+                
+                hour_weights = {
+                    0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
+                    6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
+                    12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
+                    18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
+                }
+                hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
+                timestamp = random_day.replace(
+                    hour=hour,
+                    minute=random.randint(0, 59),
+                    second=random.randint(0, 59),
+                    microsecond=random.randint(0, 999999)
+                )
+                
+                tx = tx_generator.generate(
+                    tx_id=f"{start_tx_id + i:015d}",
+                    customer_id=customer.customer_id,
+                    device_id=device.device_id,
+                    timestamp=timestamp,
+                    customer_state=customer.estado,
+                    customer_profile=customer.perfil,
+                )
+                
+                # Write directly to file - no memory accumulation!
+                f.write(json.dumps(tx, ensure_ascii=False, separators=(',', ':')) + '\n')
+                
+                # Periodic flush for very large batches
+                if i > 0 and i % STREAM_FLUSH_EVERY == 0:
+                    f.flush()
+    else:
+        # BATCH MODE - required for CSV/Parquet formats
+        transactions = []
+        for i in range(num_transactions):
+            customer, device = random.choice(pairs)
+            
+            # Generate timestamp
+            days_between = (end_date - start_date).days
+            random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+            
+            hour_weights = {
+                0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
+                6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
+                12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
+                18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
+            }
+            hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
+            timestamp = random_day.replace(
+                hour=hour,
+                minute=random.randint(0, 59),
+                second=random.randint(0, 59),
+                microsecond=random.randint(0, 999999)
+            )
+            
+            tx = tx_generator.generate(
+                tx_id=f"{start_tx_id + i:015d}",
+                customer_id=customer.customer_id,
+                device_id=device.device_id,
+                timestamp=timestamp,
+                customer_state=customer.estado,
+                customer_profile=customer.perfil,
+            )
+            transactions.append(tx)
+        
+        # Export batch
+        exporter.export_batch(transactions, output_path)
     
     return output_path
 
@@ -172,6 +222,7 @@ def worker_generate_batch(args: tuple) -> str:
 def worker_generate_rides_batch(args: tuple) -> str:
     """
     Worker that generates a batch file with rides.
+    Uses streaming write for memory efficiency - doesn't accumulate all records in memory.
     
     Args:
         args: Tuple of (batch_id, num_rides, customer_indexes, driver_indexes,
@@ -210,52 +261,105 @@ def worker_generate_rides_batch(args: tuple) -> str:
         seed=worker_seed
     )
     
-    rides = []
-    start_ride_id = batch_id * num_rides
-    
-    for i in range(num_rides):
-        # Select random passenger (customer)
-        passenger = random.choice(customer_idx_list)
-        
-        # Select driver from same state if possible
-        state_drivers = drivers_by_state.get(passenger.estado, [])
-        if state_drivers:
-            driver = random.choice(state_drivers)
-        else:
-            driver = random.choice(driver_idx_list)
-        
-        # Generate timestamp
-        days_between = (end_date - start_date).days
-        random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
-        
-        hour_weights = {
-            0: 3, 1: 2, 2: 1, 3: 1, 4: 1, 5: 2,
-            6: 5, 7: 8, 8: 12, 9: 10, 10: 8, 11: 8,
-            12: 10, 13: 8, 14: 7, 15: 7, 16: 8, 17: 12,
-            18: 14, 19: 12, 20: 10, 21: 8, 22: 8, 23: 5
-        }
-        hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
-        timestamp = random_day.replace(
-            hour=hour,
-            minute=random.randint(0, 59),
-            second=random.randint(0, 59),
-            microsecond=random.randint(0, 999999)
-        )
-        
-        ride = ride_generator.generate(
-            ride_id=f"RIDE_{start_ride_id + i:012d}",
-            driver_id=driver.driver_id,
-            passenger_id=passenger.customer_id,
-            timestamp=timestamp,
-            passenger_state=passenger.estado,
-            passenger_profile=passenger.perfil,
-        )
-        rides.append(ride)
-    
-    # Export
+    # Determine output format
     exporter = get_exporter(format_name)
     output_path = os.path.join(output_dir, f'rides_{batch_id:05d}{exporter.extension}')
-    exporter.export_batch(rides, output_path)
+    
+    start_ride_id = batch_id * num_rides
+    
+    # For JSONL format: stream directly to file (memory efficient)
+    # For other formats: accumulate (required by format)
+    if format_name == 'jsonl':
+        # STREAMING MODE - write directly to file, don't accumulate in memory
+        with open(output_path, 'w', encoding='utf-8', buffering=65536) as f:
+            for i in range(num_rides):
+                # Select random passenger (customer)
+                passenger = random.choice(customer_idx_list)
+                
+                # Select driver from same state if possible
+                state_drivers = drivers_by_state.get(passenger.estado, [])
+                if state_drivers:
+                    driver = random.choice(state_drivers)
+                else:
+                    driver = random.choice(driver_idx_list)
+                
+                # Generate timestamp
+                days_between = (end_date - start_date).days
+                random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+                
+                hour_weights = {
+                    0: 3, 1: 2, 2: 1, 3: 1, 4: 1, 5: 2,
+                    6: 5, 7: 8, 8: 12, 9: 10, 10: 8, 11: 8,
+                    12: 10, 13: 8, 14: 7, 15: 7, 16: 8, 17: 12,
+                    18: 14, 19: 12, 20: 10, 21: 8, 22: 8, 23: 5
+                }
+                hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
+                timestamp = random_day.replace(
+                    hour=hour,
+                    minute=random.randint(0, 59),
+                    second=random.randint(0, 59),
+                    microsecond=random.randint(0, 999999)
+                )
+                
+                ride = ride_generator.generate(
+                    ride_id=f"RIDE_{start_ride_id + i:012d}",
+                    driver_id=driver.driver_id,
+                    passenger_id=passenger.customer_id,
+                    timestamp=timestamp,
+                    passenger_state=passenger.estado,
+                    passenger_profile=passenger.perfil,
+                )
+                
+                # Write directly to file - no memory accumulation!
+                f.write(json.dumps(ride, ensure_ascii=False, separators=(',', ':')) + '\n')
+                
+                # Periodic flush for very large batches
+                if i > 0 and i % STREAM_FLUSH_EVERY == 0:
+                    f.flush()
+    else:
+        # BATCH MODE - required for CSV/Parquet formats
+        rides = []
+        for i in range(num_rides):
+            # Select random passenger (customer)
+            passenger = random.choice(customer_idx_list)
+            
+            # Select driver from same state if possible
+            state_drivers = drivers_by_state.get(passenger.estado, [])
+            if state_drivers:
+                driver = random.choice(state_drivers)
+            else:
+                driver = random.choice(driver_idx_list)
+            
+            # Generate timestamp
+            days_between = (end_date - start_date).days
+            random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+            
+            hour_weights = {
+                0: 3, 1: 2, 2: 1, 3: 1, 4: 1, 5: 2,
+                6: 5, 7: 8, 8: 12, 9: 10, 10: 8, 11: 8,
+                12: 10, 13: 8, 14: 7, 15: 7, 16: 8, 17: 12,
+                18: 14, 19: 12, 20: 10, 21: 8, 22: 8, 23: 5
+            }
+            hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
+            timestamp = random_day.replace(
+                hour=hour,
+                minute=random.randint(0, 59),
+                second=random.randint(0, 59),
+                microsecond=random.randint(0, 999999)
+            )
+            
+            ride = ride_generator.generate(
+                ride_id=f"RIDE_{start_ride_id + i:012d}",
+                driver_id=driver.driver_id,
+                passenger_id=passenger.customer_id,
+                timestamp=timestamp,
+                passenger_state=passenger.estado,
+                passenger_profile=passenger.perfil,
+            )
+            rides.append(ride)
+        
+        # Export batch
+        exporter.export_batch(rides, output_path)
     
     return output_path
 
@@ -366,6 +470,10 @@ Examples:
   %(prog)s --size 1GB --no-profiles --output ./data
   %(prog)s --size 50GB --fraud-rate 0.01 --workers 8
   %(prog)s --size 1GB --seed 42 --output ./data
+  
+  # MinIO/S3 direct upload:
+  %(prog)s --size 1GB --output minio://fraud-data/raw
+  %(prog)s --size 1GB --output s3://fraud-data/raw --minio-endpoint http://minio:9000
 
 Available formats: """ + ", ".join(list_formats())
     )
@@ -389,7 +497,7 @@ Available formats: """ + ", ".join(list_formats())
         '--output', '-o',
         type=str,
         default='./output',
-        help='Output directory. Default: ./output'
+        help='Output directory or MinIO URL (minio://bucket/prefix). Default: ./output'
     )
     
     parser.add_argument(
@@ -419,6 +527,34 @@ Available formats: """ + ", ".join(list_formats())
         type=int,
         default=None,
         help='Random seed for reproducibility'
+    )
+    
+    # MinIO arguments
+    parser.add_argument(
+        '--minio-endpoint',
+        type=str,
+        default=None,
+        help='MinIO endpoint URL (e.g., http://minio:9000). Default: MINIO_ENDPOINT env'
+    )
+    
+    parser.add_argument(
+        '--minio-access-key',
+        type=str,
+        default=None,
+        help='MinIO access key. Default: MINIO_ROOT_USER env'
+    )
+    
+    parser.add_argument(
+        '--minio-secret-key',
+        type=str,
+        default=None,
+        help='MinIO secret key. Default: MINIO_ROOT_PASSWORD env'
+    )
+    
+    parser.add_argument(
+        '--no-date-partition',
+        action='store_true',
+        help='Disable date partitioning in MinIO (YYYY/MM/DD)'
     )
     
     parser.add_argument(
@@ -456,8 +592,22 @@ Available formats: """ + ", ".join(list_formats())
     
     args = parser.parse_args()
     
+    # Check if output is MinIO URL
+    use_minio = is_minio_url(args.output)
+    
+    # Validate MinIO availability
+    if use_minio and not MINIO_AVAILABLE:
+        print("❌ MinIO output requires boto3.")
+        print("   Install with: pip install boto3")
+        sys.exit(1)
+    
+    # Validate format (MinIO only supports jsonl)
+    if use_minio and args.format != 'jsonl':
+        print(f"⚠️  MinIO output only supports JSONL format. Ignoring --format {args.format}")
+        args.format = 'jsonl'
+    
     # Validate format
-    if not is_format_available(args.format):
+    if not use_minio and not is_format_available(args.format):
         print(f"❌ Format '{args.format}' is not available.")
         print("   Install dependencies: pip install pyarrow pandas")
         sys.exit(1)
@@ -512,15 +662,36 @@ Available formats: """ + ", ".join(list_formats())
     # Use profiles (default: True)
     use_profiles = not args.no_profiles
     
-    # Create output directory
-    os.makedirs(args.output, exist_ok=True)
+    # Setup output (local or MinIO)
+    if use_minio:
+        # MinIO output - create exporter
+        minio_exporter = get_minio_exporter(
+            minio_url=args.output,
+            endpoint_url=args.minio_endpoint,
+            access_key=args.minio_access_key,
+            secret_key=args.minio_secret_key,
+            partition_by_date=not args.no_date_partition,
+        )
+        output_dir = None  # Not used for MinIO
+        exporter = minio_exporter
+    else:
+        # Local output - create directory
+        os.makedirs(args.output, exist_ok=True)
+        output_dir = args.output
+        exporter = get_exporter(args.format)
+        minio_exporter = None
     
     # Print configuration
     print("=" * 60)
     print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR v3.2.0")
     print("=" * 60)
     print(f"📦 Target size: {format_size(target_bytes)}")
-    print(f"📁 Output: {args.output}")
+    if use_minio:
+        print(f"☁️  Output: {args.output} (MinIO)")
+        if args.minio_endpoint:
+            print(f"   Endpoint: {args.minio_endpoint}")
+    else:
+        print(f"📁 Output: {args.output}")
     print(f"📄 Format: {args.format.upper()}")
     print(f"🎯 Type: {args.type.upper()}")
     print(f"👥 Customers: {num_customers:,}")
@@ -560,15 +731,20 @@ Available formats: """ + ", ".join(list_formats())
     print(f"   ✅ {valid_cpfs:,}/{len(customer_data):,} CPFs valid ({100*valid_cpfs/len(customer_data):.1f}%)")
     
     # Save customer and device data
-    exporter = get_exporter(args.format)
-    
-    customers_path = os.path.join(args.output, f'customers{exporter.extension}')
-    devices_path = os.path.join(args.output, f'devices{exporter.extension}')
-    
-    exporter.export_batch(customer_data, customers_path)
-    exporter.export_batch(device_data, devices_path)
-    print(f"   💾 Saved: {customers_path}")
-    print(f"   💾 Saved: {devices_path}")
+    if use_minio:
+        # Upload to MinIO
+        exporter.export_batch(customer_data, 'customers.jsonl')
+        exporter.export_batch(device_data, 'devices.jsonl')
+        print(f"   💾 Uploaded: customers.jsonl to MinIO")
+        print(f"   💾 Uploaded: devices.jsonl to MinIO")
+    else:
+        # Save locally
+        customers_path = os.path.join(args.output, f'customers{exporter.extension}')
+        devices_path = os.path.join(args.output, f'devices{exporter.extension}')
+        exporter.export_batch(customer_data, customers_path)
+        exporter.export_batch(device_data, devices_path)
+        print(f"   💾 Saved: {customers_path}")
+        print(f"   💾 Saved: {devices_path}")
     
     tx_results = []
     ride_results = []
@@ -578,25 +754,90 @@ Available formats: """ + ", ".join(list_formats())
         print(f"\n📋 Phase 2: Generating transactions ({num_files} files)...")
         phase2_start = time.time()
         
-        # Prepare worker arguments
-        worker_args = []
-        for batch_id in range(num_files):
-            args_tuple = (
-                batch_id,
-                TRANSACTIONS_PER_FILE,
-                customer_indexes,
-                device_indexes,
-                start_date,
-                end_date,
-                args.fraud_rate,
-                use_profiles,
-                args.output,
-                args.format,
-                args.seed,
-            )
-            worker_args.append(args_tuple)
-        
-        # Generate in parallel
+        if use_minio:
+            # For MinIO, generate and upload directly (no multiprocessing for now)
+            # TODO: Add multiprocessing support for MinIO
+            for batch_id in range(num_files):
+                # Generate in memory
+                tx_generator = TransactionGenerator(
+                    fraud_rate=args.fraud_rate,
+                    use_profiles=use_profiles,
+                    seed=args.seed + batch_id * 12345 if args.seed else None
+                )
+                
+                customer_idx_list = [CustomerIndex(*c) for c in customer_indexes]
+                device_idx_list = [DeviceIndex(*d) for d in device_indexes]
+                
+                # Build pairs
+                customer_device_map = {}
+                for device in device_idx_list:
+                    if device.customer_id not in customer_device_map:
+                        customer_device_map[device.customer_id] = []
+                    customer_device_map[device.customer_id].append(device)
+                
+                pairs = []
+                for customer in customer_idx_list:
+                    devices = customer_device_map.get(customer.customer_id, [])
+                    if devices:
+                        for device in devices:
+                            pairs.append((customer, device))
+                
+                if not pairs:
+                    pairs = [(customer_idx_list[0], device_idx_list[0])]
+                
+                transactions = []
+                start_tx_id = batch_id * TRANSACTIONS_PER_FILE
+                
+                for i in range(TRANSACTIONS_PER_FILE):
+                    customer, device = random.choice(pairs)
+                    days_between = (end_date - start_date).days
+                    random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+                    timestamp = random_day.replace(
+                        hour=random.randint(6, 23),
+                        minute=random.randint(0, 59),
+                        second=random.randint(0, 59)
+                    )
+                    
+                    tx = tx_generator.generate(
+                        tx_id=f"{start_tx_id + i:015d}",
+                        customer_id=customer.customer_id,
+                        device_id=device.device_id,
+                        timestamp=timestamp,
+                        customer_state=customer.estado,
+                        customer_profile=customer.perfil,
+                    )
+                    transactions.append(tx)
+                
+                # Upload to MinIO
+                filename = f'transactions_{batch_id:05d}.jsonl'
+                exporter.export_batch(transactions, filename)
+                tx_results.append(filename)
+                
+                progress = (batch_id + 1) / num_files * 100
+                print(f"\r   Progress: {progress:.1f}% ({batch_id + 1}/{num_files} files)", end='', flush=True)
+            
+            print()
+        else:
+            # Local: use multiprocessing
+            # Prepare worker arguments
+            worker_args = []
+            for batch_id in range(num_files):
+                args_tuple = (
+                    batch_id,
+                    TRANSACTIONS_PER_FILE,
+                    customer_indexes,
+                    device_indexes,
+                    start_date,
+                    end_date,
+                    args.fraud_rate,
+                    use_profiles,
+                    args.output,
+                    args.format,
+                    args.seed,
+                )
+                worker_args.append(args_tuple)
+            
+            # Generate in parallel
         with mp.Pool(workers) as pool:
             for i, result in enumerate(pool.imap_unordered(worker_generate_batch, worker_args)):
                 tx_results.append(result)
@@ -623,9 +864,13 @@ Available formats: """ + ", ".join(list_formats())
         print(f"   ⏱️  Time: {format_duration(phase3_time)}")
         
         # Save driver data
-        drivers_path = os.path.join(args.output, f'drivers{exporter.extension}')
-        exporter.export_batch(driver_data, drivers_path)
-        print(f"   💾 Saved: {drivers_path}")
+        if use_minio:
+            exporter.export_batch(driver_data, 'drivers.jsonl')
+            print(f"   💾 Uploaded: drivers.jsonl to MinIO")
+        else:
+            drivers_path = os.path.join(args.output, f'drivers{exporter.extension}')
+            exporter.export_batch(driver_data, drivers_path)
+            print(f"   💾 Saved: {drivers_path}")
         
         # Validate driver CPFs
         print("\n🔍 Validating driver CPFs...")
@@ -637,32 +882,86 @@ Available formats: """ + ", ".join(list_formats())
         print(f"\n📋 Phase 4: Generating rides ({num_files} files)...")
         phase4_start = time.time()
         
-        # Prepare worker arguments for rides
-        ride_worker_args = []
-        for batch_id in range(num_files):
-            args_tuple = (
-                batch_id,
-                RIDES_PER_FILE,
-                customer_indexes,
-                driver_indexes,
-                start_date,
-                end_date,
-                args.fraud_rate,
-                use_profiles,
-                args.output,
-                args.format,
-                args.seed,
-            )
-            ride_worker_args.append(args_tuple)
+        if use_minio:
+            # For MinIO, generate and upload directly (no multiprocessing)
+            from src.fraud_generator.generators.transaction import RideGenerator
+            
+            for batch_id in range(num_files):
+                ride_generator = RideGenerator(
+                    fraud_rate=args.fraud_rate,
+                    use_profiles=use_profiles,
+                    seed=args.seed + batch_id * 54321 if args.seed else None
+                )
+                
+                customer_idx_list = [CustomerIndex(*c) for c in customer_indexes]
+                driver_idx_list = [DriverIndex(*d) for d in driver_indexes]
+                
+                # Build pairs
+                pairs = [(c, d) for c in customer_idx_list for d in driver_idx_list[:10]]
+                if not pairs:
+                    pairs = [(customer_idx_list[0], driver_idx_list[0])]
+                
+                rides = []
+                start_ride_id = batch_id * RIDES_PER_FILE
+                
+                for i in range(RIDES_PER_FILE):
+                    customer, driver = random.choice(pairs)
+                    days_between = (end_date - start_date).days
+                    random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+                    timestamp = random_day.replace(
+                        hour=random.randint(6, 23),
+                        minute=random.randint(0, 59),
+                        second=random.randint(0, 59)
+                    )
+                    
+                    ride = ride_generator.generate(
+                        ride_id=f"R{start_ride_id + i:015d}",
+                        customer_id=customer.customer_id,
+                        driver_id=driver.driver_id,
+                        timestamp=timestamp,
+                        customer_state=customer.estado,
+                        customer_profile=customer.perfil,
+                    )
+                    rides.append(ride)
+                
+                # Upload to MinIO
+                filename = f'rides_{batch_id:05d}.jsonl'
+                exporter.export_batch(rides, filename)
+                ride_results.append(filename)
+                
+                progress = (batch_id + 1) / num_files * 100
+                print(f"\r   Progress: {progress:.1f}% ({batch_id + 1}/{num_files} files)", end='', flush=True)
+            
+            print()
+        else:
+            # Local: use multiprocessing
+            # Prepare worker arguments for rides
+            ride_worker_args = []
+            for batch_id in range(num_files):
+                args_tuple = (
+                    batch_id,
+                    RIDES_PER_FILE,
+                    customer_indexes,
+                    driver_indexes,
+                    start_date,
+                    end_date,
+                    args.fraud_rate,
+                    use_profiles,
+                    args.output,
+                    args.format,
+                    args.seed,
+                )
+                ride_worker_args.append(args_tuple)
+            
+            # Generate in parallel
+            with mp.Pool(workers) as pool:
+                for i, result in enumerate(pool.imap_unordered(worker_generate_rides_batch, ride_worker_args)):
+                    ride_results.append(result)
+                    progress = (i + 1) / num_files * 100
+                    print(f"\r   Progress: {progress:.1f}% ({i + 1}/{num_files} files)", end='', flush=True)
+            
+            print()  # New line after progress
         
-        # Generate in parallel
-        with mp.Pool(workers) as pool:
-            for i, result in enumerate(pool.imap_unordered(worker_generate_rides_batch, ride_worker_args)):
-                ride_results.append(result)
-                progress = (i + 1) / num_files * 100
-                print(f"\r   Progress: {progress:.1f}% ({i + 1}/{num_files} files)", end='', flush=True)
-        
-        print()  # New line after progress
         phase4_time = time.time() - phase4_start
         print(f"   ⏱️  Time: {format_duration(phase4_time)}")
     
@@ -671,10 +970,17 @@ Available formats: """ + ", ".join(list_formats())
     
     # Calculate actual size
     total_size = 0
-    for f in os.listdir(args.output):
-        fpath = os.path.join(args.output, f)
-        if os.path.isfile(fpath):
-            total_size += os.path.getsize(fpath)
+    if use_minio:
+        # For MinIO, estimate based on records (actual size tracking would require API calls)
+        # Approximate: ~500 bytes per transaction, ~800 bytes per ride
+        total_size = (total_transactions * 500) + (total_rides * 800) + (num_customers * 400) + (len(device_data) * 300)
+        if generate_rides:
+            total_size += num_drivers * 350
+    else:
+        for f in os.listdir(args.output):
+            fpath = os.path.join(args.output, f)
+            if os.path.isfile(fpath):
+                total_size += os.path.getsize(fpath)
     
     # Count files
     base_files = 2  # customers + devices
@@ -685,7 +991,10 @@ Available formats: """ + ", ".join(list_formats())
     print("\n" + "=" * 60)
     print("✅ GENERATION COMPLETE")
     print("=" * 60)
-    print(f"📦 Total size: {format_size(total_size)}")
+    if use_minio:
+        print(f"📦 Estimated size: ~{format_size(total_size)}")
+    else:
+        print(f"📦 Total size: {format_size(total_size)}")
     print(f"📁 Files created: {total_files}")
     if generate_transactions:
         print(f"💳 Transactions: ~{total_transactions:,}")
@@ -697,7 +1006,10 @@ Available formats: """ + ", ".join(list_formats())
     if total_records > 0:
         print(f"⚡ Throughput: {total_records / total_time:,.0f} records/sec")
     
-    print(f"📍 Output: {args.output}")
+    if use_minio:
+        print(f"📍 Output: {args.output} (MinIO)")
+    else:
+        print(f"📍 Output: {args.output}")
     print("=" * 60)
 
 
