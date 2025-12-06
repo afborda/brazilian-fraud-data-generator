@@ -177,31 +177,31 @@ python3 generate.py --size 1GB --output minio://fraud-data/raw
 ```json
 {
   "customer_id": "CUST_000000000001",
-  "nome": "Maria Silva Santos",
+  "name": "Maria Silva Santos",
   "cpf": "123.456.789-09",
   "email": "maria.silva@email.com.br",
-  "telefone": "(11) 98765-4321",
-  "data_nascimento": "1985-03-15",
-  "endereco": {
-    "cidade": "São Paulo",
-    "estado": "SP",
-    "cep": "01310-100"
+  "phone": "(11) 98765-4321",
+  "birth_date": "1985-03-15",
+  "address": {
+    "city": "São Paulo",
+    "state": "SP",
+    "postal_code": "01310-100"
   },
-  "renda_mensal": 5500.00,
-  "banco_nome": "Nubank",
-  "perfil_comportamental": "young_digital"
+  "monthly_income": 5500.00,
+  "bank_name": "Nubank",
+  "behavioral_profile": "young_digital"
 }
 ```
 
-### �� Transações
+### 💳 Transações
 
 ```json
 {
   "transaction_id": "TXN_000000000000001",
   "customer_id": "CUST_000000000001",
   "timestamp": "2024-03-15T14:32:45",
-  "tipo": "PIX",
-  "valor": 150.00,
+  "type": "PIX",
+  "amount": 150.00,
   "merchant_name": "Carrefour",
   "is_fraud": false,
   "fraud_type": null,
@@ -233,7 +233,7 @@ python3 generate.py --size 1GB --output minio://fraud-data/raw
 ```json
 {
   "driver_id": "DRV_0000000001",
-  "nome": "João Carlos Silva",
+  "name": "João Carlos Silva",
   "cpf": "987.654.321-00",
   "vehicle_plate": "ABC1D23",
   "vehicle_model": "HB20",
