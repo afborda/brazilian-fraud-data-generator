@@ -73,9 +73,11 @@ from fraud_generator.validators import validate_cpf
 
 # Configuration
 TARGET_FILE_SIZE_MB = 128  # Each file will be ~128MB
-BYTES_PER_TRANSACTION = 1050  # ~1KB per JSON transaction
+# IMPORTANT: Real JSONL size is ~500 bytes per transaction after formatting
+# Using 500 bytes ensures --size 10GB actually generates ~10GB of data
+BYTES_PER_TRANSACTION = 500  # Adjusted from 1050 to match real output size
 TRANSACTIONS_PER_FILE = (TARGET_FILE_SIZE_MB * 1024 * 1024) // BYTES_PER_TRANSACTION
-BYTES_PER_RIDE = 1200  # ~1.2KB per JSON ride
+BYTES_PER_RIDE = 600  # Adjusted from 1200 to match real output size
 RIDES_PER_FILE = (TARGET_FILE_SIZE_MB * 1024 * 1024) // BYTES_PER_RIDE
 RIDES_PER_DRIVER = 50  # Average rides per driver
 STREAM_FLUSH_EVERY = 5000  # Flush to disk every N records (memory optimization)
