@@ -67,7 +67,7 @@ from fraud_generator.exporters import (
 from fraud_generator.utils import (
     CustomerIndex, DeviceIndex, DriverIndex,
     parse_size, format_size, format_duration,
-    BatchGenerator,
+    BatchGenerator, ProgressTracker,
 )
 from fraud_generator.validators import validate_cpf
 
@@ -738,6 +738,14 @@ Available formats: """ + ", ".join(list_formats())
     )
     
     parser.add_argument(
+        '--compression',
+        type=str,
+        default='zstd',
+        choices=['snappy', 'zstd', 'gzip', 'brotli', 'none'],
+        help='Compression for Parquet files. zstd offers best compression/speed ratio. Default: zstd'
+    )
+    
+    parser.add_argument(
         '--no-profiles',
         action='store_true',
         help='Disable behavioral profiles (random transactions/rides)'
@@ -853,6 +861,9 @@ Available formats: """ + ", ".join(list_formats())
     # Use profiles (default: True)
     use_profiles = not args.no_profiles
     
+    # Compression (handle 'none' -> None)
+    compression = args.compression if args.compression != 'none' else None
+    
     # Setup output (local or MinIO)
     if use_minio:
         # MinIO output - create exporter
@@ -863,6 +874,7 @@ Available formats: """ + ", ".join(list_formats())
             secret_key=args.minio_secret_key,
             partition_by_date=not args.no_date_partition,
             output_format=args.format,  # Pass the format to MinIO exporter
+            compression=compression,  # Pass compression setting
         )
         output_dir = None  # Not used for MinIO
         exporter = minio_exporter
@@ -885,6 +897,8 @@ Available formats: """ + ", ".join(list_formats())
     else:
         print(f"📁 Output: {args.output}")
     print(f"📄 Format: {args.format.upper()}")
+    if args.format == 'parquet':
+        print(f"🗜️  Compression: {args.compression.upper()}")
     print(f"🎯 Type: {args.type.upper()}")
     print(f"👥 Customers: {num_customers:,}")
     if generate_transactions:
@@ -904,7 +918,19 @@ Available formats: """ + ", ".join(list_formats())
     start_time = time.time()
     
     # Phase 1: Generate customers and devices
-    print("\n📋 Phase 1: Generating customers and devices...")
+    print("\n" + "=" * 60)
+    print("📋 FASE 1: Gerando clientes e dispositivos")
+    print("=" * 60)
+    
+    output_display = args.output if not use_minio else f"{args.output} (MinIO)"
+    progress_phase1 = ProgressTracker(
+        total=num_customers,
+        description="Gerando clientes e dispositivos",
+        unit="clientes",
+        output_path=output_display,
+    )
+    progress_phase1.start()
+    
     phase1_start = time.time()
     
     customer_indexes, device_indexes, customer_data, device_data = generate_customers_and_devices(
@@ -913,37 +939,53 @@ Available formats: """ + ", ".join(list_formats())
         seed=args.seed
     )
     
+    progress_phase1.current = num_customers
+    progress_phase1._print_progress()
+    progress_phase1.finish(show_summary=False)
+    
     phase1_time = time.time() - phase1_start
-    print(f"   ✅ Generated {len(customer_data):,} customers, {len(device_data):,} devices")
-    print(f"   ⏱️  Time: {format_duration(phase1_time)}")
+    print(f"   ✅ Gerados {len(customer_data):,} clientes, {len(device_data):,} dispositivos")
+    print(f"   ⏱️  Tempo: {format_duration(phase1_time)}")
     
     # Validate CPFs
-    print("\n🔍 Validating CPFs...")
+    print("\n🔍 Validando CPFs...")
     valid_cpfs = sum(1 for c in customer_data if validate_cpf(c['cpf']))
-    print(f"   ✅ {valid_cpfs:,}/{len(customer_data):,} CPFs valid ({100*valid_cpfs/len(customer_data):.1f}%)")
+    print(f"   ✅ {valid_cpfs:,}/{len(customer_data):,} CPFs válidos ({100*valid_cpfs/len(customer_data):.1f}%)")
     
     # Save customer and device data
+    print("\n💾 Salvando dados de clientes e dispositivos...")
     if use_minio:
         # Upload to MinIO (exporter will handle correct extension)
         exporter.export_batch(customer_data, 'customers')
         exporter.export_batch(device_data, 'devices')
-        print(f"   💾 Uploaded: customers{exporter.extension} to MinIO")
-        print(f"   💾 Uploaded: devices{exporter.extension} to MinIO")
+        print(f"   📤 Enviado: customers{exporter.extension} para MinIO")
+        print(f"   📤 Enviado: devices{exporter.extension} para MinIO")
     else:
         # Save locally
         customers_path = os.path.join(args.output, f'customers{exporter.extension}')
         devices_path = os.path.join(args.output, f'devices{exporter.extension}')
         exporter.export_batch(customer_data, customers_path)
         exporter.export_batch(device_data, devices_path)
-        print(f"   💾 Saved: {customers_path}")
-        print(f"   💾 Saved: {devices_path}")
+        print(f"   💾 Salvo: {customers_path}")
+        print(f"   💾 Salvo: {devices_path}")
     
     tx_results = []
     ride_results = []
     
     # Phase 2: Generate transactions (if requested)
     if generate_transactions:
-        print(f"\n📋 Phase 2: Generating transactions ({num_files} files)...")
+        print("\n" + "=" * 60)
+        print("📋 FASE 2: Gerando transações")
+        print("=" * 60)
+        
+        progress_tx = ProgressTracker(
+            total=num_files,
+            description="Gerando arquivos de transações",
+            unit="arquivos",
+            output_path=output_display,
+        )
+        progress_tx.start()
+        
         phase2_start = time.time()
         
         if use_minio:
@@ -966,18 +1008,14 @@ Available formats: """ + ", ".join(list_formats())
                 return filename
             
             # Use ThreadPoolExecutor for parallel I/O
-            max_workers = min(workers, num_files, 8)  # Limit concurrent uploads
+            # Increased from 8 to 16 for better CPU utilization on modern machines
+            max_workers = min(workers, num_files, 16)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(generate_and_upload_tx_batch, i): i for i in range(num_files)}
-                completed = 0
                 for future in as_completed(futures):
                     filename = future.result()
                     tx_results.append(filename)
-                    completed += 1
-                    progress = completed / num_files * 100
-                    print(f"\r   Progress: {progress:.1f}% ({completed}/{num_files} files)", end='', flush=True)
-            
-            print()
+                    progress_tx.update(1)
         else:
             # Local: use multiprocessing
             # Prepare worker arguments
@@ -1002,17 +1040,27 @@ Available formats: """ + ", ".join(list_formats())
             with mp.Pool(workers) as pool:
                 for i, result in enumerate(pool.imap_unordered(worker_generate_batch, worker_args)):
                     tx_results.append(result)
-                    progress = (i + 1) / num_files * 100
-                    print(f"\r   Progress: {progress:.1f}% ({i + 1}/{num_files} files)", end='', flush=True)
-            
-            print()  # New line after progress
+                    progress_tx.update(1)
+        
+        progress_tx.finish()
         phase2_time = time.time() - phase2_start
-        print(f"   ⏱️  Time: {format_duration(phase2_time)}")
+        print(f"   💳 Total de transações: ~{total_transactions:,}")
     
     # Phase 3: Generate drivers (if rides requested)
     driver_indexes = []
     if generate_rides:
-        print(f"\n📋 Phase 3: Generating drivers ({num_drivers:,})...")
+        print("\n" + "=" * 60)
+        print("📋 FASE 3: Gerando motoristas")
+        print("=" * 60)
+        
+        progress_drivers = ProgressTracker(
+            total=num_drivers,
+            description="Gerando motoristas",
+            unit="motoristas",
+            output_path=output_display,
+        )
+        progress_drivers.start()
+        
         phase3_start = time.time()
         
         driver_indexes, driver_data = generate_drivers(
@@ -1020,27 +1068,43 @@ Available formats: """ + ", ".join(list_formats())
             seed=args.seed
         )
         
+        progress_drivers.current = num_drivers
+        progress_drivers._print_progress()
+        progress_drivers.finish(show_summary=False)
+        
         phase3_time = time.time() - phase3_start
-        print(f"   ✅ Generated {len(driver_data):,} drivers")
-        print(f"   ⏱️  Time: {format_duration(phase3_time)}")
+        print(f"   ✅ Gerados {len(driver_data):,} motoristas")
+        print(f"   ⏱️  Tempo: {format_duration(phase3_time)}")
         
         # Save driver data
+        print("\n💾 Salvando dados de motoristas...")
         if use_minio:
             exporter.export_batch(driver_data, 'drivers')
-            print(f"   💾 Uploaded: drivers{exporter.extension} to MinIO")
+            print(f"   📤 Enviado: drivers{exporter.extension} para MinIO")
         else:
             drivers_path = os.path.join(args.output, f'drivers{exporter.extension}')
             exporter.export_batch(driver_data, drivers_path)
-            print(f"   💾 Saved: {drivers_path}")
+            print(f"   💾 Salvo: {drivers_path}")
         
         # Validate driver CPFs
-        print("\n🔍 Validating driver CPFs...")
+        print("\n🔍 Validando CPFs dos motoristas...")
         valid_driver_cpfs = sum(1 for d in driver_data if validate_cpf(d['cpf']))
-        print(f"   ✅ {valid_driver_cpfs:,}/{len(driver_data):,} CPFs valid ({100*valid_driver_cpfs/len(driver_data):.1f}%)")
+        print(f"   ✅ {valid_driver_cpfs:,}/{len(driver_data):,} CPFs válidos ({100*valid_driver_cpfs/len(driver_data):.1f}%)")
     
     # Phase 4: Generate rides (if requested)
     if generate_rides:
-        print(f"\n📋 Phase 4: Generating rides ({num_files} files)...")
+        print("\n" + "=" * 60)
+        print("📋 FASE 4: Gerando corridas")
+        print("=" * 60)
+        
+        progress_rides = ProgressTracker(
+            total=num_files,
+            description="Gerando arquivos de corridas",
+            unit="arquivos",
+            output_path=output_display,
+        )
+        progress_rides.start()
+        
         phase4_start = time.time()
         
         if use_minio:
@@ -1063,18 +1127,14 @@ Available formats: """ + ", ".join(list_formats())
                 return filename
             
             # Use ThreadPoolExecutor for parallel I/O
-            max_workers = min(workers, num_files, 8)  # Limit concurrent uploads
+            # Increased from 8 to 16 for better CPU utilization on modern machines
+            max_workers = min(workers, num_files, 16)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(generate_and_upload_ride_batch, i): i for i in range(num_files)}
-                completed = 0
                 for future in as_completed(futures):
                     filename = future.result()
                     ride_results.append(filename)
-                    completed += 1
-                    progress = completed / num_files * 100
-                    print(f"\r   Progress: {progress:.1f}% ({completed}/{num_files} files)", end='', flush=True)
-            
-            print()
+                    progress_rides.update(1)
         else:
             # Local: use multiprocessing
             # Prepare worker arguments for rides
@@ -1099,13 +1159,11 @@ Available formats: """ + ", ".join(list_formats())
             with mp.Pool(workers) as pool:
                 for i, result in enumerate(pool.imap_unordered(worker_generate_rides_batch, ride_worker_args)):
                     ride_results.append(result)
-                    progress = (i + 1) / num_files * 100
-                    print(f"\r   Progress: {progress:.1f}% ({i + 1}/{num_files} files)", end='', flush=True)
-            
-            print()  # New line after progress
+                    progress_rides.update(1)
         
+        progress_rides.finish()
         phase4_time = time.time() - phase4_start
-        print(f"   ⏱️  Time: {format_duration(phase4_time)}")
+        print(f"   🚗 Total de corridas: ~{total_rides:,}")
     
     # Summary
     total_time = time.time() - start_time
@@ -1131,28 +1189,29 @@ Available formats: """ + ", ".join(list_formats())
     total_files = base_files + len(tx_results) + len(ride_results)
     
     print("\n" + "=" * 60)
-    print("✅ GENERATION COMPLETE")
+    print("✅ GERAÇÃO CONCLUÍDA COM SUCESSO!")
     print("=" * 60)
     if use_minio:
-        print(f"📦 Estimated size: ~{format_size(total_size)}")
+        print(f"📦 Tamanho estimado: ~{format_size(total_size)}")
     else:
-        print(f"📦 Total size: {format_size(total_size)}")
-    print(f"📁 Files created: {total_files}")
+        print(f"📦 Tamanho total: {format_size(total_size)}")
+    print(f"📁 Arquivos criados: {total_files}")
     if generate_transactions:
-        print(f"💳 Transactions: ~{total_transactions:,}")
+        print(f"💳 Transações: ~{total_transactions:,}")
     if generate_rides:
-        print(f"🚗 Rides: ~{total_rides:,}")
-    print(f"⏱️  Total time: {format_duration(total_time)}")
+        print(f"🚗 Corridas: ~{total_rides:,}")
+    print(f"⏱️  Tempo total: {format_duration(total_time)}")
     
     total_records = total_transactions + total_rides
     if total_records > 0:
-        print(f"⚡ Throughput: {total_records / total_time:,.0f} records/sec")
+        print(f"⚡ Velocidade: {total_records / total_time:,.0f} registros/seg")
     
     if use_minio:
-        print(f"📍 Output: {args.output} (MinIO)")
+        print(f"📍 Destino: {args.output} (MinIO)")
     else:
-        print(f"📍 Output: {args.output}")
+        print(f"📍 Destino: {args.output}")
     print("=" * 60)
+    print("\n🎉 Todos os dados foram gerados e salvos com sucesso!")
 
 
 if __name__ == '__main__':

@@ -309,16 +309,150 @@ def estimate_memory_usage(num_customers: int, num_devices_per_customer: float = 
 
 
 class ProgressTracker:
-    """Track progress for long-running operations."""
+    """
+    Track and display progress for batch data generation.
+    Shows percentage, speed, ETA, and output location.
+    """
     
-    def __init__(self, total: int, description: str = "Processing"):
+    def __init__(
+        self,
+        total: int,
+        description: str = "Processing",
+        unit: str = "items",
+        output_path: str = None,
+        show_bar: bool = True,
+    ):
+        """
+        Initialize progress tracker.
+        
+        Args:
+            total: Total number of items to process
+            description: Description of the task
+            unit: Unit name (e.g., "files", "records", "transactions")
+            output_path: Path where data is being saved
+            show_bar: Whether to show the progress bar
+        """
+        import time
         self.total = total
-        self.current = 0
         self.description = description
+        self.unit = unit
+        self.output_path = output_path
+        self.show_bar = show_bar
+        self.current = 0
+        self.start_time = None
+        self._last_print_len = 0
+        self._started = False
+    
+    def start(self):
+        """Start the progress tracker."""
+        import time
+        self.start_time = time.time()
+        self.current = 0
+        self._started = True
+        self._print_header()
+    
+    def _print_header(self):
+        """Print the initial header."""
+        print(f"\n   📊 {self.description}")
+        if self.output_path:
+            print(f"   📂 Salvando em: {self.output_path}")
+        print(f"   🎯 Total: {self.total:,} {self.unit}")
+        print()
     
     def update(self, n: int = 1) -> None:
-        """Update progress by n items."""
+        """
+        Update progress by n items.
+        
+        Args:
+            n: Number of items completed
+        """
+        import time
+        if not self._started:
+            self.start()
         self.current += n
+        if self.show_bar:
+            self._print_progress()
+    
+    def _format_duration(self, seconds: float) -> str:
+        """Format seconds to human-readable duration."""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.1f}m"
+        else:
+            hours = seconds / 3600
+            return f"{hours:.1f}h"
+    
+    def _print_progress(self):
+        """Print current progress with ETA."""
+        import time
+        import sys
+        
+        if self.total == 0:
+            return
+        
+        elapsed = time.time() - self.start_time if self.start_time else 0
+        percentage = (self.current / self.total) * 100
+        
+        # Calculate speed and ETA
+        if elapsed > 0 and self.current > 0:
+            speed = self.current / elapsed
+            remaining = self.total - self.current
+            eta_seconds = remaining / speed if speed > 0 else 0
+            eta_str = self._format_duration(eta_seconds)
+            speed_str = f"{speed:.1f}"
+        else:
+            eta_str = "calculando..."
+            speed_str = "-"
+        
+        # Build progress bar
+        bar_width = 25
+        filled = int(bar_width * self.current / self.total)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        
+        # Build status line
+        status = (
+            f"\r   [{bar}] {percentage:5.1f}% | "
+            f"{self.current:,}/{self.total:,} {self.unit} | "
+            f"⚡ {speed_str}/s | "
+            f"ETA: {eta_str}"
+        )
+        
+        # Clear previous line and print new status
+        padding = " " * max(0, self._last_print_len - len(status))
+        print(status + padding, end='', flush=True)
+        self._last_print_len = len(status)
+    
+    def finish(self, show_summary: bool = True):
+        """
+        Complete the progress and optionally print final summary.
+        
+        Args:
+            show_summary: Whether to print the completion summary
+        """
+        import time
+        
+        if not self._started:
+            return
+        
+        elapsed = time.time() - self.start_time if self.start_time else 0
+        
+        # Move to new line
+        print()
+        
+        if show_summary:
+            # Calculate final stats
+            if elapsed > 0 and self.current > 0:
+                speed = self.current / elapsed
+                speed_str = f"{speed:.1f}"
+            else:
+                speed_str = "-"
+            
+            print(f"   ✅ Concluído: {self.current:,} {self.unit} em {self._format_duration(elapsed)}")
+            print(f"   ⚡ Velocidade média: {speed_str} {self.unit}/s")
+            if self.output_path:
+                print(f"   💾 Dados salvos em: {self.output_path}")
     
     @property
     def progress(self) -> float:
@@ -326,6 +460,25 @@ class ProgressTracker:
         if self.total == 0:
             return 100.0
         return (self.current / self.total) * 100
+    
+    @property
+    def elapsed_time(self) -> float:
+        """Get elapsed time in seconds."""
+        import time
+        if self.start_time is None:
+            return 0.0
+        return time.time() - self.start_time
+    
+    @property
+    def eta(self) -> float:
+        """Get estimated time remaining in seconds."""
+        if self.current == 0 or self.start_time is None:
+            return 0.0
+        import time
+        elapsed = time.time() - self.start_time
+        speed = self.current / elapsed
+        remaining = self.total - self.current
+        return remaining / speed if speed > 0 else 0.0
     
     def __str__(self) -> str:
         return f"{self.description}: {self.current:,}/{self.total:,} ({self.progress:.1f}%)"

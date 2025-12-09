@@ -107,7 +107,33 @@ output/
 | Generate both (transactions + rides) | `python3 generate.py --size 1GB --type all` |
 | Higher fraud rate (5%) | `python3 generate.py --size 1GB --fraud-rate 0.05` |
 | Reproducible data (seed) | `python3 generate.py --size 1GB --seed 42` |
-| Faster with 8 workers | `python3 generate.py --size 10GB --workers 8` |
+| Faster with 16 workers | `python3 generate.py --size 10GB --workers 16` |
+
+#### 🗜️ Parquet Compression Options
+
+When using `--format parquet`, you can choose the compression algorithm:
+
+| Compression | Command | Best For |
+|-------------|---------|----------|
+| **ZSTD** (default) | `--compression zstd` | Best compression ratio, recommended |
+| Snappy | `--compression snappy` | Faster, legacy compatibility |
+| Gzip | `--compression gzip` | Maximum compatibility |
+| Brotli | `--compression brotli` | High compression |
+| None | `--compression none` | No compression |
+
+```bash
+# Default: ZSTD (best compression/speed ratio, ~91% smaller than JSONL)
+python3 generate.py --size 1GB --format parquet
+
+# Use Snappy for legacy systems or Spark < 2.4
+python3 generate.py --size 1GB --format parquet --compression snappy
+
+# Maximum compression with Gzip
+python3 generate.py --size 1GB --format parquet --compression gzip
+```
+
+> **💡 Note:** ZSTD is the default because it offers the best balance of compression ratio and speed. 
+> If your system doesn't support ZSTD (older Spark, Hive, or Presto versions), use `--compression snappy`.
 
 ### 🔹 Streaming Mode (Real-time)
 

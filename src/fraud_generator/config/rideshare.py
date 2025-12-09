@@ -387,7 +387,7 @@ def calculate_base_fare(category: str, distance_km: float, duration_min: float) 
 
 def get_random_cancellation_reason(cancelled_by: str) -> str:
     """Get a random cancellation reason based on who cancelled."""
-    reasons = CANCELLATION_REASONS.get(cancelled_by.upper(), CANCELLATION_REASONS['PASSAGEIRO'])
+    reasons = CANCELLATION_REASONS.get(cancelled_by.upper(), CANCELLATION_REASONS['PASSENGER'])
     return random.choice(reasons)
 
 

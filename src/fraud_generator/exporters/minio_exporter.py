@@ -76,6 +76,7 @@ class MinIOExporter(ExporterProtocol):
     """
     
     SUPPORTED_FORMATS = ('jsonl', 'csv', 'parquet')
+    SUPPORTED_COMPRESSIONS = ('zstd', 'snappy', 'gzip', 'brotli', 'none')
     
     def __init__(
         self,
@@ -88,6 +89,7 @@ class MinIOExporter(ExporterProtocol):
         region: str = "us-east-1",
         secure: bool = False,
         output_format: str = "jsonl",
+        compression: str = "zstd",
     ):
         """
         Initialize MinIO exporter.
@@ -102,6 +104,7 @@ class MinIOExporter(ExporterProtocol):
             region: AWS region (ignored by MinIO but required)
             secure: Use HTTPS
             output_format: Output format ('jsonl', 'csv', 'parquet')
+            compression: Compression for Parquet ('zstd', 'snappy', 'gzip', 'brotli', 'none')
         """
         if not BOTO3_AVAILABLE:
             raise ImportError(
@@ -121,6 +124,7 @@ class MinIOExporter(ExporterProtocol):
             )
         
         self._output_format = output_format
+        self.compression = compression if compression != 'none' else None
         self.endpoint_url = endpoint_url or os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
         self.access_key = access_key or os.getenv("MINIO_ROOT_USER") or os.getenv("MINIO_ACCESS_KEY", "minioadmin")
         self.secret_key = secret_key or os.getenv("MINIO_ROOT_PASSWORD") or os.getenv("MINIO_SECRET_KEY", "minioadmin")
@@ -270,13 +274,15 @@ class MinIOExporter(ExporterProtocol):
         for record in flat_data:
             writer.writerow(record)
         
-        body = buffer.getvalue()
+        # Convert to bytes and use streaming upload (avoids memory copy)
+        csv_bytes = io.BytesIO(buffer.getvalue().encode('utf-8'))
+        csv_bytes.seek(0)
         
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=object_key,
-            Body=body.encode('utf-8'),
-            ContentType='text/csv',
+        self.client.upload_fileobj(
+            csv_bytes,
+            self.bucket,
+            object_key,
+            ExtraArgs={'ContentType': 'text/csv'},
         )
         return len(data)
     
@@ -299,16 +305,22 @@ class MinIOExporter(ExporterProtocol):
                 except (ValueError, TypeError):
                     pass
         
-        # Write to buffer
+        # Write to buffer with zstd compression (better ratio than snappy)
         buffer = io.BytesIO()
-        df.to_parquet(buffer, engine='pyarrow', compression='snappy', index=False)
+        df.to_parquet(
+            buffer,
+            engine='pyarrow',
+            compression=getattr(self, 'compression', 'zstd'),
+            index=False
+        )
         buffer.seek(0)
         
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=object_key,
-            Body=buffer.getvalue(),
-            ContentType='application/octet-stream',
+        # Use streaming upload (avoids memory copy from buffer.getvalue())
+        self.client.upload_fileobj(
+            buffer,
+            self.bucket,
+            object_key,
+            ExtraArgs={'ContentType': 'application/octet-stream'},
         )
         return len(data)
     
