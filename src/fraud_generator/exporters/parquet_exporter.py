@@ -51,14 +51,15 @@ class ParquetExporter(ExporterProtocol):
     
     def __init__(
         self,
-        compression: str = 'snappy',
+        compression: str = 'zstd',
         row_group_size: int = 100000
     ):
         """
         Initialize Parquet exporter.
         
         Args:
-            compression: Compression codec ('snappy', 'gzip', 'brotli', 'zstd', None)
+            compression: Compression codec ('zstd', 'snappy', 'gzip', 'brotli', None)
+                        zstd offers best compression/speed ratio (default)
             row_group_size: Number of rows per row group
         """
         if not _check_pyarrow():

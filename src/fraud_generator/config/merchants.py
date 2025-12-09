@@ -4,44 +4,44 @@ Configuration module for MCC codes and merchant data.
 
 # MCC codes with categories, risk levels and typical value ranges
 MCC_CODES = {
-    # Alimentação (muito comum)
-    '5411': {'categoria': 'Supermercados', 'risco': 'low', 'valor_min': 15, 'valor_max': 800, 'peso': 20},
-    '5812': {'categoria': 'Restaurantes', 'risco': 'low', 'valor_min': 20, 'valor_max': 300, 'peso': 15},
-    '5814': {'categoria': 'Fast Food', 'risco': 'low', 'valor_min': 15, 'valor_max': 100, 'peso': 12},
-    '5499': {'categoria': 'Conveniência/Mercado', 'risco': 'low', 'valor_min': 5, 'valor_max': 150, 'peso': 8},
-    # Combustível e transporte
-    '5541': {'categoria': 'Postos de Combustível', 'risco': 'low', 'valor_min': 50, 'valor_max': 500, 'peso': 10},
-    '4121': {'categoria': 'Uber/99/Táxi', 'risco': 'low', 'valor_min': 8, 'valor_max': 150, 'peso': 8},
-    '4131': {'categoria': 'Transporte Público', 'risco': 'low', 'valor_min': 4, 'valor_max': 20, 'peso': 5},
-    # Saúde
-    '5912': {'categoria': 'Farmácias', 'risco': 'low', 'valor_min': 10, 'valor_max': 500, 'peso': 6},
-    '8011': {'categoria': 'Médicos/Clínicas', 'risco': 'low', 'valor_min': 100, 'valor_max': 1500, 'peso': 2},
-    # Varejo
-    '5311': {'categoria': 'Lojas de Departamento', 'risco': 'medium', 'valor_min': 30, 'valor_max': 2000, 'peso': 4},
-    '5651': {'categoria': 'Vestuário', 'risco': 'medium', 'valor_min': 50, 'valor_max': 1000, 'peso': 4},
-    '5732': {'categoria': 'Eletrônicos', 'risco': 'high', 'valor_min': 100, 'valor_max': 8000, 'peso': 2},
-    '5944': {'categoria': 'Joalherias', 'risco': 'high', 'valor_min': 200, 'valor_max': 15000, 'peso': 1},
-    # Serviços
-    '4900': {'categoria': 'Utilidades (Água/Luz/Gás)', 'risco': 'low', 'valor_min': 50, 'valor_max': 800, 'peso': 5},
-    '4814': {'categoria': 'Telecomunicações', 'risco': 'low', 'valor_min': 50, 'valor_max': 300, 'peso': 4},
-    '5977': {'categoria': 'Cosméticos/Perfumaria', 'risco': 'medium', 'valor_min': 30, 'valor_max': 500, 'peso': 2},
-    # Alto risco
-    '7995': {'categoria': 'Apostas/Jogos', 'risco': 'high', 'valor_min': 20, 'valor_max': 5000, 'peso': 1},
-    '6011': {'categoria': 'Saque/ATM', 'risco': 'medium', 'valor_min': 20, 'valor_max': 3000, 'peso': 3},
-    # Viagem
-    '7011': {'categoria': 'Hotéis', 'risco': 'medium', 'valor_min': 150, 'valor_max': 2000, 'peso': 1},
-    '4511': {'categoria': 'Companhias Aéreas', 'risco': 'medium', 'valor_min': 200, 'valor_max': 5000, 'peso': 1},
+    # Food (very common)
+    '5411': {'category': 'Supermarkets', 'risk': 'low', 'min_value': 15, 'max_value': 800, 'weight': 20},
+    '5812': {'category': 'Restaurants', 'risk': 'low', 'min_value': 20, 'max_value': 300, 'weight': 15},
+    '5814': {'category': 'Fast Food', 'risk': 'low', 'min_value': 15, 'max_value': 100, 'weight': 12},
+    '5499': {'category': 'Convenience/Grocery', 'risk': 'low', 'min_value': 5, 'max_value': 150, 'weight': 8},
+    # Fuel and transportation
+    '5541': {'category': 'Gas Stations', 'risk': 'low', 'min_value': 50, 'max_value': 500, 'weight': 10},
+    '4121': {'category': 'Uber/99/Taxi', 'risk': 'low', 'min_value': 8, 'max_value': 150, 'weight': 8},
+    '4131': {'category': 'Public Transit', 'risk': 'low', 'min_value': 4, 'max_value': 20, 'weight': 5},
+    # Health
+    '5912': {'category': 'Pharmacies', 'risk': 'low', 'min_value': 10, 'max_value': 500, 'weight': 6},
+    '8011': {'category': 'Doctors/Clinics', 'risk': 'low', 'min_value': 100, 'max_value': 1500, 'weight': 2},
+    # Retail
+    '5311': {'category': 'Department Stores', 'risk': 'medium', 'min_value': 30, 'max_value': 2000, 'weight': 4},
+    '5651': {'category': 'Clothing', 'risk': 'medium', 'min_value': 50, 'max_value': 1000, 'weight': 4},
+    '5732': {'category': 'Electronics', 'risk': 'high', 'min_value': 100, 'max_value': 8000, 'weight': 2},
+    '5944': {'category': 'Jewelry', 'risk': 'high', 'min_value': 200, 'max_value': 15000, 'weight': 1},
+    # Services
+    '4900': {'category': 'Utilities (Water/Power/Gas)', 'risk': 'low', 'min_value': 50, 'max_value': 800, 'weight': 5},
+    '4814': {'category': 'Telecommunications', 'risk': 'low', 'min_value': 50, 'max_value': 300, 'weight': 4},
+    '5977': {'category': 'Cosmetics/Perfumery', 'risk': 'medium', 'min_value': 30, 'max_value': 500, 'weight': 2},
+    # High risk
+    '7995': {'category': 'Gambling/Games', 'risk': 'high', 'min_value': 20, 'max_value': 5000, 'weight': 1},
+    '6011': {'category': 'Cash/ATM', 'risk': 'medium', 'min_value': 20, 'max_value': 3000, 'weight': 3},
+    # Travel
+    '7011': {'category': 'Hotels', 'risk': 'medium', 'min_value': 150, 'max_value': 2000, 'weight': 1},
+    '4511': {'category': 'Airlines', 'risk': 'medium', 'min_value': 200, 'max_value': 5000, 'weight': 1},
     # Streaming/Digital
-    '5815': {'categoria': 'Serviços Digitais', 'risco': 'low', 'valor_min': 10, 'valor_max': 100, 'peso': 3},
-    # Novas categorias
-    '8299': {'categoria': 'Educação/Cursos', 'risco': 'low', 'valor_min': 50, 'valor_max': 3000, 'peso': 3},
-    '5995': {'categoria': 'Pet Shop', 'risco': 'low', 'valor_min': 20, 'valor_max': 800, 'peso': 3},
-    '7941': {'categoria': 'Academias/Fitness', 'risco': 'low', 'valor_min': 50, 'valor_max': 300, 'peso': 4},
-    '5812_delivery': {'categoria': 'Delivery/Apps de Comida', 'risco': 'low', 'valor_min': 15, 'valor_max': 200, 'peso': 8},
+    '5815': {'category': 'Digital Services', 'risk': 'low', 'min_value': 10, 'max_value': 100, 'weight': 3},
+    # New categories
+    '8299': {'category': 'Education/Courses', 'risk': 'low', 'min_value': 50, 'max_value': 3000, 'weight': 3},
+    '5995': {'category': 'Pet Shop', 'risk': 'low', 'min_value': 20, 'max_value': 800, 'weight': 3},
+    '7941': {'category': 'Gyms/Fitness', 'risk': 'low', 'min_value': 50, 'max_value': 300, 'weight': 4},
+    '5812_delivery': {'category': 'Delivery/Food Apps', 'risk': 'low', 'min_value': 15, 'max_value': 200, 'weight': 8},
 }
 
 MCC_LIST = list(MCC_CODES.keys())
-MCC_WEIGHTS = [MCC_CODES[mcc]['peso'] for mcc in MCC_LIST]
+MCC_WEIGHTS = [MCC_CODES[mcc]['weight'] for mcc in MCC_LIST]
 
 # Brazilian merchants with MCC mapping
 MERCHANTS_BY_MCC = {
@@ -170,19 +170,19 @@ MERCHANTS_BY_MCC = {
 def get_mcc_info(mcc_code: str) -> dict:
     """Get MCC information by code."""
     return MCC_CODES.get(mcc_code, {
-        'categoria': 'Outros',
-        'risco': 'medium',
-        'valor_min': 10,
-        'valor_max': 1000,
-        'peso': 1
+        'category': 'Other',
+        'risk': 'medium',
+        'min_value': 10,
+        'max_value': 1000,
+        'weight': 1
     })
 
 
 def get_merchants_for_mcc(mcc_code: str) -> list:
     """Get list of merchants for a given MCC code."""
-    return MERCHANTS_BY_MCC.get(mcc_code, ['Estabelecimento Local'])
+    return MERCHANTS_BY_MCC.get(mcc_code, ['Local Merchant'])
 
 
 def get_risk_level(mcc_code: str) -> str:
     """Get risk level for a given MCC code."""
-    return MCC_CODES.get(mcc_code, {}).get('risco', 'medium')
+    return MCC_CODES.get(mcc_code, {}).get('risk', 'medium')
