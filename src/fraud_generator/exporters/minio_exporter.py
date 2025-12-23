@@ -297,21 +297,33 @@ class MinIOExporter(ExporterProtocol):
         # Convert to pandas DataFrame
         df = pd.DataFrame(flat_data)
         
-        # Convert datetime columns
+        # IMPORTANTE: Manter timestamp como STRING para compatibilidade com Spark
+        # NÃO converter para datetime porque isso causa inconsistência de schema entre partições
+        # Spark pode ter problemas quando alguns arquivos têm timestamp como string e outros como INT64
+        # A conversão para timestamp será feita na camada Bronze do pipeline
+        
+        # Garantir que colunas timestamp sejam SEMPRE strings (formato ISO8601)
         for col in df.columns:
             if 'timestamp' in col.lower() or 'date' in col.lower() or col.endswith('_at'):
-                try:
-                    df[col] = pd.to_datetime(df[col])
-                except (ValueError, TypeError):
-                    pass
+                # Converter para string se for datetime, manter como string se já for
+                if pd.api.types.is_datetime64_any_dtype(df[col]):
+                    df[col] = df[col].dt.strftime('%Y-%m-%dT%H:%M:%S.%f')
+                else:
+                    # Já é string, garantir formato consistente
+                    df[col] = df[col].astype(str)
         
-        # Write to buffer with zstd compression (better ratio than snappy)
+        # Convert to PyArrow Table - todas as colunas timestamp são strings
+        table = pa.Table.from_pandas(df, preserve_index=False)
+        
+        # Write to buffer with Spark-compatible settings
         buffer = io.BytesIO()
-        df.to_parquet(
+        pq.write_table(
+            table,
             buffer,
-            engine='pyarrow',
-            compression=getattr(self, 'compression', 'zstd'),
-            index=False
+            compression=getattr(self, 'compression', 'snappy') or 'snappy',
+            use_dictionary=False,  # Evita PlainLongDictionary issues
+            write_statistics=False,
+            version='2.4',  # Formato compatível com Spark 3.x
         )
         buffer.seek(0)
         

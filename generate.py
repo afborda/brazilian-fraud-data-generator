@@ -48,7 +48,9 @@ import sys
 import time
 import random
 import multiprocessing as mp
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import tempfile
+import gc
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any, Optional
 from functools import partial
@@ -81,6 +83,9 @@ BYTES_PER_RIDE = 600  # Adjusted from 1200 to match real output size
 RIDES_PER_FILE = (TARGET_FILE_SIZE_MB * 1024 * 1024) // BYTES_PER_RIDE
 RIDES_PER_DRIVER = 50  # Average rides per driver
 STREAM_FLUSH_EVERY = 5000  # Flush to disk every N records (memory optimization)
+# STREAMING_CHUNK_SIZE: Use full file size for maximum performance
+# With 6 workers × 134MB = 804MB + overhead = ~1.5GB total (well within 8GB limit)
+STREAMING_CHUNK_SIZE = TRANSACTIONS_PER_FILE  # Process entire file at once for speed
 
 
 def worker_generate_batch(args: tuple) -> str:
@@ -459,6 +464,255 @@ def generate_drivers(
     return driver_indexes, driver_data
 
 
+def worker_generate_and_upload_parquet(args: tuple) -> str:
+    """
+    Standalone worker for ProcessPoolExecutor - generates and uploads parquet to MinIO.
+    Must be picklable (top-level function, no closures).
+    """
+    (batch_id, num_transactions, customer_indexes, device_indexes,
+     start_date, end_date, fraud_rate, use_profiles, seed,
+     minio_endpoint, minio_access_key, minio_secret_key, bucket_name, object_prefix) = args
+    
+    import pandas as pd
+    import tempfile
+    import os
+    import gc
+    import boto3
+    
+    # Generate transactions
+    transactions = minio_generate_transaction_batch(
+        batch_id=batch_id,
+        num_transactions=num_transactions,
+        customer_indexes=customer_indexes,
+        device_indexes=device_indexes,
+        start_date=start_date,
+        end_date=end_date,
+        fraud_rate=fraud_rate,
+        use_profiles=use_profiles,
+        seed=seed,
+    )
+    
+    # Convert to DataFrame
+    df = pd.json_normalize(transactions)
+    
+    # IMPORTANTE: Manter timestamp como STRING para compatibilidade com Spark
+    # NÃO converter para datetime pois isso causa inconsistência de schema entre partições
+    # Cada partição pode ter formato diferente se a conversão falhar em algumas e não em outras
+    for col in df.columns:
+        if 'timestamp' in col.lower() or 'date' in col.lower() or col.endswith('_at'):
+            # Converter datetime para string ISO8601, manter string se já for
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = df[col].dt.strftime('%Y-%m-%dT%H:%M:%S.%f')
+            else:
+                df[col] = df[col].astype(str)
+    
+    # Create temp file
+    tmpf = tempfile.NamedTemporaryFile(
+        delete=False,
+        prefix=f"tx_{batch_id:05d}_",
+        suffix=".parquet",
+        dir="/tmp"
+    )
+    local_path = tmpf.name
+    tmpf.close()
+    
+    try:
+        # Convert to PyArrow Table
+        # Timestamps já são strings, não precisa conversão de formato
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        
+        table = pa.Table.from_pandas(df, preserve_index=False)
+        
+        # Write parquet with snappy compression (compatible with Spark 3.x + Parquet 1.13)
+        # use_dictionary=False evita problemas de PlainLongDictionary
+        pq.write_table(
+            table, 
+            local_path, 
+            compression='snappy',
+            use_dictionary=False,
+            write_statistics=False,
+            version='2.4',  # Parquet format version compatível
+        )
+        
+        # Upload to MinIO
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=minio_endpoint,
+            aws_access_key_id=minio_access_key,
+            aws_secret_access_key=minio_secret_key,
+            region_name='us-east-1',
+            config=boto3.session.Config(signature_version='s3v4')
+        )
+        
+        filename = f'transactions_{batch_id:05d}.parquet'
+        object_key = f"{object_prefix}/{filename}" if object_prefix else filename
+        
+        # Use put_object instead of upload_file to avoid multipart issues
+        with open(local_path, 'rb') as f:
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=object_key,
+                Body=f.read(),
+                ContentType='application/octet-stream'
+            )
+        
+        return filename
+    finally:
+        try:
+            if os.path.exists(local_path):
+                os.remove(local_path)
+        except Exception:
+            pass
+        # Clear memory
+        del df, transactions
+        gc.collect()
+
+
+def minio_generate_transaction_batch_streaming(
+    batch_id: int,
+    num_transactions: int,
+    customer_indexes: List[tuple],
+    device_indexes: List[tuple],
+    start_date: datetime,
+    end_date: datetime,
+    fraud_rate: float,
+    use_profiles: bool,
+    seed: Optional[int],
+    parquet_writer_path: str,
+) -> None:
+    """
+    Generate transactions in streaming chunks and write directly to Parquet file.
+    This minimizes memory usage by processing data in chunks instead of loading all
+    transactions into memory at once.
+    
+    Args:
+        batch_id: Batch ID for seeding
+        num_transactions: Total transactions to generate
+        parquet_writer_path: Path where the function will write the parquet file
+        All other args: Same as minio_generate_transaction_batch
+    """
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    
+    # Deterministic seed per batch
+    if seed is not None:
+        worker_seed = seed + batch_id * 12345
+    else:
+        worker_seed = batch_id * 12345 + int(time.time() * 1000) % 10000
+    
+    random.seed(worker_seed)
+    
+    # Reconstruct indexes
+    customer_idx_list = [CustomerIndex(*c) for c in customer_indexes]
+    device_idx_list = [DeviceIndex(*d) for d in device_indexes]
+    
+    # Build customer-device pairs
+    customer_device_map = {}
+    for device in device_idx_list:
+        if device.customer_id not in customer_device_map:
+            customer_device_map[device.customer_id] = []
+        customer_device_map[device.customer_id].append(device)
+    
+    pairs = []
+    for customer in customer_idx_list:
+        devices = customer_device_map.get(customer.customer_id, [])
+        if devices:
+            for device in devices:
+                pairs.append((customer, device))
+    
+    if not pairs:
+        pairs = [(customer_idx_list[0], device_idx_list[0])]
+    
+    # Generate transactions
+    tx_generator = TransactionGenerator(
+        fraud_rate=fraud_rate,
+        use_profiles=use_profiles,
+        seed=worker_seed
+    )
+    
+    # We'll write chunks directly to Parquet using PyArrow writer
+    writer = None
+    schema = None
+    start_tx_id = batch_id * num_transactions
+    
+    try:
+        # Process transactions in chunks
+        for chunk_start in range(0, num_transactions, STREAMING_CHUNK_SIZE):
+            chunk_size = min(STREAMING_CHUNK_SIZE, num_transactions - chunk_start)
+            transactions_chunk = []
+            
+            # Generate chunk of transactions
+            for i in range(chunk_size):
+                tx_id = chunk_start + i
+                customer, device = random.choice(pairs)
+                
+                # Generate timestamp with realistic distribution
+                days_between = (end_date - start_date).days
+                random_day = start_date + timedelta(days=random.randint(0, max(1, days_between)))
+                
+                hour_weights = {
+                    0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
+                    6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
+                    12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
+                    18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
+                }
+                hour = random.choices(list(hour_weights.keys()), weights=list(hour_weights.values()))[0]
+                timestamp = random_day.replace(
+                    hour=hour,
+                    minute=random.randint(0, 59),
+                    second=random.randint(0, 59),
+                    microsecond=random.randint(0, 999999)
+                )
+                
+                tx = tx_generator.generate(
+                    tx_id=f"{start_tx_id + tx_id:015d}",
+                    customer_id=customer.customer_id,
+                    device_id=device.device_id,
+                    timestamp=timestamp,
+                    customer_state=customer.state,
+                    customer_profile=customer.profile,
+                )
+                transactions_chunk.append(tx)
+            
+            # Convert chunk to DataFrame
+            df_chunk = pd.json_normalize(transactions_chunk)
+            
+            # Handle datetime columns
+            for col in df_chunk.columns:
+                if 'timestamp' in col.lower() or 'date' in col.lower() or col.endswith('_at'):
+                    try:
+                        df_chunk[col] = pd.to_datetime(df_chunk[col])
+                    except Exception:
+                        pass
+            
+            # On first chunk, initialize the writer with the schema
+            if writer is None:
+                table = pa.Table.from_pandas(df_chunk)
+                schema = table.schema
+                writer = pq.ParquetWriter(
+                    parquet_writer_path,
+                    schema,
+                    compression='zstd',
+                    compression_level=6,
+                )
+                writer.write_table(table)
+            else:
+                # Write subsequent chunks
+                table = pa.Table.from_pandas(df_chunk)
+                writer.write_table(table)
+            
+            # Explicit memory cleanup after each chunk
+            del df_chunk, transactions_chunk, table
+            gc.collect()
+    
+    finally:
+        # Ensure writer is closed
+        if writer is not None:
+            writer.close()
+
+
 def minio_generate_transaction_batch(
     batch_id: int,
     num_transactions: int,
@@ -643,21 +897,21 @@ def main():
         description="🇧🇷 Brazilian Fraud Data Generator v3.2.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  %(prog)s --size 1GB --output ./data
-  %(prog)s --size 1GB --type rides --output ./data
-  %(prog)s --size 1GB --type all --output ./data
-  %(prog)s --size 1GB --format csv --output ./data
-  %(prog)s --size 1GB --format parquet --output ./data
-  %(prog)s --size 1GB --no-profiles --output ./data
-  %(prog)s --size 50GB --fraud-rate 0.01 --workers 8
-  %(prog)s --size 1GB --seed 42 --output ./data
+    Examples:
+      %(prog)s --size 1GB --output ./data
+      %(prog)s --size 1GB --type rides --output ./data
+      %(prog)s --size 1GB --type all --output ./data
+      %(prog)s --size 1GB --format csv --output ./data
+      %(prog)s --size 1GB --format parquet --output ./data
+      %(prog)s --size 1GB --no-profiles --output ./data
+      %(prog)s --size 50GB --fraud-rate 0.01 --workers 8
+      %(prog)s --size 1GB --seed 42 --output ./data
   
-  # MinIO/S3 direct upload:
-  %(prog)s --size 1GB --output minio://fraud-data/raw
-  %(prog)s --size 1GB --output s3://fraud-data/raw --minio-endpoint http://minio:9000
+      # MinIO/S3 direct upload:
+      %(prog)s --size 1GB --output minio://fraud-data/raw
+      %(prog)s --size 1GB --output s3://fraud-data/raw --minio-endpoint http://minio:9000
 
-Available formats: """ + ", ".join(list_formats())
+    Available formats: """ + ", ".join(list_formats())
     )
     
     parser.add_argument(
@@ -742,9 +996,9 @@ Available formats: """ + ", ".join(list_formats())
     parser.add_argument(
         '--compression',
         type=str,
-        default='zstd',
+        default='snappy',
         choices=['snappy', 'zstd', 'gzip', 'brotli', 'none'],
-        help='Compression for Parquet files. zstd offers best compression/speed ratio. Default: zstd'
+        help='Compression for Parquet files. snappy is most compatible with Spark. Default: snappy'
     )
     
     parser.add_argument(
@@ -991,33 +1245,90 @@ Available formats: """ + ", ".join(list_formats())
         phase2_start = time.time()
         
         if use_minio:
-            # For MinIO, use ThreadPoolExecutor for parallel generation + upload
-            def generate_and_upload_tx_batch(batch_id: int) -> str:
-                """Generate transactions and upload to MinIO."""
-                transactions = minio_generate_transaction_batch(
-                    batch_id=batch_id,
-                    num_transactions=TRANSACTIONS_PER_FILE,
-                    customer_indexes=customer_indexes,
-                    device_indexes=device_indexes,
-                    start_date=start_date,
-                    end_date=end_date,
-                    fraud_rate=args.fraud_rate,
-                    use_profiles=use_profiles,
-                    seed=args.seed,
-                )
-                filename = f'transactions_{batch_id:05d}'
-                exporter.export_batch(transactions, filename)
-                return filename
-            
-            # Use ThreadPoolExecutor for parallel I/O
-            # Increased from 8 to 16 for better CPU utilization on modern machines
-            max_workers = min(workers, num_files, 16)
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(generate_and_upload_tx_batch, i): i for i in range(num_files)}
-                for future in as_completed(futures):
-                    filename = future.result()
-                    tx_results.append(filename)
-                    progress_tx.update(1)
+            # For MinIO: use ProcessPoolExecutor for true parallel processing (bypass GIL)
+            if args.format == 'parquet':
+                # Ensure bucket exists
+                exporter._ensure_bucket()
+                
+                # Prepare worker arguments for ProcessPoolExecutor
+                # Get MinIO credentials from environment variables (set by docker-compose)
+                minio_endpoint = os.environ.get('MINIO_ENDPOINT', 'http://minio:9000')
+                minio_access = os.environ.get('MINIO_ACCESS_KEY')
+                minio_secret = os.environ.get('MINIO_SECRET_KEY')
+                
+                if not minio_access or not minio_secret:
+                    raise ValueError("MINIO_ACCESS_KEY and MINIO_SECRET_KEY must be set in environment")
+                
+                worker_args = []
+                for batch_id in range(num_files):
+                    args_tuple = (
+                        batch_id,
+                        TRANSACTIONS_PER_FILE,
+                        customer_indexes,
+                        device_indexes,
+                        start_date,
+                        end_date,
+                        args.fraud_rate,
+                        use_profiles,
+                        args.seed,
+                        minio_endpoint,
+                        minio_access,
+                        minio_secret,
+                        exporter.bucket,
+                        exporter.prefix,
+                    )
+                    worker_args.append(args_tuple)
+                
+                # Use ProcessPoolExecutor for true parallel processing (bypass GIL)
+                # Credentials are now passed as arguments to workers
+                max_workers = min(workers, num_files, 4)
+                with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(worker_generate_and_upload_parquet, args): i 
+                               for i, args in enumerate(worker_args)}
+                    for future in as_completed(futures):
+                        try:
+                            filename = future.result()
+                            tx_results.append(filename)
+                        except Exception as e:
+                            batch_id = futures[future]
+                            print(f"❌ Erro batch {batch_id}: {e}", file=sys.stderr)
+                            import traceback
+                            traceback.print_exc()
+                        finally:
+                            progress_tx.update(1)
+                            # Force garbage collection every few batches
+                            if len(tx_results) % 5 == 0:
+                                gc.collect()
+            else:
+                # Non-parquet MinIO (jsonl/csv): keep existing threaded behavior
+                def generate_and_upload_tx_batch(batch_id: int) -> str:
+                    """Generate transactions and upload to MinIO."""
+                    transactions = minio_generate_transaction_batch(
+                        batch_id=batch_id,
+                        num_transactions=TRANSACTIONS_PER_FILE,
+                        customer_indexes=customer_indexes,
+                        device_indexes=device_indexes,
+                        start_date=start_date,
+                        end_date=end_date,
+                        fraud_rate=args.fraud_rate,
+                        use_profiles=use_profiles,
+                        seed=args.seed,
+                    )
+                    filename = f'transactions_{batch_id:05d}'
+                    exporter.export_batch(transactions, filename)
+                    return filename
+                
+                # CRITICAL: Reduced from 16 to 6 workers
+                max_workers = min(workers, num_files, 6)
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(generate_and_upload_tx_batch, i): i for i in range(num_files)}
+                    for future in as_completed(futures):
+                        filename = future.result()
+                        tx_results.append(filename)
+                        progress_tx.update(1)
+                        # Force garbage collection every 15 batches
+                        if len(tx_results) % 15 == 0:
+                            gc.collect()
         else:
             # Local: use multiprocessing
             # Prepare worker arguments
@@ -1129,14 +1440,17 @@ Available formats: """ + ", ".join(list_formats())
                 return filename
             
             # Use ThreadPoolExecutor for parallel I/O
-            # Increased from 8 to 16 for better CPU utilization on modern machines
-            max_workers = min(workers, num_files, 16)
+            # CRITICAL: Reduced from 16 to 4 to prevent memory exhaustion
+            max_workers = min(workers, num_files, 4)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(generate_and_upload_ride_batch, i): i for i in range(num_files)}
                 for future in as_completed(futures):
                     filename = future.result()
                     ride_results.append(filename)
                     progress_rides.update(1)
+                    # Force garbage collection every 10 batches
+                    if len(ride_results) % 10 == 0:
+                        gc.collect()
         else:
             # Local: use multiprocessing
             # Prepare worker arguments for rides
