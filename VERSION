@@ -1,0 +1,14 @@
+# Version Configuration
+# =====================
+# This file is used by build scripts to determine the current version
+
+VERSION=4.0.0
+VERSION_TAG=v4.0.0
+RELEASE_DATE=2025-01-15
+CODENAME=mango
+
+# Version history:
+# ----------------
+# v4.0.0 (2025-01-15) - Field standardization (PT->EN), MinIO multi-format support
+# v3.1.0 (2024-XX-XX) - Previous release
+# v3.0.0 (2024-XX-XX) - Initial ride-share support

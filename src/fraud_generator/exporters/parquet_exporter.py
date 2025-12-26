@@ -51,14 +51,15 @@ class ParquetExporter(ExporterProtocol):
     
     def __init__(
         self,
-        compression: str = 'snappy',
+        compression: str = 'zstd',
         row_group_size: int = 100000
     ):
         """
         Initialize Parquet exporter.
         
         Args:
-            compression: Compression codec ('snappy', 'gzip', 'brotli', 'zstd', None)
+            compression: Compression codec ('zstd', 'snappy', 'gzip', 'brotli', None)
+                        zstd offers best compression/speed ratio (default)
             row_group_size: Number of rows per row group
         """
         if not _check_pyarrow():
@@ -121,8 +122,26 @@ class ParquetExporter(ExporterProtocol):
         # Create DataFrame
         df = pd.DataFrame(flat_data)
         
-        # Convert to PyArrow Table
-        table = pa.Table.from_pandas(df)
+        # Convert to PyArrow Table - usando timestamp_as_object=True para evitar ns
+        # e depois convertemos para string para compatibilidade com Spark
+        table = pa.Table.from_pandas(df, preserve_index=False)
+        
+        # Converter timestamps de nanosegundos para microsegundos (compatível com Spark)
+        new_schema = []
+        new_columns = []
+        for i, field in enumerate(table.schema):
+            col = table.column(i)
+            if pa.types.is_timestamp(field.type):
+                # Converter para microsegundos
+                new_field = pa.field(field.name, pa.timestamp('us'), nullable=field.nullable)
+                new_col = col.cast(pa.timestamp('us'))
+                new_schema.append(new_field)
+                new_columns.append(new_col)
+            else:
+                new_schema.append(field)
+                new_columns.append(col)
+        
+        table = pa.table(dict(zip(table.column_names, new_columns)), schema=pa.schema(new_schema))
         
         if append:
             # For append, we need to read existing and concatenate
@@ -141,6 +160,25 @@ class ParquetExporter(ExporterProtocol):
         )
         
         return len(data)
+    
+    def _convert_timestamps_to_micros(self, table):
+        """Convert timestamp columns from nanoseconds to microseconds for Spark compatibility."""
+        import pyarrow as pa
+        
+        new_schema = []
+        new_columns = []
+        for i, field in enumerate(table.schema):
+            col = table.column(i)
+            if pa.types.is_timestamp(field.type):
+                new_field = pa.field(field.name, pa.timestamp('us'), nullable=field.nullable)
+                new_col = col.cast(pa.timestamp('us'))
+                new_schema.append(new_field)
+                new_columns.append(new_col)
+            else:
+                new_schema.append(field)
+                new_columns.append(col)
+        
+        return pa.table(dict(zip(table.column_names, new_columns)), schema=pa.schema(new_schema))
     
     def export_stream(
         self,
@@ -166,7 +204,8 @@ class ParquetExporter(ExporterProtocol):
                 
                 if len(batch) >= batch_size:
                     df = pd.DataFrame(batch)
-                    table = pa.Table.from_pandas(df)
+                    table = pa.Table.from_pandas(df, preserve_index=False)
+                    table = self._convert_timestamps_to_micros(table)
                     
                     if writer is None:
                         schema = table.schema
@@ -183,7 +222,8 @@ class ParquetExporter(ExporterProtocol):
             # Write remaining records
             if batch:
                 df = pd.DataFrame(batch)
-                table = pa.Table.from_pandas(df)
+                table = pa.Table.from_pandas(df, preserve_index=False)
+                table = self._convert_timestamps_to_micros(table)
                 
                 if writer is None:
                     schema = table.schema
@@ -252,8 +292,9 @@ class ParquetPartitionedExporter(ParquetExporter):
         # Create DataFrame
         df = pd.DataFrame(flat_data)
         
-        # Convert to PyArrow Table
-        table = pa.Table.from_pandas(df)
+        # Convert to PyArrow Table and fix timestamps for Spark compatibility
+        table = pa.Table.from_pandas(df, preserve_index=False)
+        table = self._convert_timestamps_to_micros(table)
         
         # Write partitioned dataset
         pq.write_to_dataset(

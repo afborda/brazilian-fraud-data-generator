@@ -93,7 +93,7 @@ class CustomerGenerator:
         
         # Risk profile based on account age and profile
         account_age_days = (datetime.now() - created_date).days
-        nivel_risco = self._calculate_risk_level(account_age_days, perfil)
+        risk_level = self._calculate_risk_level(account_age_days, perfil)
         
         # Income based on profile
         renda = self._calculate_income(profile_config)
@@ -106,49 +106,49 @@ class CustomerGenerator:
         
         # Account type based on profile
         if profile_config and perfil in ['young_digital', 'subscription_heavy']:
-            tipo_conta = random.choices(
-                ['DIGITAL', 'CORRENTE', 'POUPANCA'],
+            account_type = random.choices(
+                ['DIGITAL', 'CHECKING', 'SAVINGS'],
                 weights=[70, 25, 5]
             )[0]
         else:
-            tipo_conta = random.choices(
-                ['CORRENTE', 'POUPANCA', 'DIGITAL'],
+            account_type = random.choices(
+                ['CHECKING', 'SAVINGS', 'DIGITAL'],
                 weights=[40, 20, 40]
             )[0]
         
         customer_data = {
             'customer_id': customer_id,
-            'nome': self.fake.name(),
+            'name': self.fake.name(),
             'cpf': cpf,
             'email': self.fake.email(),
-            'telefone': self.fake.phone_number(),
-            'data_nascimento': data_nascimento.isoformat(),
-            'endereco': {
-                'logradouro': self.fake.street_address(),
-                'bairro': self.fake.bairro(),
-                'cidade': self.fake.city(),
-                'estado': estado,
-                'cep': self.fake.postcode(),
+            'phone': self.fake.phone_number(),
+            'birth_date': data_nascimento.isoformat(),
+            'address': {
+                'street': self.fake.street_address(),
+                'neighborhood': self.fake.bairro(),
+                'city': self.fake.city(),
+                'state': estado,
+                'postal_code': self.fake.postcode(),
             },
-            'renda_mensal': renda,
-            'profissao': self.fake.job(),
-            'conta_criada_em': created_date.isoformat(),
-            'tipo_conta': tipo_conta,
-            'status_conta': random.choices(
-                ['ATIVA', 'BLOQUEADA', 'INATIVA'],
+            'monthly_income': renda,
+            'profession': self.fake.job(),
+            'account_created_at': created_date.isoformat(),
+            'account_type': account_type,
+            'account_status': random.choices(
+                ['ACTIVE', 'BLOCKED', 'INACTIVE'],
                 weights=[95, 3, 2]
             )[0],
-            'limite_credito': round(renda * random.uniform(2, 8), 2),
-            'score_credito': score,
-            'nivel_risco': nivel_risco,
-            'banco_codigo': banco_codigo,
-            'banco_nome': BANKS[banco_codigo]['nome'],
-            'agencia': f'{random.randint(1, 9999):04d}',
-            'numero_conta': f'{random.randint(10000, 999999)}-{random.randint(0, 9)}',
+            'credit_limit': round(renda * random.uniform(2, 8), 2),
+            'credit_score': score,
+            'risk_level': risk_level,
+            'bank_code': banco_codigo,
+            'bank_name': BANKS[banco_codigo]['name'],
+            'branch': f'{random.randint(1, 9999):04d}',
+            'account_number': f'{random.randint(10000, 999999)}-{random.randint(0, 9)}',
         }
         
         if self.use_profiles and perfil:
-            customer_data['perfil_comportamental'] = perfil
+            customer_data['behavioral_profile'] = perfil
         
         return customer_data
     
@@ -175,10 +175,10 @@ class CustomerGenerator:
         """Create a lightweight index from customer data."""
         return CustomerIndex(
             customer_id=customer_data['customer_id'],
-            estado=customer_data['endereco']['estado'],
-            perfil=customer_data.get('perfil_comportamental'),
-            banco_codigo=customer_data.get('banco_codigo'),
-            nivel_risco=customer_data.get('nivel_risco'),
+            state=customer_data['address']['state'],
+            behavioral_profile=customer_data.get('behavioral_profile'),
+            bank_code=customer_data.get('bank_code'),
+            risk_level=customer_data.get('risk_level'),
         )
     
     def _calculate_risk_level(
@@ -200,7 +200,7 @@ class CustomerGenerator:
         elif perfil == 'traditional_senior':
             weights = [20, 40, 40]  # More susceptible to scams
         
-        return random.choices(['ALTO', 'MEDIO', 'BAIXO'], weights=weights)[0]
+        return random.choices(['HIGH', 'MEDIUM', 'LOW'], weights=weights)[0]
     
     def _calculate_income(self, profile_config) -> float:
         """Calculate monthly income based on profile."""

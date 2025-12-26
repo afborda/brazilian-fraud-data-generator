@@ -74,25 +74,25 @@ class BehavioralProfile:
 PROFILES: Dict[str, BehavioralProfile] = {
     ProfileType.YOUNG_DIGITAL.value: BehavioralProfile(
         name="young_digital",
-        description="Jovem digital: 18-30 anos, muito ativo em apps, streaming, delivery",
+        description="Young digital native: 18-30 years, very active on apps, streaming, delivery",
         age_range=(18, 30),
         income_multiplier=(0.5, 1.5),
         transaction_types={
             'PIX': 60,
-            'CARTAO_CREDITO': 25,
-            'CARTAO_DEBITO': 10,
-            'DEBITO_AUTOMATICO': 5,
+            'CREDIT_CARD': 25,
+            'DEBIT_CARD': 10,
+            'AUTO_DEBIT': 5,
         },
         preferred_mccs={
-            '5812': 20,       # Restaurantes/Delivery
-            '5812_delivery': 25,  # Apps de delivery
+            '5812': 20,       # Restaurants/Delivery
+            '5812_delivery': 25,  # Delivery apps
             '5815': 20,       # Streaming/Digital
-            '7941': 10,       # Academias
+            '7941': 10,       # Gyms
             '4121': 15,       # Uber/99
             '5814': 10,       # Fast Food
         },
         channel_preferences={
-            'APP_MOBILE': 85,
+            'MOBILE_APP': 85,
             'WEB_BANKING': 10,
             'WHATSAPP_PAY': 5,
         },
@@ -105,31 +105,31 @@ PROFILES: Dict[str, BehavioralProfile] = {
     
     ProfileType.TRADITIONAL_SENIOR.value: BehavioralProfile(
         name="traditional_senior",
-        description="Sênior tradicional: 55+ anos, prefere agência/ATM, cauteloso",
+        description="Traditional senior: 55+ years, prefers branch/ATM, cautious",
         age_range=(55, 80),
         income_multiplier=(1.0, 3.0),  # Often retired with savings
         transaction_types={
             'PIX': 25,
-            'CARTAO_CREDITO': 15,
-            'CARTAO_DEBITO': 25,
+            'CREDIT_CARD': 15,
+            'DEBIT_CARD': 25,
             'BOLETO': 15,
-            'SAQUE': 10,
+            'WITHDRAWAL': 10,
             'TED': 10,
         },
         preferred_mccs={
-            '5411': 25,       # Supermercados
-            '5912': 15,       # Farmácias
-            '8011': 10,       # Médicos
-            '4900': 15,       # Utilidades
+            '5411': 25,       # Supermarkets
+            '5912': 15,       # Pharmacies
+            '8011': 10,       # Doctors
+            '4900': 15,       # Utilities
             '4814': 10,       # Telecom
-            '5499': 10,       # Conveniência
-            '6011': 15,       # Saque/ATM
+            '5499': 10,       # Convenience
+            '6011': 15,       # Cash/ATM
         },
         channel_preferences={
-            'APP_MOBILE': 30,
+            'MOBILE_APP': 30,
             'WEB_BANKING': 20,
             'ATM': 30,
-            'AGENCIA': 20,
+            'BRANCH': 20,
         },
         monthly_tx_frequency=(15, 40),
         typical_value_range=(50, 800),
@@ -140,32 +140,32 @@ PROFILES: Dict[str, BehavioralProfile] = {
     
     ProfileType.BUSINESS_OWNER.value: BehavioralProfile(
         name="business_owner",
-        description="Empreendedor: 30-55 anos, alto volume, fornecedores e serviços",
+        description="Business owner: 30-55 years, high volume, suppliers and services",
         age_range=(30, 55),
         income_multiplier=(2.0, 8.0),
         transaction_types={
             'PIX': 45,
             'TED': 20,
             'BOLETO': 15,
-            'CARTAO_CREDITO': 15,
-            'CARTAO_DEBITO': 5,
+            'CREDIT_CARD': 15,
+            'DEBIT_CARD': 5,
         },
         preferred_mccs={
-            '5411': 10,       # Supermercados
-            '5541': 15,       # Combustível
-            '7011': 8,        # Hotéis
-            '4511': 8,        # Aéreo
-            '5732': 10,       # Eletrônicos
+            '5411': 10,       # Supermarkets
+            '5541': 15,       # Gas
+            '7011': 8,        # Hotels
+            '4511': 8,        # Airlines
+            '5732': 10,       # Electronics
             '4814': 10,       # Telecom
-            '8299': 10,       # Educação/Cursos
-            '5812': 15,       # Restaurantes
-            '4121': 14,       # Transporte
+            '8299': 10,       # Education/Courses
+            '5812': 15,       # Restaurants
+            '4121': 14,       # Transport
         },
         channel_preferences={
-            'APP_MOBILE': 60,
+            'MOBILE_APP': 60,
             'WEB_BANKING': 35,
             'ATM': 3,
-            'AGENCIA': 2,
+            'BRANCH': 2,
         },
         monthly_tx_frequency=(50, 150),
         typical_value_range=(100, 5000),
@@ -176,30 +176,30 @@ PROFILES: Dict[str, BehavioralProfile] = {
     
     ProfileType.HIGH_SPENDER.value: BehavioralProfile(
         name="high_spender",
-        description="Alto poder aquisitivo: 30-60 anos, luxo, viagens, alto ticket médio",
+        description="High net worth: 30-60 years, luxury, travel, high average ticket",
         age_range=(30, 60),
         income_multiplier=(5.0, 15.0),
         transaction_types={
-            'CARTAO_CREDITO': 50,
+            'CREDIT_CARD': 50,
             'PIX': 30,
-            'CARTAO_DEBITO': 10,
+            'DEBIT_CARD': 10,
             'TED': 10,
         },
         preferred_mccs={
-            '5944': 10,       # Joalherias
-            '5651': 15,       # Vestuário luxo
-            '7011': 15,       # Hotéis
-            '4511': 15,       # Aéreo
-            '5812': 15,       # Restaurantes
-            '5977': 10,       # Cosméticos
-            '5732': 10,       # Eletrônicos
-            '5311': 10,       # Lojas
+            '5944': 10,       # Jewelry
+            '5651': 15,       # Luxury clothing
+            '7011': 15,       # Hotels
+            '4511': 15,       # Airlines
+            '5812': 15,       # Restaurants
+            '5977': 10,       # Cosmetics
+            '5732': 10,       # Electronics
+            '5311': 10,       # Stores
         },
         channel_preferences={
-            'APP_MOBILE': 70,
+            'MOBILE_APP': 70,
             'WEB_BANKING': 25,
             'ATM': 3,
-            'AGENCIA': 2,
+            'BRANCH': 2,
         },
         monthly_tx_frequency=(30, 80),
         typical_value_range=(200, 10000),
@@ -210,25 +210,25 @@ PROFILES: Dict[str, BehavioralProfile] = {
     
     ProfileType.SUBSCRIPTION_HEAVY.value: BehavioralProfile(
         name="subscription_heavy",
-        description="Assinante digital: 22-45 anos, muitas assinaturas recorrentes",
+        description="Digital subscriber: 22-45 years, many recurring subscriptions",
         age_range=(22, 45),
         income_multiplier=(1.0, 3.0),
         transaction_types={
-            'DEBITO_AUTOMATICO': 35,
+            'AUTO_DEBIT': 35,
             'PIX': 35,
-            'CARTAO_CREDITO': 25,
-            'CARTAO_DEBITO': 5,
+            'CREDIT_CARD': 25,
+            'DEBIT_CARD': 5,
         },
         preferred_mccs={
             '5815': 35,       # Streaming/Digital
-            '7941': 15,       # Academia
+            '7941': 15,       # Gym
             '4814': 15,       # Telecom
             '5812': 15,       # Delivery
-            '8299': 10,       # Cursos online
-            '5411': 10,       # Supermercados
+            '8299': 10,       # Online courses
+            '5411': 10,       # Supermarkets
         },
         channel_preferences={
-            'APP_MOBILE': 75,
+            'MOBILE_APP': 75,
             'WEB_BANKING': 20,
             'WHATSAPP_PAY': 5,
         },
@@ -241,32 +241,32 @@ PROFILES: Dict[str, BehavioralProfile] = {
     
     ProfileType.FAMILY_PROVIDER.value: BehavioralProfile(
         name="family_provider",
-        description="Provedor familiar: 30-55 anos, supermercado, farmácia, educação",
+        description="Family provider: 30-55 years, supermarket, pharmacy, education",
         age_range=(30, 55),
         income_multiplier=(1.5, 4.0),
         transaction_types={
             'PIX': 40,
-            'CARTAO_CREDITO': 30,
-            'CARTAO_DEBITO': 15,
+            'CREDIT_CARD': 30,
+            'DEBIT_CARD': 15,
             'BOLETO': 10,
-            'DEBITO_AUTOMATICO': 5,
+            'AUTO_DEBIT': 5,
         },
         preferred_mccs={
-            '5411': 25,       # Supermercados
-            '5912': 10,       # Farmácias
+            '5411': 25,       # Supermarkets
+            '5912': 10,       # Pharmacies
             '5995': 5,        # Pet Shop
-            '8299': 10,       # Educação
-            '4900': 10,       # Utilidades
-            '5541': 10,       # Combustível
-            '5651': 10,       # Vestuário
+            '8299': 10,       # Education
+            '4900': 10,       # Utilities
+            '5541': 10,       # Gas
+            '5651': 10,       # Clothing
             '5814': 10,       # Fast Food
-            '5499': 10,       # Conveniência
+            '5499': 10,       # Convenience
         },
         channel_preferences={
-            'APP_MOBILE': 65,
+            'MOBILE_APP': 65,
             'WEB_BANKING': 25,
             'ATM': 7,
-            'AGENCIA': 3,
+            'BRANCH': 3,
         },
         monthly_tx_frequency=(60, 120),
         typical_value_range=(30, 1500),

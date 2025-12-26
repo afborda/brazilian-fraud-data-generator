@@ -11,13 +11,13 @@ import json
 @dataclass
 class Address:
     """Brazilian address data."""
-    logradouro: str
-    bairro: str
-    cidade: str
-    estado: str
-    cep: str
-    numero: Optional[str] = None
-    complemento: Optional[str] = None
+    street: str  # logradouro
+    neighborhood: str  # bairro
+    city: str  # cidade
+    state: str  # estado
+    postal_code: str  # cep
+    number: Optional[str] = None  # numero
+    complement: Optional[str] = None  # complemento
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary, excluding None values."""
@@ -31,72 +31,72 @@ class Customer:
     
     Attributes:
         customer_id: Unique identifier for the customer
-        nome: Full name
+        name: Full name
         cpf: CPF number (with valid check digits)
         email: Email address
-        telefone: Phone number in Brazilian format
-        data_nascimento: Date of birth
-        endereco: Brazilian address
-        renda_mensal: Monthly income in BRL
-        profissao: Profession/occupation
-        conta_criada_em: Account creation date
-        tipo_conta: Account type (CORRENTE, POUPANCA, DIGITAL)
-        status_conta: Account status (ATIVA, BLOQUEADA, INATIVA)
-        limite_credito: Credit limit in BRL
-        score_credito: Credit score (300-900)
-        nivel_risco: Risk level (BAIXO, MEDIO, ALTO)
-        banco_codigo: Bank code (COMPE)
-        banco_nome: Bank name
-        agencia: Branch number
-        numero_conta: Account number
-        perfil_comportamental: Behavioral profile (young_digital, traditional_senior, etc.)
+        phone: Phone number in Brazilian format
+        birth_date: Date of birth
+        address: Brazilian address
+        monthly_income: Monthly income in BRL
+        profession: Profession/occupation
+        account_created_at: Account creation date
+        account_type: Account type (CHECKING, SAVINGS, DIGITAL)
+        account_status: Account status (ACTIVE, BLOCKED, INACTIVE)
+        credit_limit: Credit limit in BRL
+        credit_score: Credit score (300-900)
+        risk_level: Risk level (LOW, MEDIUM, HIGH)
+        bank_code: Bank code (COMPE)
+        bank_name: Bank name
+        branch: Branch number
+        account_number: Account number
+        behavioral_profile: Behavioral profile (young_digital, traditional_senior, etc.)
     """
     customer_id: str
-    nome: str
+    name: str  # nome
     cpf: str
     email: str
-    telefone: str
-    data_nascimento: date
-    endereco: Address
-    renda_mensal: float
-    profissao: str
-    conta_criada_em: datetime
-    tipo_conta: str
-    status_conta: str
-    limite_credito: float
-    score_credito: int
-    nivel_risco: str
-    banco_codigo: str
-    banco_nome: str
-    agencia: str
-    numero_conta: str
-    perfil_comportamental: Optional[str] = None
+    phone: str  # telefone
+    birth_date: date  # data_nascimento
+    address: Address  # endereco
+    monthly_income: float  # renda_mensal
+    profession: str  # profissao
+    account_created_at: datetime  # conta_criada_em
+    account_type: str  # tipo_conta
+    account_status: str  # status_conta
+    credit_limit: float  # limite_credito
+    credit_score: int  # score_credito
+    risk_level: str  # nivel_risco
+    bank_code: str  # banco_codigo
+    bank_name: str  # banco_nome
+    branch: str  # agencia
+    account_number: str  # numero_conta
+    behavioral_profile: Optional[str] = None  # perfil_comportamental
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
         data = {
             'customer_id': self.customer_id,
-            'nome': self.nome,
+            'name': self.name,
             'cpf': self.cpf,
             'email': self.email,
-            'telefone': self.telefone,
-            'data_nascimento': self.data_nascimento.isoformat() if isinstance(self.data_nascimento, date) else self.data_nascimento,
-            'endereco': self.endereco.to_dict() if isinstance(self.endereco, Address) else self.endereco,
-            'renda_mensal': self.renda_mensal,
-            'profissao': self.profissao,
-            'conta_criada_em': self.conta_criada_em.isoformat() if isinstance(self.conta_criada_em, datetime) else self.conta_criada_em,
-            'tipo_conta': self.tipo_conta,
-            'status_conta': self.status_conta,
-            'limite_credito': self.limite_credito,
-            'score_credito': self.score_credito,
-            'nivel_risco': self.nivel_risco,
-            'banco_codigo': self.banco_codigo,
-            'banco_nome': self.banco_nome,
-            'agencia': self.agencia,
-            'numero_conta': self.numero_conta,
+            'phone': self.phone,
+            'birth_date': self.birth_date.isoformat() if isinstance(self.birth_date, date) else self.birth_date,
+            'address': self.address.to_dict() if isinstance(self.address, Address) else self.address,
+            'monthly_income': self.monthly_income,
+            'profession': self.profession,
+            'account_created_at': self.account_created_at.isoformat() if isinstance(self.account_created_at, datetime) else self.account_created_at,
+            'account_type': self.account_type,
+            'account_status': self.account_status,
+            'credit_limit': self.credit_limit,
+            'credit_score': self.credit_score,
+            'risk_level': self.risk_level,
+            'bank_code': self.bank_code,
+            'bank_name': self.bank_name,
+            'branch': self.branch,
+            'account_number': self.account_number,
         }
-        if self.perfil_comportamental:
-            data['perfil_comportamental'] = self.perfil_comportamental
+        if self.behavioral_profile:
+            data['behavioral_profile'] = self.behavioral_profile
         return data
     
     def to_json(self) -> str:
@@ -107,42 +107,42 @@ class Customer:
     def from_dict(cls, data: Dict[str, Any]) -> 'Customer':
         """Create Customer from dictionary."""
         # Handle nested Address
-        endereco_data = data.get('endereco', {})
-        if isinstance(endereco_data, dict):
-            endereco = Address(**endereco_data)
+        address_data = data.get('address', {})
+        if isinstance(address_data, dict):
+            address = Address(**address_data)
         else:
-            endereco = endereco_data
+            address = address_data
         
         # Handle date conversions
-        data_nascimento = data.get('data_nascimento')
-        if isinstance(data_nascimento, str):
-            data_nascimento = date.fromisoformat(data_nascimento)
+        birth_date = data.get('birth_date')
+        if isinstance(birth_date, str):
+            birth_date = date.fromisoformat(birth_date)
         
-        conta_criada_em = data.get('conta_criada_em')
-        if isinstance(conta_criada_em, str):
-            conta_criada_em = datetime.fromisoformat(conta_criada_em)
+        account_created_at = data.get('account_created_at')
+        if isinstance(account_created_at, str):
+            account_created_at = datetime.fromisoformat(account_created_at)
         
         return cls(
             customer_id=data['customer_id'],
-            nome=data['nome'],
+            name=data['name'],
             cpf=data['cpf'],
             email=data['email'],
-            telefone=data['telefone'],
-            data_nascimento=data_nascimento,
-            endereco=endereco,
-            renda_mensal=data['renda_mensal'],
-            profissao=data['profissao'],
-            conta_criada_em=conta_criada_em,
-            tipo_conta=data['tipo_conta'],
-            status_conta=data['status_conta'],
-            limite_credito=data['limite_credito'],
-            score_credito=data['score_credito'],
-            nivel_risco=data['nivel_risco'],
-            banco_codigo=data['banco_codigo'],
-            banco_nome=data['banco_nome'],
-            agencia=data['agencia'],
-            numero_conta=data['numero_conta'],
-            perfil_comportamental=data.get('perfil_comportamental'),
+            phone=data['phone'],
+            birth_date=birth_date,
+            address=address,
+            monthly_income=data['monthly_income'],
+            profession=data['profession'],
+            account_created_at=account_created_at,
+            account_type=data['account_type'],
+            account_status=data['account_status'],
+            credit_limit=data['credit_limit'],
+            credit_score=data['credit_score'],
+            risk_level=data['risk_level'],
+            bank_code=data['bank_code'],
+            bank_name=data['bank_name'],
+            branch=data['branch'],
+            account_number=data['account_number'],
+            behavioral_profile=data.get('behavioral_profile'),
         )
 
 
@@ -157,10 +157,10 @@ class CustomerIndex:
     Memory usage: ~50-80 bytes per customer vs ~800+ bytes for full Customer
     """
     customer_id: str
-    estado: str
-    perfil_comportamental: Optional[str] = None
-    banco_codigo: Optional[str] = None
-    nivel_risco: Optional[str] = None
+    state: str  # estado
+    behavioral_profile: Optional[str] = None  # perfil_comportamental
+    bank_code: Optional[str] = None  # banco_codigo
+    risk_level: Optional[str] = None  # nivel_risco
     
     def __repr__(self) -> str:
-        return f"CustomerIndex({self.customer_id}, {self.estado}, {self.perfil_comportamental})"
+        return f"CustomerIndex({self.customer_id}, {self.state}, {self.behavioral_profile})"
