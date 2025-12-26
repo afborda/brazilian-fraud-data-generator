@@ -32,27 +32,38 @@ Perfect for: **Data pipelines**, **Spark jobs**, **Kafka streaming**, **ML model
 
 ## 🚀 5-Minute Quick Start
 
-### 1️⃣ Install
+### A) Batch (files on disk)
+1. Install deps (once):
+  ```bash
+  git clone https://github.com/afborda/brazilian-fraud-data-generator.git
+  cd brazilian-fraud-data-generator
+  pip install -r requirements.txt
+  ```
+2. Generate 100MB of banking data locally:
+  ```bash
+  python3 generate.py --size 100MB --output ./my_data
+  ```
+3. Open the files in `./my_data` (customers, devices, transactions).
 
+### B) Streaming (real time)
+1. Install streaming deps (once):
+  ```bash
+  pip install -r requirements-streaming.txt
+  ```
+2. Stream to terminal (transactions, 5 events/sec):
+  ```bash
+  python3 stream.py --target stdout --rate 5
+  ```
+3. Stream to Kafka (transactions):
+  ```bash
+  python3 stream.py --target kafka --kafka-server localhost:9092 --rate 100
+  ```
+  For rides, add `--type rides` (topic defaults to `rides`).
+
+### C) Docker (no local Python needed)
 ```bash
-git clone https://github.com/afborda/brazilian-fraud-data-generator.git
-cd brazilian-fraud-data-generator
-pip install -r requirements.txt
-```
-
-### 2️⃣ Generate Your First Data
-
-```bash
-# Generate 100MB of transactions
-python3 generate.py --size 100MB --output ./my_data
-```
-
-**That's it!** Check your `./my_data` folder:
-```
-my_data/
-├── customers.jsonl       # 👥 Customers with valid CPFs
-├── devices.jsonl         # 📱 Devices per customer  
-└── transactions_00000.jsonl  # 💳 Transactions (~128MB each)
+docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+   generate.py --size 1GB --output /output
 ```
 
 ---
