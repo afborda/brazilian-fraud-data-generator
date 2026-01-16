@@ -98,6 +98,9 @@ def worker_generate_batch(args: tuple) -> str:
     (batch_id, num_transactions, customer_indexes, device_indexes,
      start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed) = args
     
+    # Generate unique session timestamp for globally unique IDs
+    session_start_ms = int(time.time() * 1000)
+    
     # Deterministic seed per worker
     if seed is not None:
         worker_seed = seed + batch_id * 12345
@@ -167,8 +170,11 @@ def worker_generate_batch(args: tuple) -> str:
                     microsecond=random.randint(0, 999999)
                 )
                 
+                # Generate globally unique transaction ID
+                unique_tx_id = f"{session_start_ms}_{batch_id:04d}_{i:06d}"
+                
                 tx = tx_generator.generate(
-                    tx_id=f"{start_tx_id + i:015d}",
+                    tx_id=unique_tx_id,
                     customer_id=customer.customer_id,
                     device_id=device.device_id,
                     timestamp=timestamp,
@@ -206,8 +212,11 @@ def worker_generate_batch(args: tuple) -> str:
                 microsecond=random.randint(0, 999999)
             )
             
+            # Generate globally unique transaction ID
+            unique_tx_id = f"{session_start_ms}_{batch_id:04d}_{i:06d}"
+            
             tx = tx_generator.generate(
-                tx_id=f"{start_tx_id + i:015d}",
+                tx_id=unique_tx_id,
                 customer_id=customer.customer_id,
                 device_id=device.device_id,
                 timestamp=timestamp,

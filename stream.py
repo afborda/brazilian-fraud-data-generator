@@ -161,6 +161,10 @@ def run_streaming(
     error_count = 0
     start_time = time.time()
     
+    # Base timestamp para garantir IDs únicos entre reinicializações
+    # Usa timestamp em milissegundos como prefixo
+    base_tx_id = int(time.time() * 1000)
+    
     while _running:
         # Check max events
         if max_events and event_count >= max_events:
@@ -172,8 +176,12 @@ def run_streaming(
         # Generate transaction with current timestamp
         timestamp = datetime.now()
         
+        # ID único: base_timestamp (ms) + sequencial
+        # Garante unicidade mesmo após reinicialização do generator
+        unique_tx_id = f"{base_tx_id}_{event_count:06d}"
+        
         tx = tx_generator.generate(
-            tx_id=f"{event_count:015d}",
+            tx_id=unique_tx_id,
             customer_id=customer.customer_id,
             device_id=device.device_id,
             timestamp=timestamp,
