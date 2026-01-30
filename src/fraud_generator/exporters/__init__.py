@@ -15,6 +15,22 @@ from .base import ExporterProtocol, ExportStats
 from .json_exporter import JSONExporter, JSONArrayExporter
 from .csv_exporter import CSVExporter, TSVExporter
 
+# Conditional import for Arrow IPC
+try:
+    from .arrow_ipc_exporter import ArrowIPCExporter
+    ARROW_IPC_AVAILABLE = True
+except ImportError:
+    ARROW_IPC_AVAILABLE = False
+    ArrowIPCExporter = None
+
+# Conditional import for Database exporter
+try:
+    from .database_exporter import DatabaseExporter
+    DATABASE_AVAILABLE = True
+except ImportError:
+    DATABASE_AVAILABLE = False
+    DatabaseExporter = None
+
 # Conditional import for Parquet
 try:
     from .parquet_exporter import ParquetExporter, ParquetPartitionedExporter
@@ -49,6 +65,14 @@ if PARQUET_AVAILABLE:
     EXPORTERS['parquet'] = ParquetExporter
     EXPORTERS['parquet_partitioned'] = ParquetPartitionedExporter
 
+if ARROW_IPC_AVAILABLE:
+    EXPORTERS['arrow'] = ArrowIPCExporter
+    EXPORTERS['ipc'] = ArrowIPCExporter
+
+if DATABASE_AVAILABLE:
+    EXPORTERS['db'] = DatabaseExporter
+    EXPORTERS['database'] = DatabaseExporter
+
 
 def get_exporter(format_name: str, **kwargs) -> ExporterProtocol:
     """
@@ -82,6 +106,8 @@ def get_exporter(format_name: str, **kwargs) -> ExporterProtocol:
         'json_array': 'json',
         'tab': 'tsv',
         'pq': 'parquet',
+        'arrow_ipc': 'arrow',
+        'sql': 'db',
     }
     format_lower = aliases.get(format_lower, format_lower)
     
@@ -173,6 +199,8 @@ __all__ = [
     'TSVExporter',
     'ParquetExporter',
     'ParquetPartitionedExporter',
+    'ArrowIPCExporter',
+    'DatabaseExporter',
     'MinIOExporter',
     'MinIOStreamWriter',
     'get_exporter',
@@ -183,5 +211,7 @@ __all__ = [
     'is_minio_available',
     'parse_minio_url',
     'PARQUET_AVAILABLE',
+    'ARROW_IPC_AVAILABLE',
+    'DATABASE_AVAILABLE',
     'MINIO_AVAILABLE',
 ]

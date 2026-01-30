@@ -7,6 +7,7 @@ from .streaming import (
     DeviceIndex,
     DriverIndex,
     RideIndex,
+    CustomerSessionState,
     create_customer_index,
     create_device_index,
     create_driver_index,
@@ -28,6 +29,13 @@ from .helpers import (
     format_duration,
 )
 
+from .redis_cache import (
+    is_redis_available,
+    get_redis_client,
+    load_cached_indexes,
+    save_cached_indexes,
+)
+
 __all__ = [
     # Streaming - Customer/Device
     'CustomerIndex',
@@ -39,6 +47,7 @@ __all__ = [
     'RideIndex',
     'create_driver_index',
     'create_ride_index',
+    'CustomerSessionState',
     # Streaming - Utils
     'BatchGenerator',
     'batch_iterator',
@@ -53,4 +62,9 @@ __all__ = [
     'parse_size',
     'format_size',
     'format_duration',
+    # Redis cache
+    'is_redis_available',
+    'get_redis_client',
+    'load_cached_indexes',
+    'save_cached_indexes',
 ]

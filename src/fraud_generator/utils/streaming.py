@@ -2,8 +2,10 @@
 Streaming utilities for memory-efficient data generation.
 """
 
-from typing import NamedTuple, List, Iterator, Optional, Dict, Any, Callable
-from collections import namedtuple
+from typing import NamedTuple, List, Iterator, Optional, Dict, Any, Callable, Tuple
+from collections import namedtuple, deque
+from datetime import datetime, timedelta
+import math
 import random
 
 
@@ -45,6 +47,110 @@ class RideIndex(NamedTuple):
     passenger_id: str
     app: str
     city: str
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the great-circle distance between two points on Earth.
+    Uses the Haversine formula.
+    """
+    # Earth's radius in kilometers
+    R = 6371.0
+
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lon = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_lat / 2) ** 2 + \
+        math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
+
+
+class CustomerSessionState:
+    """
+    Track customer activity in a session for correlated transactions.
+
+    Maintains a rolling 24h window of activity for realistic velocity,
+    accumulated amount, merchant novelty, and distance-based indicators.
+    """
+
+    def __init__(self, customer_id: str):
+        self.customer_id = customer_id
+        self._transactions = deque()  # (timestamp, amount, merchant_id, lat, lon, device_id)
+        self._merchant_counts: Dict[str, int] = {}
+        self._device_counts: Dict[str, int] = {}
+        self._accumulated_amount = 0.0
+
+    def _prune_old(self, current_time: datetime) -> None:
+        """Remove transactions older than 24h from the rolling window."""
+        cutoff = current_time - timedelta(hours=24)
+        while self._transactions and self._transactions[0][0] < cutoff:
+            ts, amount, merchant_id, _lat, _lon, device_id = self._transactions.popleft()
+            self._accumulated_amount -= amount
+
+            if merchant_id in self._merchant_counts:
+                self._merchant_counts[merchant_id] -= 1
+                if self._merchant_counts[merchant_id] <= 0:
+                    del self._merchant_counts[merchant_id]
+
+            if device_id in self._device_counts:
+                self._device_counts[device_id] -= 1
+                if self._device_counts[device_id] <= 0:
+                    del self._device_counts[device_id]
+
+    def add_transaction(self, tx: Dict[str, Any], timestamp: datetime) -> None:
+        """Add transaction to session state."""
+        self._prune_old(timestamp)
+
+        merchant_id = tx.get('merchant_id')
+        device_id = tx.get('device_id')
+        lat = tx.get('geolocation_lat')
+        lon = tx.get('geolocation_lon')
+        amount = float(tx.get('amount', 0.0))
+
+        self._transactions.append((timestamp, amount, merchant_id, lat, lon, device_id))
+        self._accumulated_amount += amount
+
+        if merchant_id:
+            self._merchant_counts[merchant_id] = self._merchant_counts.get(merchant_id, 0) + 1
+        if device_id:
+            self._device_counts[device_id] = self._device_counts.get(device_id, 0) + 1
+
+    def get_velocity(self, current_time: datetime) -> int:
+        """Transactions in last 24h."""
+        self._prune_old(current_time)
+        return len(self._transactions)
+
+    def get_accumulated_24h(self, current_time: datetime) -> float:
+        """Total amount in last 24h."""
+        self._prune_old(current_time)
+        return round(self._accumulated_amount, 2)
+
+    def is_new_merchant(self, merchant_id: Optional[str]) -> bool:
+        """Is this a new merchant for customer within 24h window?"""
+        if not merchant_id:
+            return False
+        return merchant_id not in self._merchant_counts
+
+    def get_last_transaction_minutes_ago(self, current_time: datetime) -> Optional[int]:
+        """Minutes since last transaction."""
+        if not self._transactions:
+            return None
+        last_ts = self._transactions[-1][0]
+        delta = current_time - last_ts
+        return int(delta.total_seconds() / 60) if delta.total_seconds() >= 0 else None
+
+    def get_distance_from_last_txn_km(self, lat: Optional[float], lon: Optional[float]) -> Optional[float]:
+        """Distance from last transaction (km)."""
+        if not self._transactions or lat is None or lon is None:
+            return None
+        _last_ts, _amount, _merchant_id, last_lat, last_lon, _device_id = self._transactions[-1]
+        if last_lat is None or last_lon is None:
+            return None
+        return round(haversine_distance(last_lat, last_lon, lat, lon), 2)
 
 
 def create_customer_index(customer_dict: Dict[str, Any]) -> CustomerIndex:

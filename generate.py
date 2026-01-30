@@ -68,7 +68,9 @@ from fraud_generator.exporters import (
 from fraud_generator.utils import (
     CustomerIndex, DeviceIndex, DriverIndex,
     parse_size, format_size, format_duration,
-    BatchGenerator, ProgressTracker,
+    BatchGenerator, ProgressTracker, CustomerSessionState,
+    is_redis_available, get_redis_client,
+    load_cached_indexes, save_cached_indexes,
 )
 from fraud_generator.validators import validate_cpf
 
@@ -138,6 +140,9 @@ def worker_generate_batch(args: tuple) -> str:
         use_profiles=use_profiles,
         seed=worker_seed
     )
+
+    # OTIMIZAÇÃO 2.2: Customer session state (velocity/correlation)
+    sessions: Dict[str, CustomerSessionState] = {}
     
     # Determine output format
     # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
@@ -181,6 +186,11 @@ def worker_generate_batch(args: tuple) -> str:
                 # Generate globally unique transaction ID
                 unique_tx_id = f"{session_start_ms}_{batch_id:04d}_{i:06d}"
                 
+                session = sessions.get(customer.customer_id)
+                if session is None:
+                    session = CustomerSessionState(customer.customer_id)
+                    sessions[customer.customer_id] = session
+
                 tx = tx_generator.generate(
                     tx_id=unique_tx_id,
                     customer_id=customer.customer_id,
@@ -188,7 +198,10 @@ def worker_generate_batch(args: tuple) -> str:
                     timestamp=timestamp,
                     customer_state=customer.state,
                     customer_profile=customer.profile,
+                    session_state=session,
                 )
+
+                session.add_transaction(tx, timestamp)
                 
                 # OTIMIZAÇÃO 1.3: Clean None fields if skip_none is enabled
                 tx_to_write = exporter._clean_record(tx) if hasattr(exporter, '_clean_record') else tx
@@ -242,6 +255,11 @@ def worker_generate_batch(args: tuple) -> str:
             # Generate globally unique transaction ID
             unique_tx_id = f"{session_start_ms}_{batch_id:04d}_{i:06d}"
             
+            session = sessions.get(customer.customer_id)
+            if session is None:
+                session = CustomerSessionState(customer.customer_id)
+                sessions[customer.customer_id] = session
+
             tx = tx_generator.generate(
                 tx_id=unique_tx_id,
                 customer_id=customer.customer_id,
@@ -249,7 +267,9 @@ def worker_generate_batch(args: tuple) -> str:
                 timestamp=timestamp,
                 customer_state=customer.state,
                 customer_profile=customer.profile,
+                session_state=session,
             )
+            session.add_transaction(tx, timestamp)
             transactions.append(tx)
         
         # Export batch
@@ -749,6 +769,7 @@ def minio_generate_transaction_batch(
     )
     
     transactions = []
+    sessions: Dict[str, CustomerSessionState] = {}
     start_tx_id = batch_id * num_transactions
     
     for i in range(num_transactions):
@@ -772,6 +793,11 @@ def minio_generate_transaction_batch(
             microsecond=random.randint(0, 999999)
         )
         
+        session = sessions.get(customer.customer_id)
+        if session is None:
+            session = CustomerSessionState(customer.customer_id)
+            sessions[customer.customer_id] = session
+
         tx = tx_generator.generate(
             tx_id=f"{start_tx_id + i:015d}",
             customer_id=customer.customer_id,
@@ -779,7 +805,9 @@ def minio_generate_transaction_batch(
             timestamp=timestamp,
             customer_state=customer.state,
             customer_profile=customer.profile,
+            session_state=session,
         )
+        session.add_transaction(tx, timestamp)
         transactions.append(tx)
     
     return transactions
@@ -954,6 +982,49 @@ Available formats: """ + ", ".join(list_formats())
         default=None,
         help='Random seed for reproducibility'
     )
+
+    parser.add_argument(
+        '--parallel-mode',
+        type=str,
+        default='auto',
+        choices=['auto', 'thread', 'process'],
+        help='Parallel execution mode. auto=process for Parquet/MinIO, thread otherwise. Default: auto'
+    )
+
+    parser.add_argument(
+        '--redis-url',
+        type=str,
+        default=None,
+        help='Redis URL for caching generator state (e.g., redis://localhost:6379/0)'
+    )
+
+    parser.add_argument(
+        '--redis-prefix',
+        type=str,
+        default='fraudgen',
+        help='Redis key prefix for cached indexes. Default: fraudgen'
+    )
+
+    parser.add_argument(
+        '--redis-ttl',
+        type=int,
+        default=None,
+        help='Redis TTL for cached indexes in seconds (optional)'
+    )
+
+    parser.add_argument(
+        '--db-url',
+        type=str,
+        default=None,
+        help='Database URL for db format (e.g., postgresql://user:pass@host:5432/dbname)'
+    )
+
+    parser.add_argument(
+        '--db-table',
+        type=str,
+        default='transactions',
+        help='Database table name for db format. Default: transactions'
+    )
     
     # MinIO arguments
     parser.add_argument(
@@ -1036,6 +1107,7 @@ Available formats: """ + ", ".join(list_formats())
         sys.exit(1)
     
     # Validate format for MinIO (supports jsonl, csv, parquet)
+    db_tables = None
     if use_minio:
         supported_minio_formats = ('jsonl', 'csv', 'parquet')
         if args.format not in supported_minio_formats:
@@ -1110,7 +1182,7 @@ Available formats: """ + ", ".join(list_formats())
     # Compression (handle 'none' -> None)
     compression = args.compression if args.compression != 'none' else None
     
-    # Setup output (local or MinIO)
+    # Setup output (local, MinIO, or DB)
     if use_minio:
         # MinIO output - create exporter
         minio_exporter = get_minio_exporter(
@@ -1126,15 +1198,32 @@ Available formats: """ + ", ".join(list_formats())
         output_dir = None  # Not used for MinIO
         exporter = minio_exporter
     else:
-        # Local output - create directory
-        os.makedirs(args.output, exist_ok=True)
-        output_dir = args.output
-        # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
-        exporter_kwargs = {'skip_none': True} if args.format in ['jsonl', 'json'] else {}
-        # OTIMIZAÇÃO 2.1: Pass jsonl_compress for JSONL format
-        if args.format == 'jsonl' and args.jsonl_compress != 'none':
-            exporter_kwargs['jsonl_compress'] = args.jsonl_compress
-        exporter = get_exporter(args.format, **exporter_kwargs)
+        # Local output or DB
+        if args.format in ['db', 'database']:
+            if not args.db_url:
+                raise ValueError("--db-url é obrigatório quando --format=db")
+            exporter = get_exporter(
+                args.format,
+                db_url=args.db_url,
+                table_name=args.db_table
+            )
+            db_tables = {
+                'customers': 'customers',
+                'devices': 'devices',
+                'drivers': 'drivers',
+                'transactions': args.db_table,
+                'rides': f"{args.db_table}_rides",
+            }
+            output_dir = None
+        else:
+            os.makedirs(args.output, exist_ok=True)
+            output_dir = args.output
+            # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
+            exporter_kwargs = {'skip_none': True} if args.format in ['jsonl', 'json'] else {}
+            # OTIMIZAÇÃO 2.1: Pass jsonl_compress for JSONL format
+            if args.format == 'jsonl' and args.jsonl_compress != 'none':
+                exporter_kwargs['jsonl_compress'] = args.jsonl_compress
+            exporter = get_exporter(args.format, **exporter_kwargs)
         minio_exporter = None
     
     # Print configuration
@@ -1146,6 +1235,9 @@ Available formats: """ + ", ".join(list_formats())
         print(f"☁️  Output: {args.output} (MinIO)")
         if args.minio_endpoint:
             print(f"   Endpoint: {args.minio_endpoint}")
+    elif args.format in ['db', 'database']:
+        print(f"🗄️  Output: {args.db_url} (DB)")
+        print(f"   Table: {args.db_table}")
     else:
         print(f"📁 Output: {args.output}")
     print(f"📄 Format: {args.format.upper()}")
@@ -1175,8 +1267,25 @@ Available formats: """ + ", ".join(list_formats())
     print("\n" + "=" * 60)
     print("📋 FASE 1: Gerando clientes e dispositivos")
     print("=" * 60)
+
+    redis_client = None
+    if args.redis_url:
+        if not is_redis_available():
+            print("⚠️  Redis não disponível. Instale com: pip install redis")
+        else:
+            try:
+                redis_client = get_redis_client(args.redis_url)
+                print(f"🧠 Redis cache: {args.redis_url} (prefix={args.redis_prefix})")
+            except Exception as e:
+                print(f"⚠️  Falha ao conectar ao Redis: {e}")
+                redis_client = None
     
-    output_display = args.output if not use_minio else f"{args.output} (MinIO)"
+    if use_minio:
+        output_display = f"{args.output} (MinIO)"
+    elif args.format in ['db', 'database']:
+        output_display = f"{args.db_url} (DB)"
+    else:
+        output_display = args.output
     progress_phase1 = ProgressTracker(
         total=num_customers,
         description="Gerando clientes e dispositivos",
@@ -1187,11 +1296,37 @@ Available formats: """ + ", ".join(list_formats())
     
     phase1_start = time.time()
     
-    customer_indexes, device_indexes, customer_data, device_data = generate_customers_and_devices(
-        num_customers=num_customers,
-        use_profiles=use_profiles,
-        seed=args.seed
-    )
+    customer_indexes = None
+    device_indexes = None
+    if redis_client:
+        cached_customers, cached_devices, cached_customer_data, cached_device_data, _, _ = load_cached_indexes(
+            redis_client,
+            prefix=args.redis_prefix,
+            include_drivers=False
+        )
+        if cached_customers and cached_devices:
+            customer_indexes = cached_customers
+            device_indexes = cached_devices
+            customer_data = cached_customer_data or []
+            device_data = cached_device_data or []
+            print(f"✅ Cache Redis usado: {len(customer_indexes)} customers, {len(device_indexes)} devices")
+
+    if customer_indexes is None or device_indexes is None:
+        customer_indexes, device_indexes, customer_data, device_data = generate_customers_and_devices(
+            num_customers=num_customers,
+            use_profiles=use_profiles,
+            seed=args.seed
+        )
+        if redis_client:
+            save_cached_indexes(
+                redis_client,
+                prefix=args.redis_prefix,
+                customer_indexes=customer_indexes,
+                device_indexes=device_indexes,
+                customer_data=customer_data,
+                device_data=device_data,
+                ttl_seconds=args.redis_ttl
+            )
     
     progress_phase1.current = num_customers
     progress_phase1._print_progress()
@@ -1208,7 +1343,21 @@ Available formats: """ + ", ".join(list_formats())
     
     # Save customer and device data
     print("\n💾 Salvando dados de clientes e dispositivos...")
-    if use_minio:
+    if args.format in ['db', 'database']:
+        db_customers_exporter = get_exporter(
+            args.format,
+            db_url=args.db_url,
+            table_name=db_tables['customers']
+        )
+        db_devices_exporter = get_exporter(
+            args.format,
+            db_url=args.db_url,
+            table_name=db_tables['devices']
+        )
+        db_customers_exporter.export_batch(customer_data, args.db_url, append=False)
+        db_devices_exporter.export_batch(device_data, args.db_url, append=False)
+        print(f"   🗄️  Inserido: {db_tables['customers']} e {db_tables['devices']}")
+    elif use_minio:
         # Upload to MinIO (exporter will handle correct extension)
         exporter.export_batch(customer_data, 'customers')
         exporter.export_batch(device_data, 'devices')
@@ -1242,7 +1391,24 @@ Available formats: """ + ", ".join(list_formats())
         
         phase2_start = time.time()
         
-        if use_minio:
+        if args.format in ['db', 'database']:
+            # Database export (single-process, batch inserts)
+            for batch_id in range(num_files):
+                transactions = minio_generate_transaction_batch(
+                    batch_id=batch_id,
+                    num_transactions=TRANSACTIONS_PER_FILE,
+                    customer_indexes=customer_indexes,
+                    device_indexes=device_indexes,
+                    start_date=start_date,
+                    end_date=end_date,
+                    fraud_rate=args.fraud_rate,
+                    use_profiles=use_profiles,
+                    seed=args.seed,
+                )
+                exporter.export_batch(transactions, args.db_url, append=batch_id > 0)
+                tx_results.append(f"db_batch_{batch_id:05d}")
+                progress_tx.update(1)
+        elif use_minio:
             # For MinIO + Parquet: use ProcessPoolExecutor (bypasses GIL for CPU-bound work)
             # For other formats: use ThreadPoolExecutor
             if args.format == 'parquet':
@@ -1280,10 +1446,12 @@ Available formats: """ + ", ".join(list_formats())
                 # Use ProcessPoolExecutor - bypasses GIL for real parallelism!
                 # Limit to min(workers, num_files, cpu_count) for optimal performance
                 max_process_workers = min(workers, num_files, mp.cpu_count())
+                if args.parallel_mode == 'thread':
+                    print("   ⚠️  parallel-mode=thread ignorado para Parquet+MinIO (usando ProcessPoolExecutor)")
                 print(f"   🚀 Usando ProcessPoolExecutor com {max_process_workers} processos (bypass GIL)")
-                
+
                 with ProcessPoolExecutor(max_workers=max_process_workers) as executor:
-                    futures = {executor.submit(_worker_generate_and_upload_parquet_tx, args): i 
+                    futures = {executor.submit(_worker_generate_and_upload_parquet_tx, args): i
                                for i, args in enumerate(worker_args)}
                     for future in as_completed(futures):
                         filename = future.result()
@@ -1309,6 +1477,8 @@ Available formats: """ + ", ".join(list_formats())
                     return filename
                 
                 # Use ThreadPoolExecutor for parallel I/O
+                if args.parallel_mode == 'process':
+                    print("   ⚠️  parallel-mode=process não suportado para MinIO JSONL/CSV (usando threads)")
                 max_workers = min(workers, num_files, 16)
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     futures = {executor.submit(generate_and_upload_tx_batch, i): i for i in range(num_files)}
@@ -1317,8 +1487,7 @@ Available formats: """ + ", ".join(list_formats())
                         tx_results.append(filename)
                         progress_tx.update(1)
         else:
-            # Local: use multiprocessing
-            # Prepare worker arguments
+            # Local: choose parallel strategy
             worker_args = []
             for batch_id in range(num_files):
                 args_tuple = (
@@ -1336,12 +1505,22 @@ Available formats: """ + ", ".join(list_formats())
                     args.jsonl_compress,
                 )
                 worker_args.append(args_tuple)
-            
-            # Generate in parallel
-            with mp.Pool(workers) as pool:
-                for i, result in enumerate(pool.imap_unordered(worker_generate_batch, worker_args)):
-                    tx_results.append(result)
-                    progress_tx.update(1)
+
+            if args.parallel_mode == 'thread':
+                max_workers = min(workers, num_files, 16)
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(worker_generate_batch, args): i for i, args in enumerate(worker_args)}
+                    for future in as_completed(futures):
+                        tx_results.append(future.result())
+                        progress_tx.update(1)
+            else:
+                max_process_workers = min(workers, num_files, mp.cpu_count())
+                print(f"   🚀 Usando ProcessPoolExecutor com {max_process_workers} processos (bypass GIL)")
+                with ProcessPoolExecutor(max_workers=max_process_workers) as executor:
+                    futures = {executor.submit(worker_generate_batch, args): i for i, args in enumerate(worker_args)}
+                    for future in as_completed(futures):
+                        tx_results.append(future.result())
+                        progress_tx.update(1)
         
         progress_tx.finish()
         phase2_time = time.time() - phase2_start
@@ -1364,10 +1543,38 @@ Available formats: """ + ", ".join(list_formats())
         
         phase3_start = time.time()
         
-        driver_indexes, driver_data = generate_drivers(
-            num_drivers=num_drivers,
-            seed=args.seed
-        )
+        driver_indexes = None
+        driver_data = []
+        if redis_client:
+            _, _, _, _, cached_drivers, cached_driver_data = load_cached_indexes(
+                redis_client,
+                prefix=args.redis_prefix,
+                include_drivers=True
+            )
+            if cached_drivers:
+                driver_indexes = cached_drivers
+                if cached_driver_data:
+                    driver_data = cached_driver_data
+                    print(f"✅ Cache Redis usado: {len(driver_indexes)} drivers")
+                else:
+                    # Driver data missing - regenerate to keep output consistent
+                    driver_indexes = None
+
+        if driver_indexes is None:
+            driver_indexes, driver_data = generate_drivers(
+                num_drivers=num_drivers,
+                seed=args.seed
+            )
+            if redis_client:
+                save_cached_indexes(
+                    redis_client,
+                    prefix=args.redis_prefix,
+                    customer_indexes=customer_indexes,
+                    device_indexes=device_indexes,
+                    driver_indexes=driver_indexes,
+                    driver_data=driver_data,
+                    ttl_seconds=args.redis_ttl
+                )
         
         progress_drivers.current = num_drivers
         progress_drivers._print_progress()
@@ -1379,7 +1586,15 @@ Available formats: """ + ", ".join(list_formats())
         
         # Save driver data
         print("\n💾 Salvando dados de motoristas...")
-        if use_minio:
+        if args.format in ['db', 'database']:
+            db_drivers_exporter = get_exporter(
+                args.format,
+                db_url=args.db_url,
+                table_name=db_tables['drivers']
+            )
+            db_drivers_exporter.export_batch(driver_data, args.db_url, append=False)
+            print(f"   🗄️  Inserido: {db_tables['drivers']}")
+        elif use_minio:
             exporter.export_batch(driver_data, 'drivers')
             print(f"   📤 Enviado: drivers{exporter.extension} para MinIO")
         else:
@@ -1408,7 +1623,28 @@ Available formats: """ + ", ".join(list_formats())
         
         phase4_start = time.time()
         
-        if use_minio:
+        if args.format in ['db', 'database']:
+            rides_exporter = get_exporter(
+                args.format,
+                db_url=args.db_url,
+                table_name=db_tables['rides']
+            )
+            for batch_id in range(num_files):
+                rides = minio_generate_ride_batch(
+                    batch_id=batch_id,
+                    num_rides=RIDES_PER_FILE,
+                    customer_indexes=customer_indexes,
+                    driver_indexes=driver_indexes,
+                    start_date=start_date,
+                    end_date=end_date,
+                    fraud_rate=args.fraud_rate,
+                    use_profiles=use_profiles,
+                    seed=args.seed,
+                )
+                rides_exporter.export_batch(rides, args.db_url, append=batch_id > 0)
+                ride_results.append(f"db_batch_{batch_id:05d}")
+                progress_rides.update(1)
+        elif use_minio:
             # For MinIO + Parquet: use ProcessPoolExecutor (bypasses GIL for CPU-bound work)
             # For other formats: use ThreadPoolExecutor
             if args.format == 'parquet':
@@ -1444,10 +1680,12 @@ Available formats: """ + ", ".join(list_formats())
                 
                 # Use ProcessPoolExecutor - bypasses GIL!
                 max_process_workers = min(workers, num_files, mp.cpu_count())
+                if args.parallel_mode == 'thread':
+                    print("   ⚠️  parallel-mode=thread ignorado para Parquet+MinIO (usando ProcessPoolExecutor)")
                 print(f"   🚀 Usando ProcessPoolExecutor com {max_process_workers} processos (bypass GIL)")
-                
+
                 with ProcessPoolExecutor(max_workers=max_process_workers) as executor:
-                    futures = {executor.submit(_worker_generate_and_upload_parquet_rides, args): i 
+                    futures = {executor.submit(_worker_generate_and_upload_parquet_rides, args): i
                                for i, args in enumerate(ride_worker_args)}
                     for future in as_completed(futures):
                         filename = future.result()
@@ -1473,6 +1711,8 @@ Available formats: """ + ", ".join(list_formats())
                     return filename
                 
                 # Use ThreadPoolExecutor for parallel I/O
+                if args.parallel_mode == 'process':
+                    print("   ⚠️  parallel-mode=process não suportado para MinIO JSONL/CSV (usando threads)")
                 max_workers = min(workers, num_files, 16)
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     futures = {executor.submit(generate_and_upload_ride_batch, i): i for i in range(num_files)}
@@ -1481,8 +1721,7 @@ Available formats: """ + ", ".join(list_formats())
                         ride_results.append(filename)
                         progress_rides.update(1)
         else:
-            # Local: use multiprocessing
-            # Prepare worker arguments for rides
+            # Local: choose parallel strategy
             ride_worker_args = []
             for batch_id in range(num_files):
                 args_tuple = (
@@ -1500,12 +1739,22 @@ Available formats: """ + ", ".join(list_formats())
                     args.jsonl_compress,
                 )
                 ride_worker_args.append(args_tuple)
-            
-            # Generate in parallel
-            with mp.Pool(workers) as pool:
-                for i, result in enumerate(pool.imap_unordered(worker_generate_rides_batch, ride_worker_args)):
-                    ride_results.append(result)
-                    progress_rides.update(1)
+
+            if args.parallel_mode == 'thread':
+                max_workers = min(workers, num_files, 16)
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(worker_generate_rides_batch, args): i for i, args in enumerate(ride_worker_args)}
+                    for future in as_completed(futures):
+                        ride_results.append(future.result())
+                        progress_rides.update(1)
+            else:
+                max_process_workers = min(workers, num_files, mp.cpu_count())
+                print(f"   🚀 Usando ProcessPoolExecutor com {max_process_workers} processos (bypass GIL)")
+                with ProcessPoolExecutor(max_workers=max_process_workers) as executor:
+                    futures = {executor.submit(worker_generate_rides_batch, args): i for i, args in enumerate(ride_worker_args)}
+                    for future in as_completed(futures):
+                        ride_results.append(future.result())
+                        progress_rides.update(1)
         
         progress_rides.finish()
         phase4_time = time.time() - phase4_start

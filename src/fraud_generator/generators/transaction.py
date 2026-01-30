@@ -38,6 +38,7 @@ from ..profiles.behavioral import (
     get_transaction_value_for_profile,
 )
 from ..utils.helpers import generate_ip_brazil, generate_random_hash
+from ..utils.streaming import CustomerSessionState
 from ..utils.weight_cache import WeightCache  # OTIMIZAÇÃO 1.1
 
 
@@ -99,7 +100,8 @@ class TransactionGenerator:
         timestamp: datetime,
         customer_state: Optional[str] = None,
         customer_profile: Optional[str] = None,
-        force_fraud: Optional[bool] = None
+        force_fraud: Optional[bool] = None,
+        session_state: Optional[CustomerSessionState] = None
     ) -> Dict[str, Any]:
         """
         Generate a single transaction.
@@ -193,7 +195,7 @@ class TransactionGenerator:
             tx = self._apply_fraud_pattern(tx, fraud_type, customer_profile, timestamp)
         
         # Add risk indicators
-        self._add_risk_indicators(tx, timestamp, is_fraud, fraud_type)
+        self._add_risk_indicators(tx, timestamp, is_fraud, fraud_type, session_state)
         
         return tx
     
@@ -482,7 +484,8 @@ class TransactionGenerator:
         tx: dict,
         timestamp: datetime,
         is_fraud: bool,
-        fraud_type: Optional[str]
+        fraud_type: Optional[str],
+        session_state: Optional[CustomerSessionState] = None
     ) -> None:
         """Add risk indicators to transaction."""
         hour = timestamp.hour
@@ -494,24 +497,57 @@ class TransactionGenerator:
                 weights=[60, 25, 10, 5]
             )[0]
             fraud_score = round(random.uniform(65, 100), 2)
-            transactions_24h = random.randint(5, 50)
-            accumulated_amount = round(random.uniform(2000, 50000), 2)
+            default_transactions_24h = random.randint(5, 50)
+            default_accumulated_amount = round(random.uniform(2000, 50000), 2)
         else:
             status = random.choices(
                 ['APPROVED', 'DECLINED', 'PENDING'],
                 weights=[96, 3, 1]
             )[0]
             fraud_score = round(random.uniform(0, 35), 2)
-            transactions_24h = random.randint(1, 15)
-            accumulated_amount = round(random.uniform(50, 5000), 2)
+            default_transactions_24h = random.randint(1, 15)
+            default_accumulated_amount = round(random.uniform(50, 5000), 2)
+
+        # Improved risk indicators with session state (OTIMIZAÇÃO 2.2/2.3)
+        if session_state:
+            # Velocity / accumulated (use session unless fraud pattern already set)
+            if tx.get('transactions_last_24h') is None:
+                tx['transactions_last_24h'] = session_state.get_velocity(timestamp) + 1
+            if tx.get('accumulated_amount_24h') is None:
+                tx['accumulated_amount_24h'] = round(
+                    session_state.get_accumulated_24h(timestamp) + float(tx.get('amount', 0.0)),
+                    2
+                )
+
+            # New beneficiary (merchant novelty)
+            if tx.get('new_beneficiary') is None:
+                tx['new_beneficiary'] = session_state.is_new_merchant(tx.get('merchant_id'))
+
+            # Time since last transaction
+            if tx.get('time_since_last_txn_min') is None:
+                tx['time_since_last_txn_min'] = session_state.get_last_transaction_minutes_ago(timestamp)
+
+            # Distance from last transaction
+            if tx.get('distance_from_last_txn_km') is None:
+                tx['distance_from_last_txn_km'] = session_state.get_distance_from_last_txn_km(
+                    tx.get('geolocation_lat'),
+                    tx.get('geolocation_lon')
+                )
+        else:
+            # Fallback to random indicators
+            if tx.get('distance_from_last_txn_km') is None:
+                tx['distance_from_last_txn_km'] = round(random.uniform(0, 100), 2) if random.random() > 0.5 else None
+            if tx.get('time_since_last_txn_min') is None:
+                tx['time_since_last_txn_min'] = random.randint(1, 1440) if random.random() > 0.3 else None
+            if tx.get('transactions_last_24h') is None:
+                tx['transactions_last_24h'] = default_transactions_24h
+            if tx.get('accumulated_amount_24h') is None:
+                tx['accumulated_amount_24h'] = default_accumulated_amount
+            if tx.get('new_beneficiary') is None:
+                tx['new_beneficiary'] = random.random() < (0.7 if is_fraud else 0.15)
         
         tx.update({
-            'distance_from_last_txn_km': round(random.uniform(0, 100), 2) if random.random() > 0.5 else None,
-            'time_since_last_txn_min': random.randint(1, 1440) if random.random() > 0.3 else None,
-            'transactions_last_24h': transactions_24h,
-            'accumulated_amount_24h': accumulated_amount,
             'unusual_time': unusual_time,
-            'new_beneficiary': random.random() < (0.7 if is_fraud else 0.15),
             'status': status,
             'refusal_reason': random.choice(REFUSAL_REASONS) if status == 'DECLINED' else None,
             'fraud_score': fraud_score,

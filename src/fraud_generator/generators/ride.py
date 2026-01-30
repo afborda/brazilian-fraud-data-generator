@@ -7,6 +7,16 @@ import math
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Iterator, Tuple
 
+try:
+    from numba import jit
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+    def jit(*_args, **_kwargs):  # type: ignore
+        def _wrap(func):
+            return func
+        return _wrap
+
 from ..models.ride import RideIndex
 from ..config.rideshare import (
     RIDESHARE_APPS,
@@ -67,6 +77,26 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     
     return R * c
+
+
+@jit(nopython=True, cache=True)
+def haversine_distance_numba(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Numba-accelerated Haversine distance (if numba is available).
+    """
+    R = 6371.0
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lon = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+
+# Select best available distance implementation
+HAVERSINE_DISTANCE = haversine_distance_numba if NUMBA_AVAILABLE else haversine_distance
 
 
 def calculate_surge(hour: int, weather_condition: str) -> float:
@@ -309,7 +339,7 @@ class RideGenerator:
         }
         
         # Calculate distance (Haversine * urban factor)
-        straight_distance = haversine_distance(
+        straight_distance = HAVERSINE_DISTANCE(
             pickup_poi['lat'], pickup_poi['lon'],
             dropoff_poi['lat'], dropoff_poi['lon']
         )

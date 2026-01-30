@@ -33,6 +33,7 @@ import sys
 import time
 import random
 import signal
+import asyncio
 from datetime import datetime
 from typing import Optional, List, Tuple
 
@@ -44,7 +45,11 @@ from fraud_generator.generators import (
     DriverGenerator, RideGenerator,
 )
 from fraud_generator.connections import get_connection, list_targets, is_target_available
-from fraud_generator.utils import CustomerIndex, DeviceIndex, DriverIndex
+from fraud_generator.utils import (
+    CustomerIndex, DeviceIndex, DriverIndex, CustomerSessionState,
+    is_redis_available, get_redis_client,
+    load_cached_indexes, save_cached_indexes,
+)
 
 # Global flag for graceful shutdown
 _running = True
@@ -154,6 +159,9 @@ def run_streaming(
     if not pairs:
         pairs = [(customers[0], devices[0])]
     
+    # OTIMIZAÇÃO 2.2: Customer session state
+    sessions = {}
+
     # Calculate delay between events
     delay = 1.0 / rate if rate > 0 else 0
     
@@ -180,6 +188,11 @@ def run_streaming(
         # Garante unicidade mesmo após reinicialização do generator
         unique_tx_id = f"{base_tx_id}_{event_count:06d}"
         
+        session = sessions.get(customer.customer_id)
+        if session is None:
+            session = CustomerSessionState(customer.customer_id)
+            sessions[customer.customer_id] = session
+
         tx = tx_generator.generate(
             tx_id=unique_tx_id,
             customer_id=customer.customer_id,
@@ -187,7 +200,10 @@ def run_streaming(
             timestamp=timestamp,
             customer_state=customer.state,
             customer_profile=customer.profile,
+            session_state=session,
         )
+
+        session.add_transaction(tx, timestamp)
         
         # Send to target
         success = connection.send(tx)
@@ -207,6 +223,110 @@ def run_streaming(
         if delay > 0:
             time.sleep(delay)
     
+    return event_count, error_count, time.time() - start_time
+
+
+async def run_streaming_async(
+    connection,
+    customers,
+    devices,
+    tx_generator,
+    rate: float,
+    max_events: Optional[int],
+    quiet: bool,
+    concurrency: int = 100
+):
+    """Async streaming loop for transactions (non-blocking send via threads)."""
+    global _running
+
+    # Build customer-device pairs
+    customer_device_map = {}
+    for device in devices:
+        if device.customer_id not in customer_device_map:
+            customer_device_map[device.customer_id] = []
+        customer_device_map[device.customer_id].append(device)
+
+    pairs = []
+    for customer in customers:
+        customer_devices = customer_device_map.get(customer.customer_id, [])
+        if customer_devices:
+            for device in customer_devices:
+                pairs.append((customer, device))
+
+    if not pairs:
+        pairs = [(customers[0], devices[0])]
+
+    delay = 1.0 / rate if rate > 0 else 0
+    event_count = 0
+    error_count = 0
+    start_time = time.time()
+    base_tx_id = int(time.time() * 1000)
+    sessions = {}
+
+    semaphore = asyncio.Semaphore(concurrency)
+    pending = set()
+
+    async def _send(data):
+        async with semaphore:
+            return await asyncio.to_thread(connection.send, data)
+
+    while _running:
+        if max_events and event_count >= max_events:
+            break
+
+        customer, device = random.choice(pairs)
+        timestamp = datetime.now()
+        unique_tx_id = f"{base_tx_id}_{event_count:06d}"
+
+        session = sessions.get(customer.customer_id)
+        if session is None:
+            session = CustomerSessionState(customer.customer_id)
+            sessions[customer.customer_id] = session
+
+        tx = tx_generator.generate(
+            tx_id=unique_tx_id,
+            customer_id=customer.customer_id,
+            device_id=device.device_id,
+            timestamp=timestamp,
+            customer_state=customer.state,
+            customer_profile=customer.profile,
+            session_state=session,
+        )
+        session.add_transaction(tx, timestamp)
+
+        task = asyncio.create_task(_send(tx))
+        pending.add(task)
+
+        if len(pending) >= concurrency:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for completed in done:
+                try:
+                    if completed.result():
+                        event_count += 1
+                    else:
+                        error_count += 1
+                except Exception:
+                    error_count += 1
+
+        if not quiet and event_count % 100 == 0 and event_count > 0:
+            elapsed = time.time() - start_time
+            actual_rate = event_count / elapsed if elapsed > 0 else 0
+            print(f"\r   📊 Events: {event_count:,} | Rate: {actual_rate:.1f}/s | Errors: {error_count}", end='', flush=True)
+
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+    if pending:
+        done, _ = await asyncio.wait(pending)
+        for completed in done:
+            try:
+                if completed.result():
+                    event_count += 1
+                else:
+                    error_count += 1
+            except Exception:
+                error_count += 1
+
     return event_count, error_count, time.time() - start_time
 
 
@@ -282,6 +402,95 @@ def run_rides_streaming(
         if delay > 0:
             time.sleep(delay)
     
+    return event_count, error_count, time.time() - start_time
+
+
+async def run_rides_streaming_async(
+    connection,
+    customers: List[CustomerIndex],
+    drivers: List[DriverIndex],
+    ride_generator,
+    rate: float,
+    max_events: Optional[int],
+    quiet: bool,
+    concurrency: int = 100
+):
+    """Async streaming loop for rides (non-blocking send via threads)."""
+    global _running
+
+    drivers_by_state = {}
+    for driver in drivers:
+        state = driver.operating_state
+        if state not in drivers_by_state:
+            drivers_by_state[state] = []
+        drivers_by_state[state].append(driver)
+
+    delay = 1.0 / rate if rate > 0 else 0
+    event_count = 0
+    error_count = 0
+    start_time = time.time()
+
+    semaphore = asyncio.Semaphore(concurrency)
+    pending = set()
+
+    async def _send(data):
+        async with semaphore:
+            return await asyncio.to_thread(connection.send, data)
+
+    while _running:
+        if max_events and event_count >= max_events:
+            break
+
+        passenger = random.choice(customers)
+        state_drivers = drivers_by_state.get(passenger.state, [])
+        if state_drivers:
+            driver = random.choice(state_drivers)
+        else:
+            driver = random.choice(drivers)
+
+        timestamp = datetime.now()
+        ride = ride_generator.generate(
+            ride_id=f"RIDE_{event_count:012d}",
+            driver_id=driver.driver_id,
+            passenger_id=passenger.customer_id,
+            timestamp=timestamp,
+            passenger_state=passenger.state,
+            passenger_profile=passenger.profile,
+        )
+
+        task = asyncio.create_task(_send(ride))
+        pending.add(task)
+
+        if len(pending) >= concurrency:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for completed in done:
+                try:
+                    if completed.result():
+                        event_count += 1
+                    else:
+                        error_count += 1
+                except Exception:
+                    error_count += 1
+
+        if not quiet and event_count % 100 == 0 and event_count > 0:
+            elapsed = time.time() - start_time
+            actual_rate = event_count / elapsed if elapsed > 0 else 0
+            print(f"\r   🚗 Rides: {event_count:,} | Rate: {actual_rate:.1f}/s | Errors: {error_count}", end='', flush=True)
+
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+    if pending:
+        done, _ = await asyncio.wait(pending)
+        for completed in done:
+            try:
+                if completed.result():
+                    event_count += 1
+                else:
+                    error_count += 1
+            except Exception:
+                error_count += 1
+
     return event_count, error_count, time.time() - start_time
 
 
@@ -403,6 +612,41 @@ Available targets: """ + ", ".join(list_targets())
         default=None,
         help='Random seed for reproducibility'
     )
+
+    parser.add_argument(
+        '--redis-url',
+        type=str,
+        default=None,
+        help='Redis URL for caching base data (e.g., redis://localhost:6379/0)'
+    )
+
+    parser.add_argument(
+        '--redis-prefix',
+        type=str,
+        default='fraudgen',
+        help='Redis key prefix for cached indexes. Default: fraudgen'
+    )
+
+    parser.add_argument(
+        '--redis-ttl',
+        type=int,
+        default=None,
+        help='Redis TTL for cached indexes in seconds (optional)'
+    )
+
+    parser.add_argument(
+        '--async',
+        dest='async_mode',
+        action='store_true',
+        help='Enable async streaming (uses background threads for send)'
+    )
+
+    parser.add_argument(
+        '--async-concurrency',
+        type=int,
+        default=100,
+        help='Max concurrent async sends. Default: 100'
+    )
     
     # Output options
     parser.add_argument(
@@ -476,12 +720,46 @@ Available targets: """ + ", ".join(list_targets())
     # Phase 1: Generate base data
     print("\n📋 Phase 1: Initializing...")
     use_profiles = not args.no_profiles
+
+    redis_client = None
+    if args.redis_url:
+        if not is_redis_available():
+            print("⚠️  Redis não disponível. Instale com: pip install redis")
+        else:
+            try:
+                redis_client = get_redis_client(args.redis_url)
+                print(f"🧠 Redis cache: {args.redis_url} (prefix={args.redis_prefix})")
+            except Exception as e:
+                print(f"⚠️  Falha ao conectar ao Redis: {e}")
+                redis_client = None
     
-    customers, devices = generate_base_data(
-        num_customers=args.customers,
-        use_profiles=use_profiles,
-        seed=args.seed
-    )
+    customers = None
+    devices = None
+    if redis_client:
+        cached_customers, cached_devices, _, _, _, _ = load_cached_indexes(
+            redis_client,
+            prefix=args.redis_prefix,
+            include_drivers=False
+        )
+        if cached_customers and cached_devices:
+            customers = [CustomerIndex(*c) for c in cached_customers]
+            devices = [DeviceIndex(*d) for d in cached_devices]
+            print(f"✅ Cache Redis usado: {len(customers)} customers, {len(devices)} devices")
+
+    if customers is None or devices is None:
+        customers, devices = generate_base_data(
+            num_customers=args.customers,
+            use_profiles=use_profiles,
+            seed=args.seed
+        )
+        if redis_client:
+            save_cached_indexes(
+                redis_client,
+                prefix=args.redis_prefix,
+                customer_indexes=[tuple(c) for c in customers],
+                device_indexes=[tuple(d) for d in devices],
+                ttl_seconds=args.redis_ttl
+            )
     
     print(f"   ✅ Ready: {len(customers)} customers, {len(devices)} devices")
     
@@ -489,10 +767,34 @@ Available targets: """ + ", ".join(list_targets())
     drivers = []
     if is_rides:
         num_drivers = max(100, args.customers // 10)
-        drivers = generate_drivers_data(
-            num_drivers=num_drivers,
-            seed=args.seed
-        )
+        if redis_client:
+            _, _, _, _, cached_drivers, _ = load_cached_indexes(
+                redis_client,
+                prefix=args.redis_prefix,
+                include_drivers=True
+            )
+            if cached_drivers:
+                drivers = [DriverIndex(*d) for d in cached_drivers]
+                print(f"✅ Cache Redis usado: {len(drivers)} drivers")
+            else:
+                drivers = generate_drivers_data(
+                    num_drivers=num_drivers,
+                    seed=args.seed
+                )
+                save_cached_indexes(
+                    redis_client,
+                    prefix=args.redis_prefix,
+                    customer_indexes=[tuple(c) for c in customers],
+                    device_indexes=[tuple(d) for d in devices],
+                    driver_indexes=[tuple(d) for d in drivers],
+                    driver_data=None,
+                    ttl_seconds=args.redis_ttl
+                )
+        else:
+            drivers = generate_drivers_data(
+                num_drivers=num_drivers,
+                seed=args.seed
+            )
         print(f"   ✅ Ready: {len(drivers)} drivers")
     
     # Phase 2: Setup connection
@@ -529,32 +831,60 @@ Available targets: """ + ", ".join(list_targets())
                 use_profiles=use_profiles,
                 seed=args.seed
             )
-            
-            event_count, error_count, elapsed = run_rides_streaming(
-                connection=connection,
-                customers=customers,
-                drivers=drivers,
-                ride_generator=ride_generator,
-                rate=args.rate,
-                max_events=args.max_events,
-                quiet=args.quiet
-            )
+
+            if args.async_mode:
+                event_count, error_count, elapsed = asyncio.run(
+                    run_rides_streaming_async(
+                        connection=connection,
+                        customers=customers,
+                        drivers=drivers,
+                        ride_generator=ride_generator,
+                        rate=args.rate,
+                        max_events=args.max_events,
+                        quiet=args.quiet,
+                        concurrency=args.async_concurrency
+                    )
+                )
+            else:
+                event_count, error_count, elapsed = run_rides_streaming(
+                    connection=connection,
+                    customers=customers,
+                    drivers=drivers,
+                    ride_generator=ride_generator,
+                    rate=args.rate,
+                    max_events=args.max_events,
+                    quiet=args.quiet
+                )
         else:
             tx_generator = TransactionGenerator(
                 fraud_rate=args.fraud_rate,
                 use_profiles=use_profiles,
                 seed=args.seed
             )
-            
-            event_count, error_count, elapsed = run_streaming(
-                connection=connection,
-                customers=customers,
-                devices=devices,
-                tx_generator=tx_generator,
-                rate=args.rate,
-                max_events=args.max_events,
-                quiet=args.quiet
-            )
+
+            if args.async_mode:
+                event_count, error_count, elapsed = asyncio.run(
+                    run_streaming_async(
+                        connection=connection,
+                        customers=customers,
+                        devices=devices,
+                        tx_generator=tx_generator,
+                        rate=args.rate,
+                        max_events=args.max_events,
+                        quiet=args.quiet,
+                        concurrency=args.async_concurrency
+                    )
+                )
+            else:
+                event_count, error_count, elapsed = run_streaming(
+                    connection=connection,
+                    customers=customers,
+                    devices=devices,
+                    tx_generator=tx_generator,
+                    rate=args.rate,
+                    max_events=args.max_events,
+                    quiet=args.quiet
+                )
     finally:
         connection.close()
     

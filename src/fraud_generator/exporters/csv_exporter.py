@@ -34,6 +34,9 @@ class CSVExporter(ExporterProtocol):
         self.quoting = quoting
         self.flatten_nested = flatten_nested
         self._fieldnames: Optional[List[str]] = None
+        # OTIMIZAÇÃO 2.5: Larger write buffer for fewer syscalls
+        self._buffer_size = 262144  # 256KB
+        self._chunk_size = 5000
     
     @property
     def extension(self) -> str:
@@ -138,7 +141,7 @@ class CSVExporter(ExporterProtocol):
         newline = '' if os.name == 'nt' else None
         
         # OTIMIZAÇÃO 1.6: Use buffering for better I/O performance
-        with open(output_path, mode, newline='', encoding='utf-8', buffering=65536) as f:
+        with open(output_path, mode, newline='', encoding='utf-8', buffering=self._buffer_size) as f:
             writer = csv.DictWriter(
                 f,
                 fieldnames=self._fieldnames,
@@ -153,10 +156,8 @@ class CSVExporter(ExporterProtocol):
             
             # OTIMIZAÇÃO 1.6: Write in chunks to reduce memory pressure
             count = 0
-            chunk_size = 1000
-            
-            for i in range(0, len(data), chunk_size):
-                chunk = data[i:i + chunk_size]
+            for i in range(0, len(data), self._chunk_size):
+                chunk = data[i:i + self._chunk_size]
                 for record in chunk:
                     if self.flatten_nested:
                         flat_record = self._flatten_dict(record)
@@ -166,7 +167,7 @@ class CSVExporter(ExporterProtocol):
                     count += 1
                 
                 # Flush periodically to reduce memory buffer
-                if count % 5000 == 0:
+                if count % 20000 == 0:
                     f.flush()
         
         return count
@@ -202,7 +203,7 @@ class CSVExporter(ExporterProtocol):
         if not self._fieldnames and not sample:
             return 0
         
-        with open(output_path, 'w', newline='', encoding='utf-8', buffering=65536) as f:
+        with open(output_path, 'w', newline='', encoding='utf-8', buffering=self._buffer_size) as f:
             writer = csv.DictWriter(
                 f,
                 fieldnames=self._fieldnames,
