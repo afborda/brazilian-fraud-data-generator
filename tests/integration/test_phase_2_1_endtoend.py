@@ -11,7 +11,7 @@ import json
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from fraud_generator.generators import CustomerGenerator, DeviceGenerator, TransactionGenerator
 from fraud_generator.exporters import get_exporter
