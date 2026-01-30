@@ -142,22 +142,19 @@ def worker_generate_batch(args: tuple) -> str:
     # Determine output format
     # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
     exporter_kwargs = {'skip_none': True} if format_name in ['jsonl', 'json'] else {}
+    # OTIMIZAÇÃO 2.1: Pass jsonl_compress for JSONL format
+    if format_name == 'jsonl' and jsonl_compress != 'none':
+        exporter_kwargs['jsonl_compress'] = jsonl_compress
     exporter = get_exporter(format_name, **exporter_kwargs)
     output_path = os.path.join(output_dir, f'transactions_{batch_id:05d}{exporter.extension}')
-    if format_name == 'jsonl' and jsonl_compress == 'gzip':
-        output_path = output_path + '.gz'
     
     start_tx_id = batch_id * num_transactions
     
     # For JSONL format: stream directly to file (memory efficient)
     # For other formats: accumulate (required by format)
     if format_name == 'jsonl':
-        # STREAMING MODE - write directly to file, don't accumulate in memory
-        if jsonl_compress == 'gzip':
-            file_handle = gzip.open(output_path, 'wt', encoding='utf-8', compresslevel=6)
-        else:
-            file_handle = open(output_path, 'w', encoding='utf-8', buffering=65536)
-        with file_handle as f:
+        # STREAMING MODE - write directly to file using exporter (handles compression via OTIMIZAÇÃO 2.1)
+        with open(output_path, 'wb') as f:  # Binary mode for compression support
             buffer = []
             buffer_limit = 1000
             for i in range(num_transactions):
@@ -197,9 +194,17 @@ def worker_generate_batch(args: tuple) -> str:
                 tx_to_write = exporter._clean_record(tx) if hasattr(exporter, '_clean_record') else tx
                 
                 # Write in chunks to reduce per-line overhead
-                buffer.append(json.dumps(tx_to_write, ensure_ascii=False, separators=(',', ':')) + '\n')
+                line_bytes = (json.dumps(tx_to_write, ensure_ascii=False, separators=(',', ':')) + '\n').encode('utf-8')
+                
+                # OTIMIZAÇÃO 2.1: Apply compression if enabled
+                if hasattr(exporter, '_compressor') and exporter._compressor is not None:
+                    line_bytes = exporter._compressor.compress(line_bytes)
+                
+                buffer.append(line_bytes)
                 if len(buffer) >= buffer_limit:
-                    f.write(''.join(buffer))
+                    # Write buffer (bytes) to file
+                    for chunk in buffer:
+                        f.write(chunk)
                     buffer.clear()
                 
                 # Periodic flush for very large batches
@@ -207,7 +212,8 @@ def worker_generate_batch(args: tuple) -> str:
                     f.flush()
             
             if buffer:
-                f.write(''.join(buffer))
+                for chunk in buffer:
+                    f.write(chunk)
                 buffer.clear()
     else:
         # BATCH MODE - required for CSV/Parquet formats
@@ -297,22 +303,19 @@ def worker_generate_rides_batch(args: tuple) -> str:
     # Determine output format
     # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
     exporter_kwargs = {'skip_none': True} if format_name in ['jsonl', 'json'] else {}
+    # OTIMIZAÇÃO 2.1: Pass jsonl_compress for JSONL format
+    if format_name == 'jsonl' and jsonl_compress != 'none':
+        exporter_kwargs['jsonl_compress'] = jsonl_compress
     exporter = get_exporter(format_name, **exporter_kwargs)
     output_path = os.path.join(output_dir, f'rides_{batch_id:05d}{exporter.extension}')
-    if format_name == 'jsonl' and jsonl_compress == 'gzip':
-        output_path = output_path + '.gz'
     
     start_ride_id = batch_id * num_rides
     
     # For JSONL format: stream directly to file (memory efficient)
     # For other formats: accumulate (required by format)
     if format_name == 'jsonl':
-        # STREAMING MODE - write directly to file, don't accumulate in memory
-        if jsonl_compress == 'gzip':
-            file_handle = gzip.open(output_path, 'wt', encoding='utf-8', compresslevel=6)
-        else:
-            file_handle = open(output_path, 'w', encoding='utf-8', buffering=65536)
-        with file_handle as f:
+        # STREAMING MODE - write directly to file using exporter (handles compression via OTIMIZAÇÃO 2.1)
+        with open(output_path, 'wb') as f:  # Binary mode for compression support
             buffer = []
             buffer_limit = 1000
             for i in range(num_rides):
@@ -357,9 +360,17 @@ def worker_generate_rides_batch(args: tuple) -> str:
                 ride_to_write = exporter._clean_record(ride) if hasattr(exporter, '_clean_record') else ride
                 
                 # Write in chunks to reduce per-line overhead
-                buffer.append(json.dumps(ride_to_write, ensure_ascii=False, separators=(',', ':')) + '\n')
+                line_bytes = (json.dumps(ride_to_write, ensure_ascii=False, separators=(',', ':')) + '\n').encode('utf-8')
+                
+                # OTIMIZAÇÃO 2.1: Apply compression if enabled
+                if hasattr(exporter, '_compressor') and exporter._compressor is not None:
+                    line_bytes = exporter._compressor.compress(line_bytes)
+                
+                buffer.append(line_bytes)
                 if len(buffer) >= buffer_limit:
-                    f.write(''.join(buffer))
+                    # Write buffer (bytes) to file
+                    for chunk in buffer:
+                        f.write(chunk)
                     buffer.clear()
                 
                 # Periodic flush for very large batches
@@ -367,7 +378,8 @@ def worker_generate_rides_batch(args: tuple) -> str:
                     f.flush()
             
             if buffer:
-                f.write(''.join(buffer))
+                for chunk in buffer:
+                    f.write(chunk)
                 buffer.clear()
     else:
         # BATCH MODE - required for CSV/Parquet formats
@@ -918,8 +930,8 @@ Available formats: """ + ", ".join(list_formats())
         '--jsonl-compress',
         type=str,
         default='none',
-        choices=['none', 'gzip'],
-        help='Compression for JSONL output (local only). Default: none'
+        choices=['none', 'gzip', 'zstd', 'snappy'],
+        help='Compression for JSONL output (local/MinIO). OTIMIZAÇÃO 2.1: zstd (3-4x faster), snappy (ultra-fast), gzip (fallback). Default: none'
     )
     
     parser.add_argument(
@@ -1119,6 +1131,9 @@ Available formats: """ + ", ".join(list_formats())
         output_dir = args.output
         # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
         exporter_kwargs = {'skip_none': True} if args.format in ['jsonl', 'json'] else {}
+        # OTIMIZAÇÃO 2.1: Pass jsonl_compress for JSONL format
+        if args.format == 'jsonl' and args.jsonl_compress != 'none':
+            exporter_kwargs['jsonl_compress'] = args.jsonl_compress
         exporter = get_exporter(args.format, **exporter_kwargs)
         minio_exporter = None
     

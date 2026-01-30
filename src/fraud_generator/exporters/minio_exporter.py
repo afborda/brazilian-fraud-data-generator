@@ -38,6 +38,7 @@ except ImportError:
     PANDAS_AVAILABLE = False
 
 from .base import ExporterProtocol
+from ..utils.compression import CompressionHandler  # OTIMIZAÇÃO 2.1: Native compression
 
 
 def is_minio_available() -> bool:
@@ -180,6 +181,8 @@ class MinIOExporter(ExporterProtocol):
         self._output_format = output_format
         self.compression = compression if compression != 'none' else None
         self.jsonl_compress = jsonl_compress if jsonl_compress != 'none' else None
+        # OTIMIZAÇÃO 2.1: Initialize compression handler for JSONL
+        self._compressor = CompressionHandler(jsonl_compress, verbose=False) if jsonl_compress != 'none' else None
         self.endpoint_url = endpoint_url or os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
         self.access_key = access_key or os.getenv("MINIO_ROOT_USER") or os.getenv("MINIO_ACCESS_KEY", "minioadmin")
         self.secret_key = secret_key or os.getenv("MINIO_ROOT_PASSWORD") or os.getenv("MINIO_SECRET_KEY", "minioadmin")
@@ -209,9 +212,14 @@ class MinIOExporter(ExporterProtocol):
     def extension(self) -> str:
         extensions = {'jsonl': '.jsonl', 'csv': '.csv', 'parquet': '.parquet'}
         ext = extensions[self._output_format]
-        # Add .gz for compressed JSONL
-        if self._output_format == 'jsonl' and self.jsonl_compress == 'gzip':
-            ext += '.gz'
+        # OTIMIZAÇÃO 2.1: Add compression extension for JSONL
+        if self._output_format == 'jsonl' and self.jsonl_compress:
+            if self.jsonl_compress == 'gzip':
+                ext += '.gz'
+            elif self.jsonl_compress == 'zstd':
+                ext += '.zstd'
+            elif self.jsonl_compress == 'snappy':
+                ext += '.snappy'
         return ext
     
     @property
@@ -282,16 +290,23 @@ class MinIOExporter(ExporterProtocol):
         return dict(items)
     
     def _export_jsonl(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
-        """Export data as JSONL format with optional gzip compression."""
+        """Export data as JSONL format with optional compression (OTIMIZAÇÃO 2.1)."""
         if append:
             try:
                 response = self.client.get_object(Bucket=self.bucket, Key=object_key)
-                # Handle gzip decompression if needed
-                if self.jsonl_compress == 'gzip':
-                    with gzip.open(io.BytesIO(response['Body'].read()), 'rt', encoding='utf-8') as f:
+                # Handle decompression if needed
+                body_bytes = response['Body'].read()
+                
+                if self._compressor is not None:
+                    # Decompress using appropriate algorithm
+                    existing_content = self._compressor.decompress(body_bytes).decode('utf-8')
+                elif self.jsonl_compress == 'gzip':
+                    # Fallback to gzip for backward compatibility
+                    with gzip.open(io.BytesIO(body_bytes), 'rt', encoding='utf-8') as f:
                         existing_content = f.read()
                 else:
-                    existing_content = response['Body'].read().decode('utf-8')
+                    existing_content = body_bytes.decode('utf-8')
+                    
                 existing_lines = existing_content.strip().split('\n') if existing_content.strip() else []
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchKey':
@@ -306,17 +321,15 @@ class MinIOExporter(ExporterProtocol):
             lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':'), default=str) for record in data]
             body_str = '\n'.join(lines) + '\n'
         
-        # Compress body if gzip enabled
-        if self.jsonl_compress == 'gzip':
-            body_bytes = body_str.encode('utf-8')
-            compressed_buffer = io.BytesIO()
-            with gzip.GzipFile(fileobj=compressed_buffer, mode='wb', compresslevel=6) as gz:
-                gz.write(body_bytes)
-            body = compressed_buffer.getvalue()
-            content_type = 'application/gzip'
-            content_encoding = 'gzip'
+        # OTIMIZAÇÃO 2.1: Compress body using CompressionHandler if enabled
+        body_bytes = body_str.encode('utf-8')
+        
+        if self._compressor is not None:
+            body = self._compressor.compress(body_bytes)
+            content_type = 'application/octet-stream'  # Generic binary for compressed data
+            content_encoding = self.jsonl_compress
         else:
-            body = body_str.encode('utf-8')
+            body = body_bytes
             content_type = 'application/x-ndjson'
             content_encoding = None
         

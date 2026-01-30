@@ -4,8 +4,10 @@ JSON Lines exporter for Brazilian Fraud Data Generator.
 
 import json
 import os
-from typing import List, Dict, Any, Iterator
+import gzip
+from typing import List, Dict, Any, Iterator, Literal
 from .base import ExporterProtocol
+from ..utils.compression import CompressionHandler
 
 
 class JSONExporter(ExporterProtocol):
@@ -13,6 +15,8 @@ class JSONExporter(ExporterProtocol):
     Export data to JSON Lines format (.jsonl).
     
     Each record is written as a single line of JSON.
+    Supports native compression (Phase 2.1) via zstd, snappy, or gzip.
+    
     This format is ideal for:
     - Streaming processing
     - Large datasets
@@ -20,7 +24,13 @@ class JSONExporter(ExporterProtocol):
     - Easy parsing with standard tools
     """
     
-    def __init__(self, ensure_ascii: bool = False, indent: int = None, skip_none: bool = False):
+    def __init__(
+        self,
+        ensure_ascii: bool = False,
+        indent: int = None,
+        skip_none: bool = False,
+        jsonl_compress: Literal['none', 'gzip', 'zstd', 'snappy'] = 'none'
+    ):
         """
         Initialize JSON exporter.
         
@@ -28,13 +38,29 @@ class JSONExporter(ExporterProtocol):
             ensure_ascii: If True, escape non-ASCII characters
             indent: JSON indentation (None for compact, 2 for pretty)
             skip_none: If True, skip fields with None values (OTIMIZAÇÃO 1.3)
+            jsonl_compress: Compression algorithm for JSONL (Phase 2.1)
+                - 'none': No compression (default)
+                - 'gzip': Pure Python gzip (fallback)
+                - 'zstd': Native zstandard (recommended, 3x faster)
+                - 'snappy': Native snappy (ultra-fast)
         """
         self.ensure_ascii = ensure_ascii
         self.indent = indent
         self.skip_none = skip_none
+        self.jsonl_compress = jsonl_compress
+        self._compressor = CompressionHandler(jsonl_compress, verbose=False) if jsonl_compress != 'none' else None
     
     @property
     def extension(self) -> str:
+        """Return file extension based on compression algorithm."""
+        if self.jsonl_compress == 'none':
+            return '.jsonl'
+        elif self.jsonl_compress == 'gzip':
+            return '.jsonl.gz'
+        elif self.jsonl_compress == 'zstd':
+            return '.jsonl.zstd'
+        elif self.jsonl_compress == 'snappy':
+            return '.jsonl.snappy'
         return '.jsonl'
     
     @property
@@ -58,13 +84,13 @@ class JSONExporter(ExporterProtocol):
         output_path: str,
         append: bool = False
     ) -> int:
-        """Export a batch of records to JSON Lines file."""
+        """Export a batch of records to JSON Lines file with optional compression (OTIMIZAÇÃO 2.1)."""
         self.ensure_directory(output_path)
         
-        mode = 'a' if append else 'w'
+        mode = 'ab' if append else 'wb'  # Changed to binary mode for compression support
         count = 0
         
-        with open(output_path, mode, encoding='utf-8') as f:
+        with open(output_path, mode) as f:
             for record in data:
                 clean_record = self._clean_record(record)  # OTIMIZAÇÃO 1.3: Remove None values
                 line = json.dumps(
@@ -73,7 +99,13 @@ class JSONExporter(ExporterProtocol):
                     separators=(',', ':') if self.indent is None else None,
                     indent=self.indent
                 )
-                f.write(line + '\n')
+                line_bytes = (line + '\n').encode('utf-8')
+                
+                # OTIMIZAÇÃO 2.1: Apply compression if enabled
+                if self._compressor is not None:
+                    line_bytes = self._compressor.compress(line_bytes)
+                
+                f.write(line_bytes)
                 count += 1
         
         return count
@@ -108,14 +140,20 @@ class JSONExporter(ExporterProtocol):
         return total_count
     
     def export_single(self, record: Dict[str, Any], output_path: str, append: bool = True) -> None:
-        """Export a single record to JSON Lines file."""
+        """Export a single record to JSON Lines file with optional compression (OTIMIZAÇÃO 2.1)."""
         self.ensure_directory(output_path)
         
-        mode = 'a' if append else 'w'
-        with open(output_path, mode, encoding='utf-8') as f:
+        mode = 'ab' if append else 'wb'  # Changed to binary mode for compression support
+        with open(output_path, mode) as f:
             clean_record = self._clean_record(record)  # OTIMIZAÇÃO 1.3: Remove None values
             line = json.dumps(clean_record, ensure_ascii=self.ensure_ascii)
-            f.write(line + '\n')
+            line_bytes = (line + '\n').encode('utf-8')
+            
+            # OTIMIZAÇÃO 2.1: Apply compression if enabled
+            if self._compressor is not None:
+                line_bytes = self._compressor.compress(line_bytes)
+            
+            f.write(line_bytes)
 
 
 class JSONArrayExporter(ExporterProtocol):
