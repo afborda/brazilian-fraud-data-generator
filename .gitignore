@@ -1,0 +1,203 @@
+# Generated Data & Output
+output/
+test_output/
+test_jsonl_*/
+test_csv_*/
+test_parquet_*/
+baseline_before/
+baseline_after/
+doc/
+*.jsonl
+*.jsonl.gz
+*.csv
+*.parquet
+data/
+datasets/
+tmp/
+temp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.vim/
+.emacs.d/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+.pytest_cache
+test-results.xml
+.nox/
+
+# Benchmarks & Profiling
+*.prof
+*.cProfile
+*.pstats
+prof_data/
+benchmarks/results/
+perf_results/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# OS Files
+.DS_Store
+Thumbs.db
+*.lnk
+
+# Temporary Files
+*.tmp
+*.bak
+*.swp
+*.~
+.temp/
+.tmp/
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+*.out
+
+# IDE specific
+.idea/
+*.iml
+.gradle/
+.vscode/settings.json
+.vscode/extensions.json
+
+# Documentation Build
+site/
+docs/_build/
+docs/.sphinx/
+
+# Cache Files
+.cache/
+*.cache
+
+# MinIO/S3 Credentials (NEVER commit!)
+.aws/
+.minio/
+minio_credentials.json
+aws_credentials.json
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+jupyter_data/
+
+# Package Files
+*.tar.gz
+*.zip
+*.rar
+
+# Node (if used for docs)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Backup Files
+*.bak
+*.backup
+*.swp
+*.orig
+
+# Version Control
+.git/
+.gitattributes
+
+# Keep directories but not their contents
+!.gitkeep
+output/.gitkeep
+tests/.gitkeep
+docs/.gitkeep
+benchmarks/.gitkeep
+
+# Keep documentation but exclude generated
+!*.md
+docs/*.html
+docs/_build/
+
+# Local configuration
+config.local.yml
+settings.local.json
+
+# Large test files (keep structure, ignore content)
+tests/fixtures/*.jsonl
+tests/fixtures/*.csv
+tests/fixtures/*.parquet
+
+# Generated test data
+tests/test_data/
+tests/output/
+
+# Performance profiling
+*.prof
+*.pprof
+perf/
+
+# Editor backups
+*.backup
+.bak
+
+# Misc
+*.pid
+*.seed
+*.pid.lock

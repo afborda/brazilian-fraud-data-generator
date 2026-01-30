@@ -146,6 +146,34 @@ python3 generate.py --size 1GB --format parquet --compression gzip
 > **💡 Note:** ZSTD is the default because it offers the best balance of compression ratio and speed. 
 > If your system doesn't support ZSTD (older Spark, Hive, or Presto versions), use `--compression snappy`.
 
+#### 🗜️ JSONL Compression Options (New!)
+
+For JSONL, you can enable gzip compression to save storage:
+
+| Option | Command | Benefit | Cost |
+|--------|---------|---------|------|
+| No compression (default) | `--jsonl-compress none` | Maximum speed | Large file |
+| **Gzip** | `--jsonl-compress gzip` | -85% file size | -18% speed |
+
+```bash
+# Default: JSONL without compression (28.0k records/sec)
+python3 generate.py --size 1GB --format jsonl
+
+# JSONL compressed with gzip (22.9k records/sec, 30MB vs 206MB)
+python3 generate.py --size 1GB --format jsonl --jsonl-compress gzip
+
+# MinIO with gzip: direct upload compressed
+python3 generate.py --size 1GB --output minio://bucket/path --format jsonl --jsonl-compress gzip
+```
+
+**Practical examples:**
+- **Backups/History:** Use `--jsonl-compress gzip` (save -85%)
+- **Training sets on S3:** Use `--jsonl-compress gzip` (save bandwidth)
+- **Real-time processing:** Use default no compression (maximum speed)
+
+> **💡 Recommendation:** Enable compression if you need to store or transfer data.
+> Disable if generation speed is critical or the file will be processed immediately.
+
 ### 🔹 Streaming Mode (Real-time)
 
 First, install streaming dependencies:
@@ -362,6 +390,8 @@ python3 generate.py --help
 | `--start-date` | -1 year | Start date (YYYY-MM-DD) |
 | `--end-date` | today | End date (YYYY-MM-DD) |
 | `--no-profiles` | - | Disable behavioral profiles |
+| `--compression` | `zstd` | Parquet compression: `zstd`, `snappy`, `gzip`, `brotli`, `none` |
+| `--jsonl-compress` | `none` | JSONL compression: `none` or `gzip` |
 | `--minio-endpoint` | env | MinIO/S3 endpoint URL |
 | `--minio-access-key` | env | MinIO access key |
 | `--minio-secret-key` | env | MinIO secret key |

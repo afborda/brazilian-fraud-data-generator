@@ -32,6 +32,7 @@ from ..profiles.behavioral import (
     get_transaction_value_for_profile,
 )
 from ..utils.helpers import generate_ip_brazil, generate_random_hash
+from ..utils.weight_cache import WeightCache  # OTIMIZAÇÃO 1.1
 
 
 class TransactionGenerator:
@@ -64,6 +65,22 @@ class TransactionGenerator:
         
         if seed is not None:
             random.seed(seed)
+        
+        # OTIMIZAÇÃO 1.1: Pre-compute weight caches (created once, reused for all transactions)
+        self._tx_type_cache = WeightCache(TX_TYPES_LIST, TX_TYPES_WEIGHTS)
+        self._fraud_type_cache = WeightCache(FRAUD_TYPES_LIST, FRAUD_TYPES_WEIGHTS)
+        self._mcc_cache = WeightCache(MCC_LIST, MCC_WEIGHTS)
+        self._channel_cache = WeightCache(CHANNELS_LIST, CHANNELS_WEIGHTS)
+        self._bank_cache = WeightCache(BANK_CODES, BANK_WEIGHTS)
+        self._estado_cache = WeightCache(ESTADOS_LIST, ESTADOS_WEIGHTS)
+        self._brand_cache = WeightCache(BRANDS_LIST, BRANDS_WEIGHTS)
+        self._installment_cache = WeightCache(INSTALLMENT_LIST, INSTALLMENT_WEIGHTS)
+        self._card_entry_cache = WeightCache(CARD_ENTRY_LIST, CARD_ENTRY_WEIGHTS)
+        self._pix_type_cache = WeightCache(PIX_TYPES_LIST, PIX_TYPES_WEIGHTS)
+        
+        # OTIMIZAÇÃO 1.2: Cache merchant lists by MCC (avoid repeated dict lookups)
+        from ..config.merchants import MERCHANTS_BY_MCC
+        self._merchants_cache = MERCHANTS_BY_MCC
     
     def generate(
         self,
@@ -98,22 +115,19 @@ class TransactionGenerator:
         
         fraud_type = None
         if is_fraud:
-            fraud_type = random.choices(
-                FRAUD_TYPES_LIST,
-                weights=FRAUD_TYPES_WEIGHTS
-            )[0]
+            fraud_type = self._fraud_type_cache.sample()
         
         # Select transaction type (profile-aware)
         if self.use_profiles and customer_profile:
             tx_type = get_transaction_type_for_profile(customer_profile)
         else:
-            tx_type = random.choices(TX_TYPES_LIST, weights=TX_TYPES_WEIGHTS)[0]
+            tx_type = self._tx_type_cache.sample()
         
         # Select MCC (profile-aware)
         if self.use_profiles and customer_profile:
             mcc_code = get_mcc_for_profile(customer_profile)
         else:
-            mcc_code = random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
+            mcc_code = self._mcc_cache.sample()
         
         mcc_info = get_mcc_info(mcc_code)
         
@@ -126,7 +140,7 @@ class TransactionGenerator:
         )
         
         # Get merchant
-        merchants = get_merchants_for_mcc(mcc_code)
+        merchants = self._merchants_cache.get(mcc_code, ['Local Merchant'])  # OTIMIZAÇÃO 1.2: Local cache lookup
         merchant_name = random.choice(merchants)
         
         # Geolocation
@@ -136,10 +150,10 @@ class TransactionGenerator:
         if self.use_profiles and customer_profile:
             canal = get_channel_for_profile(customer_profile)
         else:
-            canal = random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
+            canal = self._channel_cache.sample()
         
         # Bank destination
-        banco_destino = random.choices(BANK_CODES, weights=BANK_WEIGHTS)[0]
+        banco_destino = self._bank_cache.sample()
         
         # Build base transaction
         tx = {
@@ -275,21 +289,21 @@ class TransactionGenerator:
     ) -> None:
         """Add transaction type-specific fields."""
         if tx_type in ['CREDIT_CARD', 'DEBIT_CARD']:
-            card_brand = random.choices(BRANDS_LIST, weights=BRANDS_WEIGHTS)[0]
+            card_brand = self._brand_cache.sample()
             tx.update({
                 'card_number_hash': generate_random_hash(16),
                 'card_brand': card_brand,
                 'card_type': 'CREDIT' if tx_type == 'CREDIT_CARD' else 'DEBIT',
-                'installments': random.choices(INSTALLMENT_LIST, weights=INSTALLMENT_WEIGHTS)[0] if tx_type == 'CREDIT_CARD' else 1,
-                'card_entry': random.choices(CARD_ENTRY_LIST, weights=CARD_ENTRY_WEIGHTS)[0],
-                'cvv_validated': random.choices([True, False], weights=[95, 5])[0],
-                'auth_3ds': random.choices([True, False], weights=[70, 30])[0],
+                'installments': self._installment_cache.sample() if tx_type == 'CREDIT_CARD' else 1,
+                'card_entry': self._card_entry_cache.sample(),
+                'cvv_validated': random.random() < 0.95,
+                'auth_3ds': random.random() < 0.70,
                 'pix_key_type': None,
                 'pix_key_destination': None,
                 'destination_bank': None,
             })
         elif tx_type == 'PIX':
-            pix_key_type = random.choices(PIX_TYPES_LIST, weights=PIX_TYPES_WEIGHTS)[0]
+            pix_key_type = self._pix_type_cache.sample()
             tx.update({
                 'card_number_hash': None,
                 'card_brand': None,

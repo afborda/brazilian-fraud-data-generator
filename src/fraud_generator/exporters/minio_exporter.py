@@ -6,11 +6,13 @@ Supports JSONL, CSV, and Parquet formats.
 """
 
 import csv
+import gzip
 import io
 import json
 import os
+import time
 from datetime import datetime
-from typing import List, Dict, Any, Iterator, Optional, Literal
+from typing import List, Dict, Any, Iterator, Optional, Literal, Callable
 from urllib.parse import urlparse
 
 try:
@@ -64,6 +66,56 @@ def parse_minio_url(url: str) -> tuple:
     return bucket, prefix
 
 
+def retry_with_exponential_backoff(
+    func: Callable,
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 10.0,
+    backoff_multiplier: float = 2.0,
+    exceptions: tuple = (Exception,)
+) -> Any:
+    """
+    OTIMIZAÇÃO 1.5: Retry function with exponential backoff.
+    
+    Improves reliability for network operations (MinIO uploads) by retrying
+    failed requests with increasing delays between attempts.
+    
+    Args:
+        func: Function to execute with retry
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay in seconds before first retry
+        max_delay: Maximum delay between retries
+        backoff_multiplier: Multiplier for exponential backoff
+        exceptions: Tuple of exceptions to catch and retry
+    
+    Returns:
+        Result of func() if successful
+    
+    Raises:
+        Last exception if all retries fail
+    """
+    delay = initial_delay
+    last_exception = None
+    
+    for attempt in range(max_retries + 1):
+        try:
+            return func()
+        except exceptions as e:
+            last_exception = e
+            
+            if attempt < max_retries:
+                # Exponential backoff with jitter
+                sleep_time = min(delay, max_delay)
+                time.sleep(sleep_time)
+                delay *= backoff_multiplier
+            else:
+                # Last attempt failed, raise the exception
+                raise last_exception
+    
+    # Should never reach here, but for safety
+    raise last_exception if last_exception else RuntimeError("Retry failed")
+
+
 class MinIOExporter(ExporterProtocol):
     """
     Export data directly to MinIO/S3-compatible storage.
@@ -90,6 +142,7 @@ class MinIOExporter(ExporterProtocol):
         secure: bool = False,
         output_format: str = "jsonl",
         compression: str = "zstd",
+        jsonl_compress: str = "none",
     ):
         """
         Initialize MinIO exporter.
@@ -105,6 +158,7 @@ class MinIOExporter(ExporterProtocol):
             secure: Use HTTPS
             output_format: Output format ('jsonl', 'csv', 'parquet')
             compression: Compression for Parquet ('zstd', 'snappy', 'gzip', 'brotli', 'none')
+            jsonl_compress: Compression for JSONL ('gzip' or 'none')
         """
         if not BOTO3_AVAILABLE:
             raise ImportError(
@@ -125,6 +179,7 @@ class MinIOExporter(ExporterProtocol):
         
         self._output_format = output_format
         self.compression = compression if compression != 'none' else None
+        self.jsonl_compress = jsonl_compress if jsonl_compress != 'none' else None
         self.endpoint_url = endpoint_url or os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
         self.access_key = access_key or os.getenv("MINIO_ROOT_USER") or os.getenv("MINIO_ACCESS_KEY", "minioadmin")
         self.secret_key = secret_key or os.getenv("MINIO_ROOT_PASSWORD") or os.getenv("MINIO_SECRET_KEY", "minioadmin")
@@ -153,7 +208,11 @@ class MinIOExporter(ExporterProtocol):
     @property
     def extension(self) -> str:
         extensions = {'jsonl': '.jsonl', 'csv': '.csv', 'parquet': '.parquet'}
-        return extensions[self._output_format]
+        ext = extensions[self._output_format]
+        # Add .gz for compressed JSONL
+        if self._output_format == 'jsonl' and self.jsonl_compress == 'gzip':
+            ext += '.gz'
+        return ext
     
     @property
     def format_name(self) -> str:
@@ -223,11 +282,16 @@ class MinIOExporter(ExporterProtocol):
         return dict(items)
     
     def _export_jsonl(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
-        """Export data as JSONL format."""
+        """Export data as JSONL format with optional gzip compression."""
         if append:
             try:
                 response = self.client.get_object(Bucket=self.bucket, Key=object_key)
-                existing_content = response['Body'].read().decode('utf-8')
+                # Handle gzip decompression if needed
+                if self.jsonl_compress == 'gzip':
+                    with gzip.open(io.BytesIO(response['Body'].read()), 'rt', encoding='utf-8') as f:
+                        existing_content = f.read()
+                else:
+                    existing_content = response['Body'].read().decode('utf-8')
                 existing_lines = existing_content.strip().split('\n') if existing_content.strip() else []
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchKey':
@@ -237,16 +301,42 @@ class MinIOExporter(ExporterProtocol):
             
             new_lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':')) for record in data]
             all_lines = existing_lines + new_lines
-            body = '\n'.join(all_lines) + '\n'
+            body_str = '\n'.join(all_lines) + '\n'
         else:
             lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':'), default=str) for record in data]
-            body = '\n'.join(lines) + '\n'
+            body_str = '\n'.join(lines) + '\n'
         
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=object_key,
-            Body=body.encode('utf-8'),
-            ContentType='application/x-ndjson',
+        # Compress body if gzip enabled
+        if self.jsonl_compress == 'gzip':
+            body_bytes = body_str.encode('utf-8')
+            compressed_buffer = io.BytesIO()
+            with gzip.GzipFile(fileobj=compressed_buffer, mode='wb', compresslevel=6) as gz:
+                gz.write(body_bytes)
+            body = compressed_buffer.getvalue()
+            content_type = 'application/gzip'
+            content_encoding = 'gzip'
+        else:
+            body = body_str.encode('utf-8')
+            content_type = 'application/x-ndjson'
+            content_encoding = None
+        
+        # OTIMIZAÇÃO 1.5: Retry upload with exponential backoff
+        def upload_jsonl():
+            extra_args = {'ContentType': content_type}
+            if content_encoding:
+                extra_args['ContentEncoding'] = content_encoding
+            
+            self.client.put_object(
+                Bucket=self.bucket,
+                Key=object_key,
+                Body=body,  # Already bytes
+                **extra_args,
+            )
+        
+        retry_with_exponential_backoff(
+            upload_jsonl,
+            max_retries=3,
+            exceptions=(ClientError, Exception)
         )
         return len(data)
     
@@ -278,11 +368,20 @@ class MinIOExporter(ExporterProtocol):
         csv_bytes = io.BytesIO(buffer.getvalue().encode('utf-8'))
         csv_bytes.seek(0)
         
-        self.client.upload_fileobj(
-            csv_bytes,
-            self.bucket,
-            object_key,
-            ExtraArgs={'ContentType': 'text/csv'},
+        # OTIMIZAÇÃO 1.5: Retry upload with exponential backoff
+        def upload_csv():
+            csv_bytes.seek(0)  # Reset position before each retry
+            self.client.upload_fileobj(
+                csv_bytes,
+                self.bucket,
+                object_key,
+                ExtraArgs={'ContentType': 'text/csv'},
+            )
+        
+        retry_with_exponential_backoff(
+            upload_csv,
+            max_retries=3,
+            exceptions=(ClientError, Exception)
         )
         return len(data)
     
@@ -327,12 +426,20 @@ class MinIOExporter(ExporterProtocol):
         )
         buffer.seek(0)
         
-        # Use streaming upload (avoids memory copy from buffer.getvalue())
-        self.client.upload_fileobj(
-            buffer,
-            self.bucket,
-            object_key,
-            ExtraArgs={'ContentType': 'application/octet-stream'},
+        # OTIMIZAÇÃO 1.5: Use streaming upload with retry (avoids memory copy)
+        def upload_parquet():
+            buffer.seek(0)  # Reset position before each retry
+            self.client.upload_fileobj(
+                buffer,
+                self.bucket,
+                object_key,
+                ExtraArgs={'ContentType': 'application/octet-stream'},
+            )
+        
+        retry_with_exponential_backoff(
+            upload_parquet,
+            max_retries=3,
+            exceptions=(ClientError, Exception)
         )
         return len(data)
     

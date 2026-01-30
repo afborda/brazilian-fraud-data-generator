@@ -47,6 +47,7 @@ import os
 import sys
 import time
 import random
+import gzip
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -89,14 +90,14 @@ def worker_generate_batch(args: tuple) -> str:
     Uses streaming write for memory efficiency - doesn't accumulate all records in memory.
     
     Args:
-        args: Tuple of (batch_id, num_transactions, customer_indexes, device_indexes,
-              start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed)
+          args: Tuple of (batch_id, num_transactions, customer_indexes, device_indexes,
+              start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed, jsonl_compress)
     
     Returns:
         Path to generated file
     """
     (batch_id, num_transactions, customer_indexes, device_indexes,
-     start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed) = args
+     start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed, jsonl_compress) = args
     
     # Generate unique session timestamp for globally unique IDs
     session_start_ms = int(time.time() * 1000)
@@ -139,8 +140,12 @@ def worker_generate_batch(args: tuple) -> str:
     )
     
     # Determine output format
-    exporter = get_exporter(format_name)
+    # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
+    exporter_kwargs = {'skip_none': True} if format_name in ['jsonl', 'json'] else {}
+    exporter = get_exporter(format_name, **exporter_kwargs)
     output_path = os.path.join(output_dir, f'transactions_{batch_id:05d}{exporter.extension}')
+    if format_name == 'jsonl' and jsonl_compress == 'gzip':
+        output_path = output_path + '.gz'
     
     start_tx_id = batch_id * num_transactions
     
@@ -148,7 +153,13 @@ def worker_generate_batch(args: tuple) -> str:
     # For other formats: accumulate (required by format)
     if format_name == 'jsonl':
         # STREAMING MODE - write directly to file, don't accumulate in memory
-        with open(output_path, 'w', encoding='utf-8', buffering=65536) as f:
+        if jsonl_compress == 'gzip':
+            file_handle = gzip.open(output_path, 'wt', encoding='utf-8', compresslevel=6)
+        else:
+            file_handle = open(output_path, 'w', encoding='utf-8', buffering=65536)
+        with file_handle as f:
+            buffer = []
+            buffer_limit = 1000
             for i in range(num_transactions):
                 customer, device = random.choice(pairs)
                 
@@ -182,12 +193,22 @@ def worker_generate_batch(args: tuple) -> str:
                     customer_profile=customer.profile,
                 )
                 
-                # Write directly to file - no memory accumulation!
-                f.write(json.dumps(tx, ensure_ascii=False, separators=(',', ':')) + '\n')
+                # OTIMIZAÇÃO 1.3: Clean None fields if skip_none is enabled
+                tx_to_write = exporter._clean_record(tx) if hasattr(exporter, '_clean_record') else tx
+                
+                # Write in chunks to reduce per-line overhead
+                buffer.append(json.dumps(tx_to_write, ensure_ascii=False, separators=(',', ':')) + '\n')
+                if len(buffer) >= buffer_limit:
+                    f.write(''.join(buffer))
+                    buffer.clear()
                 
                 # Periodic flush for very large batches
                 if i > 0 and i % STREAM_FLUSH_EVERY == 0:
                     f.flush()
+            
+            if buffer:
+                f.write(''.join(buffer))
+                buffer.clear()
     else:
         # BATCH MODE - required for CSV/Parquet formats
         transactions = []
@@ -237,14 +258,14 @@ def worker_generate_rides_batch(args: tuple) -> str:
     Uses streaming write for memory efficiency - doesn't accumulate all records in memory.
     
     Args:
-        args: Tuple of (batch_id, num_rides, customer_indexes, driver_indexes,
-              start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed)
+          args: Tuple of (batch_id, num_rides, customer_indexes, driver_indexes,
+              start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed, jsonl_compress)
     
     Returns:
         Path to generated file
     """
     (batch_id, num_rides, customer_indexes, driver_indexes,
-     start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed) = args
+     start_date, end_date, fraud_rate, use_profiles, output_dir, format_name, seed, jsonl_compress) = args
     
     # Deterministic seed per worker
     if seed is not None:
@@ -274,8 +295,12 @@ def worker_generate_rides_batch(args: tuple) -> str:
     )
     
     # Determine output format
-    exporter = get_exporter(format_name)
+    # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
+    exporter_kwargs = {'skip_none': True} if format_name in ['jsonl', 'json'] else {}
+    exporter = get_exporter(format_name, **exporter_kwargs)
     output_path = os.path.join(output_dir, f'rides_{batch_id:05d}{exporter.extension}')
+    if format_name == 'jsonl' and jsonl_compress == 'gzip':
+        output_path = output_path + '.gz'
     
     start_ride_id = batch_id * num_rides
     
@@ -283,7 +308,13 @@ def worker_generate_rides_batch(args: tuple) -> str:
     # For other formats: accumulate (required by format)
     if format_name == 'jsonl':
         # STREAMING MODE - write directly to file, don't accumulate in memory
-        with open(output_path, 'w', encoding='utf-8', buffering=65536) as f:
+        if jsonl_compress == 'gzip':
+            file_handle = gzip.open(output_path, 'wt', encoding='utf-8', compresslevel=6)
+        else:
+            file_handle = open(output_path, 'w', encoding='utf-8', buffering=65536)
+        with file_handle as f:
+            buffer = []
+            buffer_limit = 1000
             for i in range(num_rides):
                 # Select random passenger (customer)
                 passenger = random.choice(customer_idx_list)
@@ -322,12 +353,22 @@ def worker_generate_rides_batch(args: tuple) -> str:
                     passenger_profile=passenger.profile,
                 )
                 
-                # Write directly to file - no memory accumulation!
-                f.write(json.dumps(ride, ensure_ascii=False, separators=(',', ':')) + '\n')
+                # OTIMIZAÇÃO 1.3: Clean None fields if skip_none is enabled
+                ride_to_write = exporter._clean_record(ride) if hasattr(exporter, '_clean_record') else ride
+                
+                # Write in chunks to reduce per-line overhead
+                buffer.append(json.dumps(ride_to_write, ensure_ascii=False, separators=(',', ':')) + '\n')
+                if len(buffer) >= buffer_limit:
+                    f.write(''.join(buffer))
+                    buffer.clear()
                 
                 # Periodic flush for very large batches
                 if i > 0 and i % STREAM_FLUSH_EVERY == 0:
                     f.flush()
+            
+            if buffer:
+                f.write(''.join(buffer))
+                buffer.clear()
     else:
         # BATCH MODE - required for CSV/Parquet formats
         rides = []
@@ -874,6 +915,14 @@ Available formats: """ + ", ".join(list_formats())
     )
     
     parser.add_argument(
+        '--jsonl-compress',
+        type=str,
+        default='none',
+        choices=['none', 'gzip'],
+        help='Compression for JSONL output (local only). Default: none'
+    )
+    
+    parser.add_argument(
         '--fraud-rate', '-r',
         type=float,
         default=0.02,
@@ -1060,6 +1109,7 @@ Available formats: """ + ", ".join(list_formats())
             partition_by_date=not args.no_date_partition,
             output_format=args.format,  # Pass the format to MinIO exporter
             compression=compression,  # Pass compression setting
+            jsonl_compress=args.jsonl_compress,  # Pass JSONL compression
         )
         output_dir = None  # Not used for MinIO
         exporter = minio_exporter
@@ -1067,7 +1117,9 @@ Available formats: """ + ", ".join(list_formats())
         # Local output - create directory
         os.makedirs(args.output, exist_ok=True)
         output_dir = args.output
-        exporter = get_exporter(args.format)
+        # OTIMIZAÇÃO 1.3: Pass skip_none=True for JSON formats to remove NULL fields
+        exporter_kwargs = {'skip_none': True} if args.format in ['jsonl', 'json'] else {}
+        exporter = get_exporter(args.format, **exporter_kwargs)
         minio_exporter = None
     
     # Print configuration
@@ -1084,6 +1136,8 @@ Available formats: """ + ", ".join(list_formats())
     print(f"📄 Format: {args.format.upper()}")
     if args.format == 'parquet':
         print(f"🗜️  Compression: {args.compression.upper()}")
+    elif args.format == 'jsonl' and args.jsonl_compress != 'none':
+        print(f"🗜️  Compression: {args.jsonl_compress.upper()}")
     print(f"🎯 Type: {args.type.upper()}")
     print(f"👥 Customers: {num_customers:,}")
     if generate_transactions:
@@ -1264,6 +1318,7 @@ Available formats: """ + ", ".join(list_formats())
                     args.output,
                     args.format,
                     args.seed,
+                    args.jsonl_compress,
                 )
                 worker_args.append(args_tuple)
             
@@ -1427,6 +1482,7 @@ Available formats: """ + ", ".join(list_formats())
                     args.output,
                     args.format,
                     args.seed,
+                    args.jsonl_compress,
                 )
                 ride_worker_args.append(args_tuple)
             

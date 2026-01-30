@@ -144,6 +144,34 @@ python3 generate.py --size 1GB --format parquet --compression gzip
 > **💡 Nota:** ZSTD é o padrão porque oferece o melhor equilíbrio entre taxa de compressão e velocidade.
 > Se seu sistema não suporta ZSTD (versões antigas de Spark, Hive ou Presto), use `--compression snappy`.
 
+#### 🗜️ Opções de Compressão JSONL (Novo!)
+
+Para JSONL, você pode ativar a compressão gzip para economizar armazenamento:
+
+| Opção | Comando | Benefício | Custo |
+|-------|---------|-----------|-------|
+| Sem compressão (padrão) | `--jsonl-compress none` | Máxima velocidade | Arquivo grande |
+| **Gzip** | `--jsonl-compress gzip` | -85% tamanho arquivo | -18% velocidade |
+
+```bash
+# Padrão: JSONL sem compressão (28.0k reg/seg)
+python3 generate.py --size 1GB --format jsonl
+
+# JSONL comprimido com gzip (22.9k reg/seg, 30MB vs 206MB)
+python3 generate.py --size 1GB --format jsonl --jsonl-compress gzip
+
+# MinIO com gzip: upload direto comprimido
+python3 generate.py --size 1GB --output minio://bucket/path --format jsonl --jsonl-compress gzip
+```
+
+**Exemplos práticos:**
+- **Backup/Histórico:** Use `--jsonl-compress gzip` (economia de -85%)
+- **Training sets em S3:** Use `--jsonl-compress gzip` (economia de bandwidth)
+- **Real-time processing:** Use padrão sem compressão (máxima velocidade)
+
+> **💡 Recomendação:** Ative compressão se você precisa armazenar ou transferir dados.
+> Desative se a velocidade de geração é crítica ou o arquivo será processado imediatamente.
+
 ### 🔹 Modo Streaming (Tempo Real)
 
 Primeiro, instale as dependências de streaming:
@@ -332,6 +360,8 @@ python3 generate.py --help
 | `--start-date` | -1 ano | Data inicial (YYYY-MM-DD) |
 | `--end-date` | hoje | Data final (YYYY-MM-DD) |
 | `--no-profiles` | - | Desabilitar perfis comportamentais |
+| `--compression` | `zstd` | Compressão Parquet: `zstd`, `snappy`, `gzip`, `brotli`, `none` |
+| `--jsonl-compress` | `none` | Compressão JSONL: `none` ou `gzip` |
 | `--minio-endpoint` | env | URL do MinIO/S3 |
 | `--minio-access-key` | env | Chave de acesso MinIO |
 | `--minio-secret-key` | env | Chave secreta MinIO |
