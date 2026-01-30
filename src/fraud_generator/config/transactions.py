@@ -31,7 +31,9 @@ CHANNELS_LIST = list(CHANNELS.keys())
 CHANNELS_WEIGHTS = list(CHANNELS.values())
 
 # Fraud types with realistic distribution
-FRAUD_TYPES = {
+# DEPRECATED: Use fraud_patterns.py for contextualized fraud patterns
+# Kept for backward compatibility only
+FRAUD_TYPES_LEGACY = {
     'ENGENHARIA_SOCIAL': 20,    # Social engineering - most common
     'CONTA_TOMADA': 15,         # Account takeover
     'CARTAO_CLONADO': 14,       # Cloned card
@@ -47,8 +49,18 @@ FRAUD_TYPES = {
     'QR_CODE_FALSO': 2,         # Fake PIX QR codes
 }
 
-FRAUD_TYPES_LIST = list(FRAUD_TYPES.keys())
-FRAUD_TYPES_WEIGHTS = list(FRAUD_TYPES.values())
+# NEW: Import from fraud_patterns (OTIMIZAÇÃO 2: Fraud Contextualization)
+try:
+    from .fraud_patterns import FRAUD_PATTERNS, FRAUD_TYPES_LIST as FP_LIST, FRAUD_TYPES_WEIGHTS as FP_WEIGHTS
+    FRAUD_TYPES_LIST = FP_LIST
+    FRAUD_TYPES_WEIGHTS = FP_WEIGHTS
+    # Create FRAUD_TYPES dict for backward compatibility
+    FRAUD_TYPES = {k: int(v * 100) for k, v in zip(FP_LIST, FP_WEIGHTS)}
+except ImportError:
+    # Fallback to legacy if fraud_patterns not available
+    FRAUD_TYPES = FRAUD_TYPES_LEGACY
+    FRAUD_TYPES_LIST = list(FRAUD_TYPES_LEGACY.keys())
+    FRAUD_TYPES_WEIGHTS = list(FRAUD_TYPES_LEGACY.values())
 
 # PIX key types with realistic distribution
 PIX_KEY_TYPES = {

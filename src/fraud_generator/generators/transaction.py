@@ -17,6 +17,12 @@ from ..config.transactions import (
     INSTALLMENT_LIST, INSTALLMENT_WEIGHTS,
     REFUSAL_REASONS,
 )
+from ..config.fraud_patterns import (
+    FRAUD_PATTERNS,
+    get_fraud_pattern,
+    get_anomaly_multiplier,
+    get_time_window_for_anomaly,
+)
 from ..config.merchants import (
     MCC_LIST, MCC_WEIGHTS, MCC_CODES,
     get_merchants_for_mcc, get_mcc_info,
@@ -81,6 +87,9 @@ class TransactionGenerator:
         # OTIMIZAÇÃO 1.2: Cache merchant lists by MCC (avoid repeated dict lookups)
         from ..config.merchants import MERCHANTS_BY_MCC
         self._merchants_cache = MERCHANTS_BY_MCC
+        
+        # OTIMIZAÇÃO 2: Fraud pattern cache for contextualized fraud
+        self._fraud_patterns = FRAUD_PATTERNS
     
     def generate(
         self,
@@ -178,6 +187,10 @@ class TransactionGenerator:
         
         # Add type-specific fields
         self._add_type_specific_fields(tx, tx_type, banco_destino)
+        
+        # OTIMIZAÇÃO 2: Apply fraud pattern characteristics if fraud
+        if is_fraud and fraud_type:
+            tx = self._apply_fraud_pattern(tx, fraud_type, customer_profile, timestamp)
         
         # Add risk indicators
         self._add_risk_indicators(tx, timestamp, is_fraud, fraud_type)
@@ -329,6 +342,140 @@ class TransactionGenerator:
                 'pix_key_destination': None,
                 'destination_bank': banco_destino if tx_type in ['TED', 'BOLETO', 'DOC'] else None,
             })
+    
+    def _apply_fraud_pattern(
+        self,
+        tx: Dict[str, Any],
+        fraud_type: str,
+        customer_profile: Optional[str],
+        timestamp: datetime
+    ) -> Dict[str, Any]:
+        """
+        Apply fraud-specific characteristics to transaction (OTIMIZAÇÃO 2: Fraud Contextualization).
+        
+        Each fraud type has specific patterns that make it detectável by ML models:
+        - ENGENHARIA_SOCIAL: Normal device/location, new beneficiary
+        - CONTA_TOMADA: New device, unusual time, high velocity
+        - CARTAO_CLONADO: Multiple small transactions, different location
+        - PIX_GOLPE: PIX-only, new PIX key, medium amounts
+        - etc.
+        
+        Args:
+            tx: Base transaction dict
+            fraud_type: Type of fraud
+            customer_profile: Customer behavioral profile
+            timestamp: Original timestamp
+            
+        Returns:
+            Modified transaction with fraud-specific characteristics
+        """
+        pattern = get_fraud_pattern(fraud_type)
+        characteristics = pattern['characteristics']
+        
+        # VALUE ANOMALY: Adjust amount based on fraud pattern
+        if 'amount_override' in characteristics:
+            # Force specific amount range (e.g., for card testing)
+            min_amt, max_amt = characteristics['amount_override']
+            tx['amount'] = round(random.uniform(min_amt, max_amt), 2)
+        elif 'amount_multiplier' in characteristics:
+            min_mult, max_mult = characteristics['amount_multiplier']
+            current_amount = tx.get('amount', 100.0)
+            
+            # Get base value for profile
+            if self.use_profiles and customer_profile:
+                profile_avg = get_transaction_value_for_profile(customer_profile)
+            else:
+                profile_avg = current_amount
+            
+            # Apply multiplier
+            new_amount = profile_avg * random.uniform(min_mult, max_mult)
+            tx['amount'] = round(new_amount, 2)
+        
+        # NEW BENEFICIARY: Always for certain fraud types
+        if characteristics.get('new_beneficiary', False):
+            tx['new_beneficiary'] = True
+            # Different destination bank for transfers
+            if tx.get('destination_bank'):
+                tx['destination_bank'] = self._bank_cache.sample()
+        
+        # VELOCITY: Transaction burst pattern
+        if characteristics.get('velocity') == 'HIGH':
+            if 'transaction_burst' in characteristics:
+                min_burst, max_burst = characteristics['transaction_burst']
+                tx['transactions_last_24h'] = random.randint(min_burst, max_burst)
+            else:
+                tx['transactions_last_24h'] = random.randint(10, 30)
+            
+            # High accumulated amount
+            tx['accumulated_amount_24h'] = round(tx['amount'] * tx['transactions_last_24h'] * random.uniform(0.6, 0.9), 2)
+        elif characteristics.get('velocity') == 'MEDIUM':
+            tx['transactions_last_24h'] = random.randint(5, 12)
+            tx['accumulated_amount_24h'] = round(tx['amount'] * tx['transactions_last_24h'] * 0.7, 2)
+        
+        # TIME ANOMALY: Unusual hours (madrugada for account takeover)
+        time_anomaly = characteristics.get('time_anomaly', 'NONE')
+        if time_anomaly != 'NONE':
+            valid_hours = get_time_window_for_anomaly(time_anomaly)
+            new_hour = random.choice(valid_hours)
+            new_timestamp = timestamp.replace(hour=new_hour, minute=random.randint(0, 59))
+            tx['timestamp'] = new_timestamp.isoformat()
+            tx['unusual_time'] = new_hour < 6 or new_hour > 22
+        
+        # LOCATION ANOMALY: Different state/geo
+        location_anomaly = characteristics.get('location_anomaly', 'NONE')
+        if location_anomaly == 'HIGH':
+            # Completely different state
+            different_state = random.choice([s for s in ESTADOS_LIST if s != tx.get('customer_state', 'SP')])
+            estado_info = ESTADOS_BR.get(different_state, ESTADOS_BR['SP'])
+            base_lat, base_lon = estado_info['lat'], estado_info['lon']
+            tx['geolocation_lat'] = round(base_lat + random.uniform(-0.5, 0.5), 6)
+            tx['geolocation_lon'] = round(base_lon + random.uniform(-0.5, 0.5), 6)
+        elif location_anomaly == 'MEDIUM':
+            # Same state but far from usual (50-200km offset)
+            tx['geolocation_lat'] += random.uniform(-2.0, 2.0)
+            tx['geolocation_lon'] += random.uniform(-2.0, 2.0)
+            tx['distance_from_last_txn_km'] = round(random.uniform(50, 200), 2)
+        
+        # DEVICE ANOMALY: New/suspicious device
+        device_anomaly = characteristics.get('device_anomaly', 'NONE')
+        if device_anomaly == 'HIGH':
+            # Completely different device
+            tx['device_id'] = f"DEV_FRAUD_{random.randint(100000, 999999):06d}"
+        
+        # CHANNEL PREFERENCE: Force specific channels
+        if 'channel_preference' in characteristics:
+            preferred_channels = characteristics['channel_preference']
+            tx['channel'] = random.choice(preferred_channels)
+            
+            # Update PIX fields if PIX fraud
+            if 'PIX' in preferred_channels and tx['channel'] == 'PIX':
+                tx['type'] = 'PIX'
+                pix_key_type = random.choice(characteristics.get('pix_key_type', ['CPF', 'PHONE', 'EMAIL']))
+                tx['pix_key_type'] = pix_key_type
+                tx['pix_key_destination'] = generate_random_hash(32)
+                tx['destination_bank'] = self._bank_cache.sample()
+                # Clear card fields
+                tx['card_number_hash'] = None
+                tx['card_brand'] = None
+                tx['card_type'] = None
+        
+        # MCC PREFERENCE: Common MCCs for fraud type
+        if 'mcc_preference' in characteristics:
+            mcc_codes = characteristics['mcc_preference']
+            new_mcc = random.choice(mcc_codes)
+            tx['mcc_code'] = new_mcc
+            mcc_info = get_mcc_info(new_mcc)
+            tx['merchant_category'] = mcc_info['category']
+            tx['mcc_risk_level'] = mcc_info['risk']
+            # Update merchant
+            merchants = self._merchants_cache.get(new_mcc, ['Suspicious Merchant'])
+            tx['merchant_name'] = random.choice(merchants)
+        
+        # FRAUD SCORE: Higher base score for pattern
+        base_score = pattern.get('fraud_score_base', 0.5)
+        tx['fraud_score'] = round(random.uniform(base_score * 100, 95), 2)
+        
+        return tx
     
     def _add_risk_indicators(
         self,
