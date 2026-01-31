@@ -16,6 +16,16 @@ datasets/
 tmp/
 temp/
 
+# Documentation (generated/temporary analysis files)
+docs/benchmarks/benchmark_results/
+docs/benchmarks/*.log
+docs/*.txt
+docs/ANALISE_*.md
+docs/ORGANIZATION_*.md
+docs/STATUS_*.md
+docs/PHASE_*_INTEGRATION_*.md
+docs/REPOSITORY_*.md
+
 # Python
 __pycache__/
 *.py[cod]
@@ -83,6 +93,8 @@ test-results.xml
 prof_data/
 benchmarks/results/
 perf_results/
+benchmark_output.log
+benchmark_results/
 
 # Environment Variables
 .env
