@@ -95,6 +95,72 @@ _PROFILE_VELOCITY_BASELINE: dict = {
 _PROFILE_VELOCITY_DEFAULT = (8, 3.0)  # fallback when profile unknown
 
 
+# T6: Fraud ring registry — maps customer_id → (ring_id, ring_role)
+# Up to ~5% of fraud customers are assigned to rings at first encounter.
+# Rings have 3–15 members; roles: orchestrator (1), mule (2-6), recruiter (0-1),
+# regular (rest).
+class _RingRegistry:
+    """Lightweight session-scoped registry for fraud ring assignment."""
+
+    _RING_FRAUD_TYPES = frozenset({
+        'LAVAGEM_DINHEIRO', 'TRIANGULACAO', 'CONTA_TOMADA',
+        'DISTRIBUTED_VELOCITY', 'PIRÂMIDE_FINANCEIRA',
+    })
+
+    def __init__(self) -> None:
+        self._members: dict = {}   # customer_id → (ring_id, ring_role)
+        self._rings: dict = {}     # ring_id → [member_count, roles_used]
+        self._ring_counter = 0
+
+    def get_or_assign(
+        self,
+        customer_id: str,
+        is_fraud: bool,
+        fraud_type: Optional[str],
+        rng: random.Random,
+    ) -> tuple:
+        """Return (ring_id, ring_role) or (None, None) for non-ring customers."""
+        if customer_id in self._members:
+            return self._members[customer_id]
+
+        # Only ring-eligible fraud types; 12% chance of ring assignment
+        if not (is_fraud and fraud_type in self._RING_FRAUD_TYPES):
+            return (None, None)
+        if rng.random() > 0.12:
+            return (None, None)
+
+        # Try to join an existing ring that has space (< 15 members)
+        for ring_id, info in self._rings.items():
+            if info['count'] < 15:
+                role = self._pick_role(info['roles'], rng)
+                info['count'] += 1
+                info['roles'].append(role)
+                self._members[customer_id] = (ring_id, role)
+                return (ring_id, role)
+
+        # Create a new ring
+        self._ring_counter += 1
+        ring_id = f'RING_{self._ring_counter:06d}'
+        role = 'orchestrator'
+        self._rings[ring_id] = {'count': 1, 'roles': [role]}
+        self._members[customer_id] = (ring_id, role)
+        return (ring_id, role)
+
+    @staticmethod
+    def _pick_role(roles: list, rng: random.Random) -> str:
+        if 'orchestrator' not in roles:
+            return 'orchestrator'
+        mule_count = roles.count('mule')
+        if mule_count < 6 and rng.random() < 0.55:
+            return 'mule'
+        if 'recruiter' not in roles and rng.random() < 0.15:
+            return 'recruiter'
+        return 'mule'
+
+
+_ring_registry = _RingRegistry()   # module-level singleton (one per process)
+
+
 class TransactionGenerator:
     """
     Generator for realistic Brazilian financial transactions.
@@ -871,6 +937,58 @@ class TransactionGenerator:
             sig for sig, val in breakdown.items()
             if sig != 'total' and val > 0
         ] or None
+
+        # ── TPRD2: OS-tier behavioural context fields ─────────────────────────
+        # active_call_during_tx: serialise the context flag that the score uses
+        tx['active_call_during_tx'] = ctx.active_call
+
+        # network_type: mobile/wifi distribution; fraud skews to mobile data
+        _net_vals = ['WIFI', '4G', '5G', '3G', 'UNKNOWN']
+        if is_fraud:
+            _net_w = [25, 40, 15, 15, 5]
+        else:
+            _net_w = [55, 25, 12, 5, 3]
+        tx['network_type'] = self._buf.next_weighted('network_type', _net_vals, _net_w)
+
+        # language_locale: Brazilian Portuguese dominant; ATO may show foreign locale
+        if is_fraud and fraud_type in ('CONTA_TOMADA', 'PIRÂMIDE_FINANCEIRA'):
+            _loc_vals = ['pt-BR', 'en-US', 'es-ES', 'zh-CN', 'ru-RU']
+            _loc_w    = [50, 25, 10, 10, 5]
+        else:
+            _loc_vals = ['pt-BR', 'pt-PT', 'en-US', 'es-ES']
+            _loc_w    = [92, 3, 3, 2]
+        tx['language_locale'] = self._buf.next_weighted('language_locale', _loc_vals, _loc_w)
+
+        # Biometric fields — null in OS tier; populated by paid enricher (TPRD4)
+        tx.update({
+            'typing_speed_avg_ms':       None,
+            'typing_rhythm_variance':    None,
+            'touch_pressure_avg':        None,
+            'accelerometer_variance':    None,
+            'gyroscope_variance':        None,
+            'scroll_before_confirm':     None,
+            'time_to_confirm_tx_sec':    None,
+            'session_duration_sec':      None,
+            'copy_paste_on_key':         None,
+            'navigation_order_anomaly':  None,
+        })
+
+        # ── T6: Fraud ring assignment ─────────────────────────────────────────
+        ring_id, ring_role = _ring_registry.get_or_assign(
+            tx.get('customer_id', ''),
+            is_fraud,
+            fraud_type,
+            self._buf._rng,
+        )
+        tx['fraud_ring_id'] = ring_id
+        tx['ring_role'] = ring_role
+        # recipient_is_mule: True when destination is a known mule account.
+        # Proxy: high-value PIX/TED to a customer tagged as mule in their ring.
+        tx['recipient_is_mule'] = (
+            ring_role in ('orchestrator', 'recruiter') and
+            tx.get('type') in ('PIX', 'TED') and
+            is_fraud
+        ) if ring_id else False
     
     def _generate_timestamp(
         self,

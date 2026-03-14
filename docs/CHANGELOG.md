@@ -19,6 +19,35 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.2 | **Sinal** | Fraud signal pipeline: 17 signals + 4 rules + PIX BACEN + device enrichment | 2026-03-14 |
 | v4.3 | **Consistência** | T7 distribuições + T4 padrões comportamentais + TPRD3 PIX Fase 2 | 2026-03-14 |
 | v4.4 | **Padrões** | T7 micro-probe + T4 device consistency + T5 ride-share fraud patterns | 2026-03-14 |
+| v4.5 | **Separação** | Remoção de docs estratégicos para repo privado | 2026-03-14 |
+| v4.6 | **Contexto** | TPRD2 campos OS comportamentais + T6 Fraud Rings + test_licensing fix | 2026-03-14 |
+
+---
+
+## v4.6 — Contexto (2026-03-14)
+
+### TPRD2 — Campos Comportamentais OS tier
+
+- **`active_call_during_tx: bool`** — serializado de `GenerationContext.active_call`; indica chamada telefônica ativa durante a transação (sinal de social engineering)
+- **`network_type: str`** — tipo de conexão de rede: `WIFI`, `4G`, `5G`, `3G`, `UNKNOWN`; distribuição ponderada por fraud_type (fraudes tendem a conexões móveis e desconhecidas)
+- **`language_locale: str`** — locale do dispositivo: dominante `pt-BR`; ATO/PIRÂMIDE_FINANCEIRA mostram locales estrangeiros (`en-US`, `zh-CN`, `ru-RU`) com maior frequência
+- **10 campos biométricos nulos (stubs OS)**: `typing_speed_avg_ms`, `typing_rhythm_variance`, `touch_pressure_avg`, `accelerometer_variance`, `gyroscope_variance`, `scroll_before_confirm`, `time_to_confirm_tx_sec`, `session_duration_sec`, `copy_paste_on_key`, `navigation_order_anomaly` — todos `null` no tier OS, serão preenchidos pelo enricher pago (TPRD4)
+
+### T6 — Fraud Rings (padrões coordenados)
+
+- **`_RingRegistry`** — classe singleton de nível de módulo em `transaction.py`; mapeia `customer_id → (ring_id, ring_role)` com estado persistente por sessão de geração
+- **`fraud_ring_id: str | null`** — ID do anel de fraude (ex: `RING_000001`); presente em 12% dos eventos de fraude elegíveis
+- **`ring_role: str | null`** — papel no anel: `orchestrator` (1 por anel), `mule` (até 6), `recruiter` (0–1)
+- **`recipient_is_mule: bool`** — `true` quando o orchestrator/recruiter envia PIX/TED em contexto de fraude
+- **Tipos elegíveis a rings**: `LAVAGEM_DINHEIRO`, `TRIANGULACAO`, `CONTA_TOMADA`, `DISTRIBUTED_VELOCITY`, `PIRÂMIDE_FINANCEIRA`
+- **Tamanho de anel**: 3–15 membros; roles estáveis durante toda a sessão de geração
+
+### Testes — test_licensing.py
+
+- **Refatorado de script para pytest**: `test_licensing.py` causava `INTERNALERROR` por chamar `sys.exit(1)` no nível de módulo durante a coleta pytest; convertido para 12 funções pytest com fixtures (`starter_lic`, `free_lic`, `pro_lic`)
+- **Corrigido**: `sys.path` apontava para `tests/unit/src` (inexistente) → corrigido para `../../src`
+- **Corrigido**: asserção `test_format_parquet_free_blocked` → `test_format_parquet_free_allowed` (FREE plan permite parquet conforme `limits.py`)
+- **Total de testes**: 180 → 192 (12 novos testes de licenciamento); 192 passando, 3 skipped, 0 failed
 
 ---
 

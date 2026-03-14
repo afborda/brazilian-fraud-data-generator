@@ -214,7 +214,8 @@
 
 > **Objetivo**: gerar padrões de fraude coordenada que apareçam em grafos — preparar dados para GNN (Graph Neural Networks).  
 > **Esforço**: ~2 semanas  
-> **Impacto**: ⭐⭐⭐⭐⭐
+> **Impacto**: ⭐⭐⭐⭐⭐  
+> **Status**: ✅ **CONCLUÍDO** (v4.6 — 2026-03-14)
 
 ### Implementações novas
 
@@ -367,7 +368,7 @@
 > **Objetivo**: implementar a separação OS/Pago via `config/license.py` + campos biométricos detalhados para o tier pago.  
 > **Esforço**: ~1 semana  
 > **Depende de**: TSN  
-> **Status**: ⬜ Não iniciado  
+> **Status**: ✅ **CONCLUÍDO** (v4.6 — 2026-03-14)  
 > **Fonte**: `02 - ANALISE_COMPARATIVA_CRUZADA.md` Fase 1 + Fase 4, `03 - ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md`
 
 ### Implementações
@@ -490,10 +491,10 @@
 | TSN | ✅ Concluído | 2026-03-13 | 2026-03-14 | fraud_risk_score live, PIX BACEN 7 campos, device 4 campos, 109 testes, v4.2.0 |
 | T4 | ✅ Concluído | v4.4 | 2026-03-14 | Consistência comportamental de clientes — device/merchant clustering, velocity z-score |
 | T5 | ✅ Concluído | v4.4 | 2026-03-14 | Novos fraud patterns ride-share: promo abuse, refund abuse, destination disparity |
-| T6 | ⬜ Não iniciado | — | — | Fraud rings: fraud_ring_id, ring_role, recipient_is_mule |
+| T6 | ✅ Concluído | v4.6 | 2026-03-14 | Fraud rings: fraud_ring_id, ring_role, recipient_is_mule — _RingRegistry singleton, 12% ring rate |
 | T7 | ✅ Concluído | v4.4 | 2026-03-14 | Ajustes finos: BOLETO_FALSO 8%, ENGENHARIA_SOCIAL beneficiário fixo, QA final |
 | TPRD1 | ✅ Concluído | v4.3 | 2026-03-14 | Campos faltantes: new_merchant, cliente_perfil, classe_social, sim_swap_recent, fraud_signals |
-| TPRD2 | ⬜ Não iniciado | — | — | config/license.py gate + profiles/biometric.py tier pago |
+| TPRD2 | ✅ Concluído | v4.6 | 2026-03-14 | active_call_during_tx, network_type, language_locale, 10 biometric stubs (null OS) |
 | TPRD3 | ✅ Concluído | v4.3 | 2026-03-14 | PIX Fase 2: cpf_hash, motivo_devolucao_med, pacs_status, is_devolucao |
 | TPRD4 | ⬜ Não iniciado | — | — | Refactor enricher/pipeline |
 | TPRD5 | ⬜ Não iniciado | — | — | CI/CD Pipelines 1-3 + VPS OVH setup |
