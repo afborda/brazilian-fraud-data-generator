@@ -89,6 +89,10 @@ class CustomerSessionState:
         self._merchant_counts: Dict[str, int] = {}
         self._device_counts: Dict[str, int] = {}
         self._accumulated_amount = 0.0
+        # T4: favorite merchants — first _FAVORITE_MAX distinct merchants seen become favorites
+        self._favorite_merchants: List[tuple] = []   # (merchant_id, merchant_name, mcc_code)
+        self._favorite_ids: set = set()
+        self._FAVORITE_MAX = 8
 
     def _prune_old(self, current_time: datetime) -> None:
         """Remove transactions older than 24h from the rolling window."""
@@ -122,8 +126,28 @@ class CustomerSessionState:
 
         if merchant_id:
             self._merchant_counts[merchant_id] = self._merchant_counts.get(merchant_id, 0) + 1
+            # T4: accumulate favorites from first _FAVORITE_MAX distinct merchants
+            if (
+                merchant_id not in self._favorite_ids
+                and len(self._favorite_merchants) < self._FAVORITE_MAX
+            ):
+                merchant_name = tx.get('merchant_name', '')
+                mcc_code = tx.get('mcc_code', '')
+                self._favorite_merchants.append((merchant_id, merchant_name, mcc_code))
+                self._favorite_ids.add(merchant_id)
         if device_id:
             self._device_counts[device_id] = self._device_counts.get(device_id, 0) + 1
+
+    def get_favorite_merchant(self) -> Optional[tuple]:
+        """Return a random (merchant_id, merchant_name, mcc_code) from favorites.
+
+        Returns None when fewer than 3 favorites have been accumulated, so that
+        early transactions are still diversified before a stable pattern forms.
+        """
+        if len(self._favorite_merchants) < 3:
+            return None
+        import random as _random
+        return _random.choice(self._favorite_merchants)
 
     def get_velocity(self, current_time: datetime) -> int:
         """Transactions in last 24h."""

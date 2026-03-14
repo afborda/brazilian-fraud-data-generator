@@ -143,7 +143,7 @@
   - ATO injeta device completamente novo
   - Arquivo alvo: `src/fraud_generator/generators/transaction.py` + `DeviceIndex`
 
-- [ ] **Merchant clustering** — cliente tem 5–10 merchants favoritos recorrentes:
+- [x] **Merchant clustering** — cliente tem 5–10 merchants favoritos recorrentes:
   - 70% das transações legítimas nesses merchants
   - Fraude usa merchants novos (nunca vistos pelo cliente)
   - Arquivo alvo: `CustomerIndex` + `TransactionGenerator`
@@ -154,7 +154,7 @@
   - ATO usa canal nunca usado antes
   - Arquivo alvo: `src/fraud_generator/profiles/behavioral.py`
 
-- [ ] **Velocity baseline por cliente** — cada cliente tem `avg_tx_day` histórico; fraude desvia em 5–10×:
+- [x] **Velocity baseline por cliente** — cada cliente tem `avg_tx_day` histórico; fraude desvia em 5–10×:
   - Campo: `customer_velocity_z_score: float` (z-score em relação à média do cliente)
 
 - [ ] **Account ramp-up** — clientes novos (dias 1–30) têm valores progressivamente maiores (não já começam com transações altas):
@@ -253,7 +253,7 @@
 
 ### Ajustes de dados
 
-- [ ] **BOLETO_FALSO** (hoje em 2%, real é 8%) — aumentar taxa base e corrigir padrão:
+- [x] **BOLETO_FALSO** (agora 8%) — adicionado a `fraud_patterns.py` com `prevalence: 0.08`, canal MOBILE_APP/WEB_BANKING, `amount_multiplier: (0.8, 1.5)`:
   - Hoje: único evento
   - Real: boleto pago + 2–5 dias → chargeback; ou múltiplos pagamentos do mesmo boleto
 
@@ -264,8 +264,8 @@
   - Hoje: cada transação gera novo beneficiário
   - Target: 80% das txs de um episódio vão para o mesmo CPF destino
 
-- [ ] **Valor das fraudes** — CONTA_TOMADA atual é conservador (3–10× normal); real é 30–100×:
-  - Ajustar multiplicador em `src/fraud_generator/generators/transaction.py`
+- [x] **Valor das fraudes** — CONTA_TOMADA corrigido para `(30.0, 100.0)` (multiplicador real de ATO):
+  - Ajustado em `src/fraud_generator/config/fraud_patterns.py`
 
 - [ ] **First fraud transaction** — PIX_GOLPE e CARTAO_CLONADO devem sempre começar com micro-teste (R$1–5) antes da transação grande
 
@@ -345,9 +345,7 @@
 > **Objetivo**: completar o output de transações com campos definidos no `brazildata_schema.json` mas ausentes no JSON gerado.  
 > **Esforço**: ~3 dias  
 > **Depende de**: TSN  
-> **Status**: ⬜ Não iniciado
-
-### Campos a adicionar ao output de transação
+> **Status**: ✅ **CONCLUÍDO** (v4.3 — 2026-03-14)
 
 - [ ] `new_merchant: bool` — se o merchant nunca foi usado pelo cliente antes (já calculado em CustomerSessionState, não serializado)
 - [ ] `cliente_perfil: str` — ex: `young_digital`, `business_owner` (já atribuído ao gerar cliente, não propagado para transação)
@@ -399,7 +397,7 @@
 > **Objetivo**: completar a conformidade com pacs.008 e adicionar campos de devolução/status.  
 > **Esforço**: ~3 dias  
 > **Depende de**: TSN  
-> **Status**: ⬜ Não iniciado  
+> **Status**: ✅ **CONCLUÍDO** (v4.3 — 2026-03-14)  
 > **Fonte**: `02 - ANALISE_COMPARATIVA_CRUZADA.md` Fase 3
 
 ### Implementações
@@ -494,9 +492,9 @@
 | T5 | ⬜ Não iniciado | — | — | Novos fraud patterns ride-share: promo abuse, refund abuse, destination disparity |
 | T6 | ⬜ Não iniciado | — | — | Fraud rings: fraud_ring_id, ring_role, recipient_is_mule |
 | T7 | ⬜ Não iniciado | — | — | Ajustes finos: BOLETO_FALSO 8%, ENGENHARIA_SOCIAL beneficiário fixo, QA final |
-| TPRD1 | ⬜ Não iniciado | — | — | Campos faltantes: new_merchant, cliente_perfil, classe_social, sim_swap_recent, fraud_signals |
+| TPRD1 | ✅ Concluído | v4.3 | 2026-03-14 | Campos faltantes: new_merchant, cliente_perfil, classe_social, sim_swap_recent, fraud_signals |
 | TPRD2 | ⬜ Não iniciado | — | — | config/license.py gate + profiles/biometric.py tier pago |
-| TPRD3 | ⬜ Não iniciado | — | — | PIX Fase 2: cpf_hash, motivo_devolucao_med, pacs_status |
+| TPRD3 | ✅ Concluído | v4.3 | 2026-03-14 | PIX Fase 2: cpf_hash, motivo_devolucao_med, pacs_status, is_devolucao |
 | TPRD4 | ⬜ Não iniciado | — | — | Refactor enricher/pipeline |
 | TPRD5 | ⬜ Não iniciado | — | — | CI/CD Pipelines 1-3 + VPS OVH setup |
 

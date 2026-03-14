@@ -49,14 +49,50 @@ from ..utils.weight_cache import WeightCache  # OTIMIZAÇÃO 1.1
 from ..utils.precompute import PrecomputeBuffers  # OTIMIZAÇÃO 3: RAM pre-compute
 from .session_context import build_context_for_fraud
 from .correlations import match_fraud_rule
-from .score import compute_fraud_risk_score
+from .score import compute_fraud_risk_score, score_breakdown
+from ..config.distributions import get_income_class
 from ..config.pix import (
     MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS,
     TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS,
     HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS,
     ISPB_LIST,
     generate_end_to_end_id,
+    MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS,
 )
+from ..validators.cpf import generate_valid_cpf
+
+# Profile → social class mapping (used when customer income is not available)
+_PROFILE_CLASSE = {
+    'high_spender':        'A',
+    'business_owner':      'B1',
+    'subscription_heavy':  'B2',
+    'young_digital':       'C1',
+    'traditional_senior':  'C2',
+    'family_provider':     'C2',
+    # fraud victim profiles
+    'ato_victim':          'C2',
+    'falsa_central_victim': 'D',
+    'malware_ats_victim':  'C1',
+}
+
+def _profile_to_classe_social(profile: Optional[str]) -> Optional[str]:
+    return _PROFILE_CLASSE.get(profile) if profile else None
+
+
+# T4: velocity baseline (mean txns/24h, std) per behavioral profile
+# Used to compute customer_velocity_z_score; ATO fraud deviates 5-10× from baseline
+_PROFILE_VELOCITY_BASELINE: dict = {
+    'high_spender':         (15, 5.0),
+    'business_owner':       (20, 7.0),
+    'subscription_heavy':    (8, 3.0),
+    'young_digital':        (10, 4.0),
+    'traditional_senior':    (5, 2.0),
+    'family_provider':       (7, 2.5),
+    'ato_victim':            (8, 3.5),
+    'falsa_central_victim':  (6, 2.5),
+    'malware_ats_victim':    (9, 3.5),
+}
+_PROFILE_VELOCITY_DEFAULT = (8, 3.0)  # fallback when profile unknown
 
 
 class TransactionGenerator:
@@ -124,6 +160,7 @@ class TransactionGenerator:
         force_fraud: Optional[bool] = None,
         session_state: Optional[CustomerSessionState] = None,
         location_cluster: Optional[tuple] = None,
+        customer_cpf: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate a single transaction.
@@ -156,26 +193,46 @@ class TransactionGenerator:
         else:
             tx_type = self._tx_type_cache.sample()
         
-        # Select MCC (profile-aware)
-        if self.use_profiles and customer_profile:
-            mcc_code = get_mcc_for_profile(customer_profile)
-        else:
-            mcc_code = self._mcc_cache.sample()
-        
-        mcc_info = get_mcc_info(mcc_code)
-        
-        # Calculate value
+        # T4: merchant clustering — reuse a favourite for legit transactions 70% of the time.
+        # Builds stable per-customer patterns so anomalous merchants become a real signal.
+        _fav_merchant_id: Optional[str] = None
+        _fav_from_session = (
+            not is_fraud
+            and session_state is not None
+            and random.random() < 0.70
+        )
+        if _fav_from_session:
+            _fav = session_state.get_favorite_merchant()  # type: ignore[union-attr]
+            if _fav is not None:
+                _fav_merchant_id, _fav_name, _fav_mcc = _fav
+                mcc_code = _fav_mcc if _fav_mcc else (
+                    get_mcc_for_profile(customer_profile)
+                    if (self.use_profiles and customer_profile)
+                    else self._mcc_cache.sample()
+                )
+                mcc_info = get_mcc_info(mcc_code)
+                merchant_name = _fav_name
+            else:
+                _fav_from_session = False  # no favourite yet, fall through
+
+        if not _fav_from_session:
+            # Normal MCC selection (profile-aware)
+            if self.use_profiles and customer_profile:
+                mcc_code = get_mcc_for_profile(customer_profile)
+            else:
+                mcc_code = self._mcc_cache.sample()
+            mcc_info = get_mcc_info(mcc_code)
+            merchants = self._merchants_cache.get(mcc_code, ['Local Merchant'])  # OTIMIZAÇÃO 1.2
+            merchant_name = random.choice(merchants)
+
+        # Calculate value (uses mcc_info; resolved above regardless of path)
         valor = self._calculate_value(
             is_fraud,
             fraud_type,
             mcc_info,
             customer_profile
         )
-        
-        # Get merchant
-        merchants = self._merchants_cache.get(mcc_code, ['Local Merchant'])  # OTIMIZAÇÃO 1.2: Local cache lookup
-        merchant_name = random.choice(merchants)
-        
+
         # Geolocation
         lat, lon = self._get_geolocation(customer_state, is_fraud, location_cluster)
         
@@ -202,11 +259,14 @@ class TransactionGenerator:
             'ip_address': self._buf.next_ip(),
             'geolocation_lat': lat,
             'geolocation_lon': lon,
-            'merchant_id': self._buf.next_merchant_id(),
+            'merchant_id': _fav_merchant_id or self._buf.next_merchant_id(),
             'merchant_name': merchant_name,
             'merchant_category': mcc_info['category'],
             'mcc_code': mcc_code,
             'mcc_risk_level': mcc_info['risk'],
+            # Profile / demographics
+            'cliente_perfil': customer_profile,
+            'classe_social': _profile_to_classe_social(customer_profile),
             # T3 — velocity / card-testing fields (set by _apply_fraud_pattern)
             'card_test_phase': None,
             'velocity_burst_id': None,
@@ -214,14 +274,14 @@ class TransactionGenerator:
         }
         
         # Add type-specific fields (uses pre-computed buffers)
-        self._add_type_specific_fields(tx, tx_type, banco_destino)
+        self._add_type_specific_fields(tx, tx_type, banco_destino, customer_id, customer_cpf)
         
         # OTIMIZAÇÃO 2: Apply fraud pattern characteristics if fraud
         if is_fraud and fraud_type:
             tx = self._apply_fraud_pattern(tx, fraud_type, customer_profile, timestamp)
         
         # Add risk indicators
-        self._add_risk_indicators(tx, timestamp, is_fraud, fraud_type, session_state)
+        self._add_risk_indicators(tx, timestamp, is_fraud, fraud_type, session_state, customer_profile)
         
         return tx
     
@@ -345,7 +405,9 @@ class TransactionGenerator:
         self,
         tx: dict,
         tx_type: str,
-        banco_destino: str
+        banco_destino: str,
+        customer_id: str = '',
+        customer_cpf: Optional[str] = None,
     ) -> None:
         """Add transaction type-specific fields."""
         if tx_type in ['CREDIT_CARD', 'DEBIT_CARD']:
@@ -369,6 +431,12 @@ class TransactionGenerator:
                 'tipo_conta_recebedor': None,
                 'holder_type_recebedor': None,
                 'modalidade_iniciacao': None,
+                # TPRD3 PIX Fase 2 — null for card transactions
+                'cpf_hash_pagador': None,
+                'cpf_hash_recebedor': None,
+                'pacs_status': None,
+                'is_devolucao': None,
+                'motivo_devolucao_med': None,
             })
         elif tx_type == 'PIX':
             pix_key_type = self._pix_type_cache.sample()
@@ -397,6 +465,19 @@ class TransactionGenerator:
                 'tipo_conta_recebedor': self._buf.next_weighted('tipo_conta', TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS),
                 'holder_type_recebedor': self._buf.next_weighted('holder', HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS),
                 'modalidade_iniciacao': modalidade,
+                # TPRD3-LGPD: hashed CPFs (no plaintext CPF in output)
+                'cpf_hash_pagador': hashlib.sha256(
+                    (customer_cpf or customer_id).encode()
+                ).hexdigest(),
+                'cpf_hash_recebedor': hashlib.sha256(
+                    generate_valid_cpf().encode()
+                ).hexdigest(),
+                # TPRD3: pacs.008 status and MED devolution fields
+                'pacs_status': self._buf.next_weighted(
+                    'pacs_status', ['ACSC', 'RJCT', 'PDNG'], [92, 6, 2]
+                ),
+                'is_devolucao': False,
+                'motivo_devolucao_med': None,
             })
         else:
             tx.update({
@@ -418,6 +499,12 @@ class TransactionGenerator:
                 'tipo_conta_recebedor': None,
                 'holder_type_recebedor': None,
                 'modalidade_iniciacao': None,
+                # TPRD3 PIX Fase 2 — null for non-PIX
+                'cpf_hash_pagador': None,
+                'cpf_hash_recebedor': None,
+                'pacs_status': None,
+                'is_devolucao': None,
+                'motivo_devolucao_med': None,
             })
     
     def _apply_fraud_pattern(
@@ -620,7 +707,8 @@ class TransactionGenerator:
         timestamp: datetime,
         is_fraud: bool,
         fraud_type: Optional[str],
-        session_state: Optional[CustomerSessionState] = None
+        session_state: Optional[CustomerSessionState] = None,
+        customer_profile: Optional[str] = None,
     ) -> None:
         """Add risk indicators to transaction."""
         hour = timestamp.hour
@@ -660,6 +748,15 @@ class TransactionGenerator:
             if tx.get('new_beneficiary') is None:
                 tx['new_beneficiary'] = session_state.is_new_merchant(tx.get('merchant_id'))
 
+            # T4: customer_velocity_z_score — deviation from profile baseline
+            current_v = tx.get('velocity_transactions_24h') or 0
+            v_mean, v_std = _PROFILE_VELOCITY_BASELINE.get(
+                customer_profile, _PROFILE_VELOCITY_DEFAULT  # type: ignore[arg-type]
+            )
+            tx['customer_velocity_z_score'] = round(
+                (current_v - v_mean) / max(v_std, 0.1), 2
+            )
+
             # Time since last transaction
             if tx.get('time_since_last_txn_min') is None:
                 tx['time_since_last_txn_min'] = session_state.get_last_transaction_minutes_ago(timestamp)
@@ -692,10 +789,55 @@ class TransactionGenerator:
             'fraud_type': fraud_type,
         })
 
-        # Compute fraud_risk_score via the 17-signal pipeline
+        # ── Context fields used by score pipeline ────────────────────────────
+        # sim_swap_recent: higher for identity-takeover fraud types
+        if tx.get('sim_swap_recent') is None:
+            if is_fraud and fraud_type in ('CONTA_TOMADA', 'SIM_SWAP', 'ATO'):
+                tx['sim_swap_recent'] = self._buf.next_float() < 0.65
+            elif is_fraud:
+                tx['sim_swap_recent'] = self._buf.next_float() < 0.10
+            else:
+                tx['sim_swap_recent'] = self._buf.next_float() < 0.01
+
+        # ip_location_matches_account: geographic IP coherence
+        if tx.get('ip_location_matches_account') is None:
+            if is_fraud:
+                tx['ip_location_matches_account'] = self._buf.next_float() < 0.35
+            else:
+                tx['ip_location_matches_account'] = self._buf.next_float() < 0.94
+
+        # hours_inactive: coarse version of time_since_last_txn_min
+        _tslt = tx.get('time_since_last_txn_min')
+        tx['hours_inactive'] = int(_tslt / 60) if _tslt is not None else 0
+
+        # new_merchant mirrors new_beneficiary (schema has both field names)
+        if tx.get('new_merchant') is None:
+            tx['new_merchant'] = tx.get('new_beneficiary')
+
+        # TPRD3: MED devolution — confirmed fraud PIX transactions occasionally
+        # trigger a devolution request (FR01/MD06). ~30% of fraud PIX events.
+        if (
+            is_fraud
+            and tx.get('type') == 'PIX'
+            and tx.get('is_devolucao') is False   # only override if PIX block set it
+            and self._buf.next_float() < 0.30
+        ):
+            tx['is_devolucao'] = True
+            tx['motivo_devolucao_med'] = self._buf.next_weighted(
+                'motivo_devolucao', MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS
+            )
+
+        # ── Compute fraud_risk_score via the 17-signal pipeline ───────────────
         ctx = build_context_for_fraud(tx, is_fraud, fraud_type, rng=self._buf._rng)
         match_fraud_rule(ctx)
         tx['fraud_risk_score'] = compute_fraud_risk_score(ctx)
+
+        # fraud_signals: human-readable list of active signals (non-zero)
+        breakdown = score_breakdown(ctx)
+        tx['fraud_signals'] = [
+            sig for sig, val in breakdown.items()
+            if sig != 'total' and val > 0
+        ] or None
     
     def _generate_timestamp(
         self,

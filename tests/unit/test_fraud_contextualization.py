@@ -170,8 +170,8 @@ class TestFraudContextualization:
             # Prefer POS/ECOMMERCE channels
             assert tx.get('channel') in ['POS', 'ECOMMERCE', 'MOBILE_APP', 'ONLINE']
             
-            # Medium value (1.5x-4x)
-            assert 100 <= tx['amount'] <= 20000, "CARTAO_CLONADO should have medium amounts"
+            # Medium value (1.5x-4x of fraud base 500-10000 → up to 40000)
+            assert 100 <= tx['amount'] <= 40000, "CARTAO_CLONADO should have medium amounts"
     
     def test_compra_teste_pattern(self, generator):
         """Test COMPRA_TESTE (card testing) pattern characteristics."""

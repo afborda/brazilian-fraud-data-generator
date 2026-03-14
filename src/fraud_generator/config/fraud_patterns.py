@@ -42,7 +42,7 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
             'location_anomaly': 'HIGH',           # IP/geo diferente
             'device_anomaly': 'HIGH',             # Device completamente novo
             'channel_preference': ['PIX', 'TED', 'ONLINE'],
-            'amount_multiplier': (3.0, 10.0),     # 3x-10x valor típico
+            'amount_multiplier': (30.0, 100.0),    # 30x-100x valor típico (T7: real ATO é muito mais agressivo)
             'transaction_burst': (5, 15),         # 5-15 transações em sequência
         },
         'prevalence': 0.15,
@@ -212,6 +212,27 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         },
         'prevalence': 0.04,
         'fraud_score_base': 0.78,
+    },
+
+    'BOLETO_FALSO': {
+        'name': 'Boleto Falso',
+        'description': (
+            'Boleto forjado ou interceptado: vítima paga boleto legítimo mas '
+            'linha digitável foi substituída. Chargeback 2–5 dias após. '
+            'Real: 8% das fraudes bancárias BR (FEBRABAN 2024).'
+        ),
+        'characteristics': {
+            'value_anomaly': 'LOW',               # Valor parece legítimo
+            'new_beneficiary': True,              # Novo ISPB/banco destino
+            'velocity': 'LOW',                    # Pagamento único
+            'time_anomaly': 'LOW',                # Horário comercial
+            'location_anomaly': 'NONE',           # Mesma localização da vítima
+            'device_anomaly': 'NONE',             # Mesmo device
+            'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
+            'amount_multiplier': (0.8, 1.5),      # Próximo ao valor esperado
+        },
+        'prevalence': 0.08,
+        'fraud_score_base': 0.40,
     },
 }
 

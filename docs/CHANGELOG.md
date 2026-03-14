@@ -17,10 +17,55 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.0 | **Quantum** | Phase 2.2-2.9: Session State + Parallelism + Analytics | 2026-01-30 |
 | v4.1 | **Guaraná** | SOLID CLI refactor + JSON schema mode | 2026-03-04 |
 | v4.2 | **Sinal** | Fraud signal pipeline: 17 signals + 4 rules + PIX BACEN + device enrichment | 2026-03-14 |
+| v4.3 | **Consistência** | T7 distribuições + T4 padrões comportamentais + TPRD3 PIX Fase 2 | 2026-03-14 |
+
+---
+
+## v4.3 — Consistência (2026-03-14)
+
+### T7 — Ajustes de Distribuição de Fraude
+
+- **CONTA_TOMADA** `amount_multiplier` corrigido de `(3.0, 10.0)` para `(30.0, 100.0)` — ATO real drena contas em magnitude muito maior; modelos treinados agora veem a distribuição de valores correta para detecção de desvio.
+- **BOLETO_FALSO** adicionado como 11º tipo de fraude ativo (`fraud_patterns.py`): prevalência 0.08 (conforme FEBRABAN 2024), canal MOBILE_APP/WEB_BANKING, `amount_multiplier: (0.8, 1.5)` — valor próximo ao esperado pela vítima.
+- `FRAUD_TYPES_LIST` e `FRAUD_TYPES_WEIGHTS` atualizados automaticamente via auto-derive do dict `FRAUD_PATTERNS`.
+
+### T4 — Consistência Comportamental de Clientes
+
+- **`customer_velocity_z_score: float`** — novo campo de output. Z-score da velocidade atual do cliente em relação ao baseline esperado por perfil comportamental. Fraude de ATO produz z-score > 5 em >80% dos casos. Implementado com `_PROFILE_VELOCITY_BASELINE` dict (9 perfis com média e desvio padrão de txns/24h).
+- **Merchant clustering** (OS tier): `CustomerSessionState` agora acumula até 8 merchants favoritos (primeiros vistos). Transações legítimas reutilizam favoritos em 70% dos casos (`_fav_from_session` logic em `generate()`). Fraudes ignoram favoritos e usam merchants novos — signal real de anomalia.
+- Perfis `_PROFILE_CLASSE` e `_PROFILE_VELOCITY_BASELINE` corrigidos: `casual_user`/`retiree` removidos (inexistentes), `family_provider` adicionado.
+
+### TPRD3 — PIX Fase 2 + Conformidade LGPD
+
+- **`cpf_hash_pagador: str`** — SHA-256 do CPF do pagador (sem CPF em claro no output — LGPD); fallback para hash do `customer_id` quando CPF não passado.
+- **`cpf_hash_recebedor: str`** — SHA-256 de CPF gerado para o recebedor.
+- **`pacs_status: str`** — ACSC/RJCT/PDNG (status de liquidação pacs.008); distribuição 92/6/2%.
+- **`is_devolucao: bool`** — `True` em ~30% das fraudes PIX confirmadas (MED devolution).
+- **`motivo_devolucao_med: str | null`** — FR01/MD06/BE08/REFU quando `is_devolucao=True`.
+- Valores nulos adicionados para CREDIT_CARD, DEBIT_CARD e outros tipos (schema consistency).
+
+### Testes
+
+- `test_cartao_clonado_pattern`: bound corrigido de 20000 para 40000 (teto real = 10000 × 4.0 multiplier).
+- 180 passam, 3 skipped, 0 failed.
 
 ---
 
 ## v4.2 — Sinal (2026-03-14)
+
+### Documentação e Posicionamento
+
+- README principal redesenhado com foco em SEO, escaneabilidade e clareza de disponibilidade: diferencia capacidades open-source, limites sem licença e recursos liberados por plano.
+- README em português refeito no mesmo padrão premium e nova arte visual de workflow adicionada para explicar o fluxo operacional do produto.
+- READMEs ajustados para remover dependência visual imediata e reforçar explicação de payload JSON, realismo dos dados, valor dos datasets e ferramentas de validação e teste.
+- Seção "Start Fast" expandida com exemplos abrangentes cobrindo todos os formatos, flags comuns, Docker, streaming e schema mode.
+- Seção "CLI Reference" adicionada em ambos os READMEs com tabelas completas de todas as flags de `generate.py` e `stream.py`.
+- Seção "Output Schema" substituiu o JSON mínimo preexistente: expõe registros reais completos (transação com cartão, PIX com fraude e campos BACEN, cliente com CPF/perfil, device, corrida) e documenta a estrutura de arquivos de saída (`customers.jsonl`, `devices.jsonl`, `transactions_00000.jsonl`).
+
+### Correções de Bug
+
+- Corrigido `SyntaxError` em `src/fraud_generator/generators/transaction.py` linha 439 causado por `\n` literal em trecho de string.
+- Corrigido `NameError: name 'customer_cpf' is not defined` em `_add_type_specific_fields`: o parâmetro `customer_cpf` agora é passado explicitamente da chamada em `generate()`.
 
 ### Pipeline de Sinais de Fraude
 
