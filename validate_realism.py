@@ -233,7 +233,7 @@ def compute_auc(records: List[Dict]) -> Optional[Dict]:
                 r.get('amount', 0),
                 ts.hour,
                 ts.weekday(),
-                r.get('transactions_last_24h', 0) or 0,
+                r.get('velocity_transactions_24h', 0) or 0,
                 r.get('accumulated_amount_24h', 0) or 0,
                 1 if r.get('unusual_time') else 0,
                 1 if r.get('new_beneficiary') else 0,

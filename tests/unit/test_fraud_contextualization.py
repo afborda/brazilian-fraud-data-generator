@@ -83,7 +83,7 @@ class TestFraudContextualization:
             assert tx['amount'] >= 300, "CONTA_TOMADA should have high amounts"
             
             # High velocity
-            assert tx.get('transactions_last_24h', 0) >= 5, "CONTA_TOMADA should have high velocity"
+            assert tx.get('velocity_transactions_24h', 0) >= 5, "CONTA_TOMADA should have high velocity"
             
             # High fraud score
             assert tx['fraud_score'] >= 60, "CONTA_TOMADA should have high fraud score"
@@ -165,7 +165,7 @@ class TestFraudContextualization:
             tx = cloned_card_txs[0]
             
             # High velocity (multiple quick transactions)
-            assert tx.get('transactions_last_24h', 0) >= 5, "CARTAO_CLONADO should have high velocity"
+            assert tx.get('velocity_transactions_24h', 0) >= 5, "CARTAO_CLONADO should have high velocity"
             
             # Prefer POS/ECOMMERCE channels
             assert tx.get('channel') in ['POS', 'ECOMMERCE', 'MOBILE_APP', 'ONLINE']
@@ -195,7 +195,7 @@ class TestFraudContextualization:
             assert tx['amount'] < 50, "COMPRA_TESTE should have very low amounts"
             
             # Very high velocity (many test attempts)
-            assert tx.get('transactions_last_24h', 0) >= 10, "COMPRA_TESTE should have very high velocity"
+            assert tx.get('velocity_transactions_24h', 0) >= 10, "COMPRA_TESTE should have very high velocity"
     
     def test_fraud_score_consistency(self, generator):
         """Test that fraud scores are consistently high for fraud transactions."""
@@ -247,7 +247,7 @@ class TestFraudContextualization:
         
         # Risk indicator fields
         assert 'new_beneficiary' in tx
-        assert 'transactions_last_24h' in tx
+        assert 'velocity_transactions_24h' in tx
         assert 'unusual_time' in tx
         
         # Transaction should be marked as fraud

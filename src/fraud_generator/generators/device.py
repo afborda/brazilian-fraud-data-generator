@@ -104,7 +104,7 @@ class DeviceGenerator:
             'fingerprint': fingerprint,
             'first_use': first_use.isoformat(),
             'is_trusted': is_trusted,
-            'is_rooted_jailbroken': is_rooted,
+            'rooted_or_jailbreak': is_rooted,
         }
     
     def generate_for_customer(

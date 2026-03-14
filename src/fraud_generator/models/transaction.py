@@ -49,7 +49,7 @@ class Transaction:
         # Risk indicators
         distance_from_last_txn_km: Distance from last transaction
         time_since_last_txn_min: Time since last transaction
-        transactions_last_24h: Transactions in last 24h
+        velocity_transactions_24h: Transactions in last 24h
         accumulated_amount_24h: Accumulated value in last 24h
         unusual_time: Whether time is unusual
         new_beneficiary: Whether beneficiary is new
@@ -57,7 +57,8 @@ class Transaction:
         # Status and fraud
         status: Transaction status
         refusal_reason: Refusal reason
-        fraud_score: Fraud score
+        fraud_score: Fraud score (0-100 int)
+        fraud_risk_score: Composite risk score (0-100 int) with 17 signals
         is_fraud: Whether transaction is fraudulent
         fraud_type: Type of fraud
     """
@@ -96,7 +97,7 @@ class Transaction:
     # Risk indicators
     distance_from_last_txn_km: Optional[float] = None  # distancia_ultima_transacao_km
     time_since_last_txn_min: Optional[int] = None  # tempo_desde_ultima_transacao_min
-    transactions_last_24h: int = 1  # transacoes_ultimas_24h
+    velocity_transactions_24h: int = 1  # transacoes_ultimas_24h
     accumulated_amount_24h: float = 0.0  # valor_acumulado_24h
     unusual_time: bool = False  # horario_incomum
     new_beneficiary: bool = False  # novo_beneficiario
@@ -104,7 +105,8 @@ class Transaction:
     # Status and fraud
     status: str = 'APPROVED'  # APROVADA
     refusal_reason: Optional[str] = None  # motivo_recusa
-    fraud_score: float = 0.0
+    fraud_score: int = 0  # 0-100
+    fraud_risk_score: int = 0  # 0-100 composite (17 signals)
     is_fraud: bool = False
     fraud_type: Optional[str] = None
     
@@ -140,13 +142,14 @@ class Transaction:
             'destination_bank': self.destination_bank,
             'distance_from_last_txn_km': self.distance_from_last_txn_km,
             'time_since_last_txn_min': self.time_since_last_txn_min,
-            'transactions_last_24h': self.transactions_last_24h,
+            'velocity_transactions_24h': self.velocity_transactions_24h,
             'accumulated_amount_24h': self.accumulated_amount_24h,
             'unusual_time': self.unusual_time,
             'new_beneficiary': self.new_beneficiary,
             'status': self.status,
             'refusal_reason': self.refusal_reason,
             'fraud_score': self.fraud_score,
+            'fraud_risk_score': self.fraud_risk_score,
             'is_fraud': self.is_fraud,
             'fraud_type': self.fraud_type,
         }
@@ -193,13 +196,14 @@ class Transaction:
             destination_bank=data.get('destination_bank'),
             distance_from_last_txn_km=data.get('distance_from_last_txn_km'),
             time_since_last_txn_min=data.get('time_since_last_txn_min'),
-            transactions_last_24h=data.get('transactions_last_24h', 1),
+            velocity_transactions_24h=data.get('velocity_transactions_24h', data.get('transactions_last_24h', 1)),
             accumulated_amount_24h=data.get('accumulated_amount_24h', 0.0),
             unusual_time=data.get('unusual_time', False),
             new_beneficiary=data.get('new_beneficiary', False),
             status=data.get('status', 'APPROVED'),
             refusal_reason=data.get('refusal_reason'),
-            fraud_score=data.get('fraud_score', 0.0),
+            fraud_score=int(data.get('fraud_score', 0)),
+            fraud_risk_score=int(data.get('fraud_risk_score', 0)),
             is_fraud=data.get('is_fraud', False),
             fraud_type=data.get('fraud_type'),
         )

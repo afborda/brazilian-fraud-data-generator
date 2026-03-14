@@ -280,10 +280,123 @@ PROFILES: Dict[str, BehavioralProfile] = {
         weekend_multiplier=1.4,  # More family activity on weekends
         fraud_susceptibility=1.0,
     ),
+
+    # ── Fraud victim archetypes (used by correlations/score pipeline) ──────
+
+    "ato_victim": BehavioralProfile(
+        name="ato_victim",
+        description=(
+            "Account Takeover victim: 35-65 years, light mobile users with dormant "
+            "periods, passwords reused across services, account inactive for 1+ weeks"
+        ),
+        age_range=(35, 65),
+        income_multiplier=(1.0, 3.0),
+        transaction_types={
+            'PIX': 35,
+            'DEBIT_CARD': 30,
+            'CREDIT_CARD': 20,
+            'BOLETO': 10,
+            'WITHDRAWAL': 5,
+        },
+        preferred_mccs={
+            '5411': 30,   # Supermarkets
+            '5912': 15,   # Pharmacies
+            '4900': 15,   # Utilities
+            '5814': 10,   # Fast Food
+            '5541': 10,   # Gas
+            '8011': 10,   # Health/doctors
+            '6011': 10,   # ATM/withdrawals
+        },
+        channel_preferences={
+            'MOBILE_APP': 40,
+            'WEB_BANKING': 25,
+            'ATM': 20,
+            'BRANCH': 15,
+        },
+        monthly_tx_frequency=(10, 30),   # low frequency → dormant account pattern
+        typical_value_range=(30, 600),
+        preferred_hours=[9, 10, 15, 16, 18],
+        weekend_multiplier=0.7,
+        fraud_susceptibility=2.0,        # prime ATO target
+    ),
+
+    "falsa_central_victim": BehavioralProfile(
+        name="falsa_central_victim",
+        description=(
+            "Golpe da falsa central victim: 55+ years, low digital literacy, "
+            "trusts phone calls from 'bank employees', high susceptibility to social engineering"
+        ),
+        age_range=(55, 85),
+        income_multiplier=(1.0, 4.0),   # often retirees with savings
+        transaction_types={
+            'PIX': 20,
+            'TED': 15,
+            'DEBIT_CARD': 30,
+            'BOLETO': 15,
+            'WITHDRAWAL': 15,
+            'CREDIT_CARD': 5,
+        },
+        preferred_mccs={
+            '5411': 30,   # Supermarkets
+            '5912': 20,   # Pharmacies
+            '8011': 15,   # Doctors
+            '4900': 15,   # Utilities
+            '6011': 15,   # ATM
+            '5499': 5,    # Convenience
+        },
+        channel_preferences={
+            'MOBILE_APP': 20,
+            'WEB_BANKING': 15,
+            'ATM': 35,
+            'BRANCH': 30,
+        },
+        monthly_tx_frequency=(8, 25),
+        typical_value_range=(50, 1000),
+        preferred_hours=[9, 10, 11, 14, 15, 16],
+        weekend_multiplier=0.5,
+        fraud_susceptibility=2.5,        # highest susceptibility — prime falsa central target
+    ),
+
+    "malware_ats_victim": BehavioralProfile(
+        name="malware_ats_victim",
+        description=(
+            "Malware/ATS victim: 18-45 years, high-risk app installer, "
+            "rooted Android device, APK from untrusted sources, high digital activity"
+        ),
+        age_range=(18, 45),
+        income_multiplier=(0.5, 2.5),
+        transaction_types={
+            'PIX': 65,
+            'CREDIT_CARD': 20,
+            'DEBIT_CARD': 10,
+            'AUTO_DEBIT': 5,
+        },
+        preferred_mccs={
+            '5812': 15,       # Delivery
+            '5815': 20,       # Streaming
+            '4121': 15,       # Rideshare
+            '5814': 10,       # Fast food
+            '7941': 10,       # Gyms
+            '5732': 15,       # Electronics/apps
+            '8299': 15,       # Online courses
+        },
+        channel_preferences={
+            'MOBILE_APP': 95,   # exclusively mobile — device compromise is effective
+            'WEB_BANKING': 4,
+            'WHATSAPP_PAY': 1,
+        },
+        monthly_tx_frequency=(50, 120),  # high digital activity = more exposure
+        typical_value_range=(10, 500),
+        preferred_hours=[19, 20, 21, 22, 23],  # evening sideload sessions
+        weekend_multiplier=1.4,
+        fraud_susceptibility=1.8,
+    ),
 }
 
 
 # Profile distribution weights for automatic assignment
+# Fraud victim archetypes receive low weights — they exist for targeted fraud injection,
+# not for the general population baseline.
 PROFILE_DISTRIBUTION = {
     ProfileType.YOUNG_DIGITAL.value: 25,
     ProfileType.TRADITIONAL_SENIOR.value: 15,
@@ -291,6 +404,10 @@ PROFILE_DISTRIBUTION = {
     ProfileType.HIGH_SPENDER.value: 8,
     ProfileType.SUBSCRIPTION_HEAVY.value: 20,
     ProfileType.FAMILY_PROVIDER.value: 22,
+    # Fraud victim archetypes (low base weight; boosted by fraud injection logic)
+    "ato_victim": 0,
+    "falsa_central_victim": 0,
+    "malware_ats_victim": 0,
 }
 
 PROFILE_LIST = list(PROFILE_DISTRIBUTION.keys())

@@ -25,7 +25,7 @@ class Device:
         fingerprint: Device fingerprint hash
         first_use: First use date
         is_trusted: Whether device is trusted
-        is_rooted_jailbroken: Whether device is rooted/jailbroken
+        rooted_or_jailbreak: Whether device is rooted/jailbroken
     """
     device_id: str
     customer_id: str
@@ -36,7 +36,7 @@ class Device:
     fingerprint: str
     first_use: date  # primeiro_uso
     is_trusted: bool = True
-    is_rooted_jailbroken: bool = False
+    rooted_or_jailbreak: bool = False
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
@@ -50,7 +50,7 @@ class Device:
             'fingerprint': self.fingerprint,
             'first_use': self.first_use.isoformat() if isinstance(self.first_use, date) else self.first_use,
             'is_trusted': self.is_trusted,
-            'is_rooted_jailbroken': self.is_rooted_jailbroken,
+            'rooted_or_jailbreak': self.rooted_or_jailbreak,
         }
     
     def to_json(self) -> str:
@@ -74,7 +74,7 @@ class Device:
             fingerprint=data['fingerprint'],
             first_use=first_use,
             is_trusted=data.get('is_trusted', True),
-            is_rooted_jailbroken=data.get('is_rooted_jailbroken', False),
+            rooted_or_jailbreak=data.get('rooted_or_jailbreak', data.get('is_rooted_jailbroken', False)),
         )
 
 

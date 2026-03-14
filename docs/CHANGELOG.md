@@ -16,6 +16,63 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v3.3 | **Turbo** | Performance Phase 1 (+18.9% speed, -85% storage) | 2025-01-30 |
 | v4.0 | **Quantum** | Phase 2.2-2.9: Session State + Parallelism + Analytics | 2026-01-30 |
 | v4.1 | **Guaraná** | SOLID CLI refactor + JSON schema mode | 2026-03-04 |
+| v4.2 | **Sinal** | Fraud signal pipeline: 17 signals + 4 rules + victim profiles | 2026-07 |
+
+---
+
+## v4.2 — Sinal (2026-07)
+
+### Pipeline de Sinais de Fraude
+
+Implementação completa da arquitetura de pontuação de fraude baseada em sinais comportamentais e biométricos do dispositivo, alinhada com dados BACEN/IBGE 2023-2024.
+
+#### Correções de Schema (breaking → compat)
+- **`fraud_score`**: tipo alterado de `float` para `int` (escala 0-100, sem decimais)
+- **`transactions_last_24h` → `velocity_transactions_24h`**: campo renomeado para semântica correta; `from_dict()` aceita ambos os nomes para retrocompatibilidade
+- **`is_rooted_jailbroken` → `rooted_or_jailbreak`**: renomeado para consistência com spec; `from_dict()` aceita ambos
+- Novo campo em `Transaction`: `fraud_risk_score: int = 0` — pontuação composta 0-100 calculada pelos 17 sinais
+
+#### Novo: `config/distributions.py`
+- Distribuições demográficas brasileiras baseadas em IBGE/PNAD 2023 e BACEN 2023
+- 7 classes de renda (E/D/C2/C1/B2/B1/A) com pesos populacionais reais
+- 7 faixas etárias da população bancarizada
+- 8 níveis de escolaridade IBGE
+- Funções: `sample_monthly_income()`, `sample_age()`, `sample_education()`, `sample_profession()`, `sample_credit_score()`, `sample_credit_limit()`
+
+#### Novo: `profiles/device.py`
+- 5 perfis de sinais biométricos de dispositivo para simulação por tipo de fraude
+- `DeviceSignalProfile` dataclass com 11 campos (pressão tátil, intervalo de digitação, aceleração, duração de sessão, etc.)
+- Perfis: `NORMAL_HUMAN`, `BOT_ATS`, `COERCED_USER`, `ACCOUNT_TAKEOVER`, `MONEY_MULE`
+- Função `sample_device_signals(profile, rng)` gera valores concretos por perfil
+
+#### Novo: `generators/session_context.py`
+- `GenerationContext` dataclass com 26 campos — snapshot completo de todos os sinais disponíveis no momento da geração de uma transação
+- `SessionContextGenerator.build()` — constrói contexto a partir de fraud_type + CustomerSessionState + sinais do dispositivo
+- `SessionContextGenerator.enrich_transaction(tx, ctx)` — mescla todos os campos do contexto no dicionário da transação
+
+#### Novo: `generators/correlations.py`
+- Motor de correlação de regras de fraude: avalia contexto contra 4 padrões comportamentais conhecidos
+- 4 regras implementadas (ordem de prioridade, mais específica primeiro):
+  1. **MALWARE_ATS** — emulador + rooted + digitação ≤15ms + pressão=0 + accel=0
+  2. **ATO** — dispositivo novo + IP mismatch + sessão 5-20s + inativo ≥168h
+  3. **FALSA_CENTRAL** — ligação ativa + pressão 0.75-0.90 + conta destino <7 dias
+  4. **CONTA_LARANJA** — múltiplas contas + inativo ≤2h + conta destino ≤14 dias
+- `match_fraud_rule(ctx)` — avalia e seta `ctx.matched_rule` como side-effect
+- `FraudRuleMatcher` — wrapper para injeção em testes
+
+#### Novo: `generators/score.py`
+- Calculadora de `fraud_risk_score` com 17 sinais ponderados, resultado int 0-100
+- Pesos calibrados para padrões de fraude bancária brasileira (2023-2024)
+- Top sinais: `active_call` (+35), `emulator` (+35), `rooted` (+30), `typing<15ms` (+30), `accel=0+session<5s` (+28)
+- `compute_fraud_risk_score(ctx)` — função principal
+- `score_breakdown(ctx)` — retorna dict por-sinal para análise de explicabilidade
+
+#### Atualizado: `profiles/behavioral.py`
+- 3 novos perfis de vítimas de fraude adicionados a `PROFILES`:
+  - **`ato_victim`** — 35-65 anos, conta dormante, baixa freq. transações (ATO target)
+  - **`falsa_central_victim`** — 55-85 anos, baixa alfabetização digital, sênior (golpe da central)
+  - **`malware_ats_victim`** — 18-45 anos, usuário Android de risco, APK sideload
+- Perfis de vítima têm peso 0 em `PROFILE_DISTRIBUTION` — não são selecionados aleatoriamente; só via injeção explícita de fraude
 
 ---
 

@@ -51,7 +51,7 @@ FIELD_CATALOG: Dict[str, List[str]] = {
         "cvv_validated", "auth_3ds",
         "pix_key_type", "pix_key_destination", "destination_bank",
         "distance_from_last_txn_km", "time_since_last_txn_min",
-        "transactions_last_24h", "accumulated_amount_24h",
+        "velocity_transactions_24h", "accumulated_amount_24h",
         "unusual_time", "new_beneficiary",
         "status", "refusal_reason", "fraud_score", "is_fraud", "fraud_type",
     ],

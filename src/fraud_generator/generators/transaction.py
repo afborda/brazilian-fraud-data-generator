@@ -438,15 +438,15 @@ class TransactionGenerator:
         if characteristics.get('velocity') == 'HIGH':
             if 'transaction_burst' in characteristics:
                 min_burst, max_burst = characteristics['transaction_burst']
-                tx['transactions_last_24h'] = random.randint(min_burst, max_burst)
+                tx['velocity_transactions_24h'] = random.randint(min_burst, max_burst)
             else:
-                tx['transactions_last_24h'] = random.randint(10, 30)
+                tx['velocity_transactions_24h'] = random.randint(10, 30)
             
             # High accumulated amount
-            tx['accumulated_amount_24h'] = round(tx['amount'] * tx['transactions_last_24h'] * random.uniform(0.6, 0.9), 2)
+            tx['accumulated_amount_24h'] = round(tx['amount'] * tx['velocity_transactions_24h'] * random.uniform(0.6, 0.9), 2)
         elif characteristics.get('velocity') == 'MEDIUM':
-            tx['transactions_last_24h'] = random.randint(5, 12)
-            tx['accumulated_amount_24h'] = round(tx['amount'] * tx['transactions_last_24h'] * 0.7, 2)
+            tx['velocity_transactions_24h'] = random.randint(5, 12)
+            tx['accumulated_amount_24h'] = round(tx['amount'] * tx['velocity_transactions_24h'] * 0.7, 2)
         
         # TIME ANOMALY: Unusual hours (madrugada for account takeover)
         time_anomaly = characteristics.get('time_anomaly', 'NONE')
@@ -517,20 +517,20 @@ class TransactionGenerator:
                 tx['card_test_phase'] = 1
                 # Multiple small merchants
                 burst_min, burst_max = chars.get('transaction_burst', (3, 8))
-                tx['transactions_last_24h'] = random.randint(burst_min, burst_max)
+                tx['velocity_transactions_24h'] = random.randint(burst_min, burst_max)
             else:
                 # Phase 3: large transaction
                 lo, hi = chars.get('card_test_phase_3_amount', (3000.0, 15000.0))
                 tx['amount'] = round(random.uniform(lo, hi), 2)
                 tx['card_test_phase'] = 3
-                tx['transactions_last_24h'] = random.randint(1, 2)
+                tx['velocity_transactions_24h'] = random.randint(1, 2)
 
         # ---- T3: Micro-Burst Velocity ------------------------------------ #
         elif fraud_type == 'MICRO_BURST_VELOCITY':
             import uuid as _uuid
             tx['velocity_burst_id'] = str(_uuid.uuid4())
             burst_min, burst_max = characteristics.get('transaction_burst', (10, 50))
-            tx['transactions_last_24h'] = random.randint(burst_min, burst_max)
+            tx['velocity_transactions_24h'] = random.randint(burst_min, burst_max)
             window_min, window_max = characteristics.get('burst_window_minutes', (5, 15))
             # Compress timestamp into the burst window
             window_seconds = random.randint(window_min, window_max) * 60
@@ -540,7 +540,7 @@ class TransactionGenerator:
             burst_ts = burst_ts + _td(seconds=offset_s)
             tx['timestamp'] = burst_ts.isoformat()
             tx['accumulated_amount_24h'] = round(
-                tx['amount'] * tx['transactions_last_24h'] * random.uniform(0.7, 0.9), 2
+                tx['amount'] * tx['velocity_transactions_24h'] * random.uniform(0.7, 0.9), 2
             )
 
         # ---- T3: Distributed Velocity ------------------------------------ #
@@ -549,14 +549,14 @@ class TransactionGenerator:
             group_id = str(_uuid.uuid4())
             tx['distributed_attack_group'] = group_id
             per_min, per_max = characteristics.get('transactions_per_device', (2, 3))
-            tx['transactions_last_24h'] = random.randint(per_min, per_max)  # Per device
+            tx['velocity_transactions_24h'] = random.randint(per_min, per_max)  # Per device
             # Rotate device on each hit
             tx['device_id'] = f"DEV_DIST_{random.randint(100000, 999999):06d}"
             tx['ip_address'] = self._buf.next_ip()  # Fresh IP each time
 
         # FRAUD SCORE: Higher base score for pattern
         base_score = pattern.get('fraud_score_base', 0.5)
-        tx['fraud_score'] = round(random.uniform(base_score * 100, 95), 2)
+        tx['fraud_score'] = int(random.uniform(base_score * 100, 95))
         
         return tx
     
@@ -578,7 +578,7 @@ class TransactionGenerator:
                 ['APPROVED', 'DECLINED', 'PENDING', 'BLOCKED'],
                 [60, 25, 10, 5]
             )
-            fraud_score = round(self._buf.next_uniform(65, 100), 2)
+            fraud_score = int(self._buf.next_uniform(65, 100))
             default_transactions_24h = self._buf.next_int(5, 50)
             default_accumulated_amount = round(self._buf.next_uniform(2000, 50000), 2)
         else:
@@ -587,15 +587,15 @@ class TransactionGenerator:
                 ['APPROVED', 'DECLINED', 'PENDING'],
                 [96, 3, 1]
             )
-            fraud_score = round(self._buf.next_uniform(0, 35), 2)
+            fraud_score = int(self._buf.next_uniform(0, 35))
             default_transactions_24h = self._buf.next_int(1, 15)
             default_accumulated_amount = round(self._buf.next_uniform(50, 5000), 2)
 
         # Improved risk indicators with session state (OTIMIZAÇÃO 2.2/2.3)
         if session_state:
             # Velocity / accumulated (use session unless fraud pattern already set)
-            if tx.get('transactions_last_24h') is None:
-                tx['transactions_last_24h'] = session_state.get_velocity(timestamp) + 1
+            if tx.get('velocity_transactions_24h') is None:
+                tx['velocity_transactions_24h'] = session_state.get_velocity(timestamp) + 1
             if tx.get('accumulated_amount_24h') is None:
                 tx['accumulated_amount_24h'] = round(
                     session_state.get_accumulated_24h(timestamp) + float(tx.get('amount', 0.0)),
@@ -622,8 +622,8 @@ class TransactionGenerator:
                 tx['distance_from_last_txn_km'] = round(self._buf.next_uniform(0, 100), 2) if self._buf.next_float() > 0.5 else None
             if tx.get('time_since_last_txn_min') is None:
                 tx['time_since_last_txn_min'] = self._buf.next_int(1, 1440) if self._buf.next_float() > 0.3 else None
-            if tx.get('transactions_last_24h') is None:
-                tx['transactions_last_24h'] = default_transactions_24h
+            if tx.get('velocity_transactions_24h') is None:
+                tx['velocity_transactions_24h'] = default_transactions_24h
             if tx.get('accumulated_amount_24h') is None:
                 tx['accumulated_amount_24h'] = default_accumulated_amount
             if tx.get('new_beneficiary') is None:
@@ -634,6 +634,7 @@ class TransactionGenerator:
             'status': status,
             'refusal_reason': self._buf.next_choice(REFUSAL_REASONS) if status == 'DECLINED' else None,
             'fraud_score': fraud_score,
+            'fraud_risk_score': 0,  # populated by generators/score.py
             'is_fraud': is_fraud,
             'fraud_type': fraud_type,
         })
