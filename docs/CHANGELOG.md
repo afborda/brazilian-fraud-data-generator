@@ -22,6 +22,18 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ---
 
+## v4.5 — Separação Estratégica (2026-03-14)
+
+### Segurança / Governança de Repositório
+
+- **Docs de estratégia removidos do repo público**: `PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md`, `PRICING_ANALYSIS_COMPLETO.md`, `pricing_charts.html`, `CHECKLIST_MELHORIAS_DISRUPTIVAS_E_UX.md`, `ROADMAP_TECNICO_DETALHADO.md`, `ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md` deletados do OS repo. Devem residir no repo privado `afborda/synthfin-saas`.
+- **Pastas de estratégia removidas**: `docs/Analise e comparacao com estudos das ferias/`, `docs/mercado/`, `docs/pesquisa_mercado/`, `docs/planning/` deletadas do repo público.
+- **`admin_tools/` removido**: ferramentas de emissão de licença (`issue_license.py`) não devem estar em repo público.
+- **`docs/analysis/ROADMAP_ARQUITETURA.md` e `MAPA_OPORTUNIDADES.md` removidos**: expunham gaps de implementação e oportunidades de produto.
+- **`docs/INDEX.md` atualizado**: removidas todas as referências aos docs deletados; adicionada nota indicando que docs de estratégia estão no repo privado. Estatísticas e versão atualizadas.
+
+---
+
 ## v4.4 — Padrões (2026-03-14)
 
 ### T7 — Padrões seqüenciais de fraude
