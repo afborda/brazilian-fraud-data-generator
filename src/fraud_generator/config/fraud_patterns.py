@@ -138,6 +138,81 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         'prevalence': 0.06,
         'fraud_score_base': 0.70,
     },
+
+    # ------------------------------------------------------------------ #
+    #  T3 — Novos Padrões de Alta Prioridade                              #
+    # ------------------------------------------------------------------ #
+
+    'CARD_TESTING': {
+        'name': 'Teste de Cartão (Card Testing)',
+        'description': (
+            'Validação de cartões roubados em 3 fases: micro-compras → silêncio '
+            '→ compras grandes. Sinal de ML muito forte: escalada de valor + '
+            'burst de pequenas transações.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'MEDIUM',            # Varia por fase (baixo→alto)
+            'new_beneficiary': False,             # Merchants comuns
+            'velocity': 'HIGH',                   # Burst na fase 1
+            'time_anomaly': 'LOW',
+            'location_anomaly': 'HIGH',           # International / VPN
+            'device_anomaly': 'HIGH',             # Device nunca visto
+            'channel_preference': ['ECOMMERCE', 'POS'],
+            'transaction_burst': (3, 8),          # Fase-1: 3-8 micro-transações
+            # Fase 1 (65% prob): micro-amounts
+            'card_test_phase_1_amount': (0.01, 1.00),
+            # Fase 3 (35% prob): grandes
+            'card_test_phase_3_amount': (3000.0, 15000.0),
+            'mcc_preference': ['5999', '5732', '5411', '5912'],
+        },
+        'prevalence': 0.07,
+        'fraud_score_base': 0.75,
+    },
+
+    'MICRO_BURST_VELOCITY': {
+        'name': 'Rajada de Velocidade (Micro-Burst)',
+        'description': (
+            '10–50 transações em janela de 5–15 minutos, com valores variados. '
+            'Tipicamente de device novo ou IP nunca visto. Indica automação / '
+            'ataque de força bruta.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'MEDIUM',
+            'new_beneficiary': True,
+            'velocity': 'HIGH',
+            'time_anomaly': 'MEDIUM',
+            'location_anomaly': 'MEDIUM',
+            'device_anomaly': 'HIGH',             # Device novo ou IP suspeito
+            'channel_preference': ['ECOMMERCE', 'MOBILE_APP', 'PIX'],
+            'amount_multiplier': (0.5, 3.0),
+            'transaction_burst': (10, 50),        # 10-50 txns em 5-15 min
+            'burst_window_minutes': (5, 15),      # Janela de tempo em minutos
+        },
+        'prevalence': 0.05,
+        'fraud_score_base': 0.80,
+    },
+
+    'DISTRIBUTED_VELOCITY': {
+        'name': 'Velocidade Distribuída (Evasão de Velocity Check)',
+        'description': (
+            'Mesmo ataque com rotação de devices/IPs para iludir velocity checks. '
+            '2–3 transações por device, depois troca. Alta correlação com rings '
+            'de fraude quando agrupadas por `distributed_attack_group`.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'MEDIUM',
+            'new_beneficiary': True,
+            'velocity': 'MEDIUM',                 # Baixo por device — alto no grupo
+            'time_anomaly': 'MEDIUM',
+            'location_anomaly': 'HIGH',           # IPs/cidades diferentes
+            'device_anomaly': 'HIGH',             # Rotação de devices
+            'channel_preference': ['ECOMMERCE', 'PIX', 'MOBILE_APP'],
+            'amount_multiplier': (1.0, 4.0),
+            'transactions_per_device': (2, 3),    # Antes de trocar device/IP
+        },
+        'prevalence': 0.04,
+        'fraud_score_base': 0.78,
+    },
 }
 
 # List of fraud types for random selection

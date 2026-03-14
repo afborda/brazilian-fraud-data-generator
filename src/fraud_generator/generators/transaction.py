@@ -17,6 +17,12 @@ from ..config.transactions import (
     INSTALLMENT_LIST, INSTALLMENT_WEIGHTS,
     REFUSAL_REASONS,
 )
+from ..config.seasonality import (
+    pick_weighted_date,
+    pick_hour,
+    HORA_WEIGHTS_PADRAO,
+    HORA_WEIGHTS_FRAUD_ATO,
+)
 from ..config.fraud_patterns import (
     FRAUD_PATTERNS,
     get_fraud_pattern,
@@ -40,6 +46,7 @@ from ..profiles.behavioral import (
 from ..utils.helpers import generate_ip_brazil, generate_random_hash
 from ..utils.streaming import CustomerSessionState
 from ..utils.weight_cache import WeightCache  # OTIMIZAÇÃO 1.1
+from ..utils.precompute import PrecomputeBuffers  # OTIMIZAÇÃO 3: RAM pre-compute
 
 
 class TransactionGenerator:
@@ -91,6 +98,9 @@ class TransactionGenerator:
         
         # OTIMIZAÇÃO 2: Fraud pattern cache for contextualized fraud
         self._fraud_patterns = FRAUD_PATTERNS
+
+        # OTIMIZAÇÃO 3: RAM pre-compute buffers
+        self._buf = PrecomputeBuffers(seed=seed)
     
     def generate(
         self,
@@ -101,7 +111,8 @@ class TransactionGenerator:
         customer_state: Optional[str] = None,
         customer_profile: Optional[str] = None,
         force_fraud: Optional[bool] = None,
-        session_state: Optional[CustomerSessionState] = None
+        session_state: Optional[CustomerSessionState] = None,
+        location_cluster: Optional[tuple] = None,
     ) -> Dict[str, Any]:
         """
         Generate a single transaction.
@@ -155,7 +166,7 @@ class TransactionGenerator:
         merchant_name = random.choice(merchants)
         
         # Geolocation
-        lat, lon = self._get_geolocation(customer_state, is_fraud)
+        lat, lon = self._get_geolocation(customer_state, is_fraud, location_cluster)
         
         # Channel (profile-aware)
         if self.use_profiles and customer_profile:
@@ -177,17 +188,21 @@ class TransactionGenerator:
             'amount': valor,
             'currency': 'BRL',
             'channel': canal,
-            'ip_address': generate_ip_brazil(),
+            'ip_address': self._buf.next_ip(),
             'geolocation_lat': lat,
             'geolocation_lon': lon,
-            'merchant_id': f'MERCH_{random.randint(1, 100000):06d}',
+            'merchant_id': self._buf.next_merchant_id(),
             'merchant_name': merchant_name,
             'merchant_category': mcc_info['category'],
             'mcc_code': mcc_code,
             'mcc_risk_level': mcc_info['risk'],
+            # T3 — velocity / card-testing fields (set by _apply_fraud_pattern)
+            'card_test_phase': None,
+            'velocity_burst_id': None,
+            'distributed_attack_group': None,
         }
         
-        # Add type-specific fields
+        # Add type-specific fields (uses pre-computed buffers)
         self._add_type_specific_fields(tx, tx_type, banco_destino)
         
         # OTIMIZAÇÃO 2: Apply fraud pattern characteristics if fraud
@@ -267,33 +282,52 @@ class TransactionGenerator:
     def _calculate_fraud_value(self, fraud_type: Optional[str]) -> float:
         """Calculate fraud transaction value."""
         if fraud_type in ['LAVAGEM_DINHEIRO', 'TRIANGULACAO']:
-            return round(random.uniform(5000, 50000), 2)
+            return round(self._buf.next_uniform(5000, 50000), 2)
         elif fraud_type in ['CARTAO_CLONADO', 'CONTA_TOMADA']:
-            return round(random.uniform(500, 10000), 2)
+            return round(self._buf.next_uniform(500, 10000), 2)
         else:
-            return round(random.uniform(200, 5000), 2)
+            return round(self._buf.next_uniform(200, 5000), 2)
     
     def _get_geolocation(
         self,
         customer_state: Optional[str],
-        is_fraud: bool
+        is_fraud: bool,
+        location_cluster: Optional[tuple] = None,
     ) -> Tuple[float, float]:
-        """Get geolocation for transaction."""
-        # Fraud sometimes happens in different states
-        if is_fraud and random.random() < 0.3:
-            estado = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
-        elif customer_state and customer_state in ESTADOS_BR:
+        """Get geolocation for transaction.
+
+        Legitimate transactions (~95%) are drawn from the customer's habitual
+        location cluster (home/work/shopping/other).  Fraud with HIGH location
+        anomaly is placed in a random *different* state to enable impossible-
+        travel detection; MEDIUM anomaly offsets the cluster by 1-3°.
+        """
+        # ── Fraud: HIGH location anomaly → completely different state
+        if is_fraud and self._buf.next_float() < 0.3:
+            diff_state = self._estado_cache.sample()
+            info = ESTADOS_BR[diff_state]
+            lat = round(info['lat'] + self._buf.next_uniform(-0.5, 0.5), 6)
+            lon = round(info['lon'] + self._buf.next_uniform(-0.5, 0.5), 6)
+            return lat, lon
+
+        # ── Legitimate (or fraud without location anomaly): use cluster
+        if location_cluster:
+            lats   = [p[0] for p in location_cluster]
+            lons   = [p[1] for p in location_cluster]
+            wts    = [p[2] for p in location_cluster]
+            idx    = random.choices(range(len(location_cluster)), weights=wts, k=1)[0]
+            # small jitter within ~1km so the same "home" isn't one pixel
+            lat = round(lats[idx] + self._buf.next_uniform(-0.01, 0.01), 6)
+            lon = round(lons[idx] + self._buf.next_uniform(-0.01, 0.01), 6)
+            return lat, lon
+
+        # ── Fallback: state-level random (backward compat)
+        if customer_state and customer_state in ESTADOS_BR:
             estado = customer_state
         else:
-            estado = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
-        
-        estado_info = ESTADOS_BR[estado]
-        base_lat, base_lon = estado_info['lat'], estado_info['lon']
-        
-        # Add random offset (within ~50km)
-        lat = round(base_lat + random.uniform(-0.5, 0.5), 6)
-        lon = round(base_lon + random.uniform(-0.5, 0.5), 6)
-        
+            estado = self._estado_cache.sample()
+        info = ESTADOS_BR[estado]
+        lat = round(info['lat'] + self._buf.next_uniform(-0.5, 0.5), 6)
+        lon = round(info['lon'] + self._buf.next_uniform(-0.5, 0.5), 6)
         return lat, lon
     
     def _add_type_specific_fields(
@@ -306,13 +340,13 @@ class TransactionGenerator:
         if tx_type in ['CREDIT_CARD', 'DEBIT_CARD']:
             card_brand = self._brand_cache.sample()
             tx.update({
-                'card_number_hash': generate_random_hash(16),
+                'card_number_hash': self._buf.next_hash16(),
                 'card_brand': card_brand,
                 'card_type': 'CREDIT' if tx_type == 'CREDIT_CARD' else 'DEBIT',
                 'installments': self._installment_cache.sample() if tx_type == 'CREDIT_CARD' else 1,
                 'card_entry': self._card_entry_cache.sample(),
-                'cvv_validated': random.random() < 0.95,
-                'auth_3ds': random.random() < 0.70,
+                'cvv_validated': self._buf.next_bool(0.95),
+                'auth_3ds': self._buf.next_bool(0.70),
                 'pix_key_type': None,
                 'pix_key_destination': None,
                 'destination_bank': None,
@@ -328,7 +362,7 @@ class TransactionGenerator:
                 'cvv_validated': None,
                 'auth_3ds': None,
                 'pix_key_type': pix_key_type,
-                'pix_key_destination': generate_random_hash(32),
+                'pix_key_destination': self._buf.next_hash32(),
                 'destination_bank': banco_destino,
             })
         else:
@@ -473,6 +507,53 @@ class TransactionGenerator:
             merchants = self._merchants_cache.get(new_mcc, ['Suspicious Merchant'])
             tx['merchant_name'] = random.choice(merchants)
         
+        # ---- T3: Card Testing phases ------------------------------------ #
+        if fraud_type == 'CARD_TESTING':
+            chars = characteristics
+            if random.random() < 0.65:
+                # Phase 1: micro-transactions
+                lo, hi = chars.get('card_test_phase_1_amount', (0.01, 1.00))
+                tx['amount'] = round(random.uniform(lo, hi), 2)
+                tx['card_test_phase'] = 1
+                # Multiple small merchants
+                burst_min, burst_max = chars.get('transaction_burst', (3, 8))
+                tx['transactions_last_24h'] = random.randint(burst_min, burst_max)
+            else:
+                # Phase 3: large transaction
+                lo, hi = chars.get('card_test_phase_3_amount', (3000.0, 15000.0))
+                tx['amount'] = round(random.uniform(lo, hi), 2)
+                tx['card_test_phase'] = 3
+                tx['transactions_last_24h'] = random.randint(1, 2)
+
+        # ---- T3: Micro-Burst Velocity ------------------------------------ #
+        elif fraud_type == 'MICRO_BURST_VELOCITY':
+            import uuid as _uuid
+            tx['velocity_burst_id'] = str(_uuid.uuid4())
+            burst_min, burst_max = characteristics.get('transaction_burst', (10, 50))
+            tx['transactions_last_24h'] = random.randint(burst_min, burst_max)
+            window_min, window_max = characteristics.get('burst_window_minutes', (5, 15))
+            # Compress timestamp into the burst window
+            window_seconds = random.randint(window_min, window_max) * 60
+            offset_s = random.randint(0, window_seconds)
+            burst_ts = timestamp.replace(second=0, microsecond=0)
+            from datetime import timedelta as _td
+            burst_ts = burst_ts + _td(seconds=offset_s)
+            tx['timestamp'] = burst_ts.isoformat()
+            tx['accumulated_amount_24h'] = round(
+                tx['amount'] * tx['transactions_last_24h'] * random.uniform(0.7, 0.9), 2
+            )
+
+        # ---- T3: Distributed Velocity ------------------------------------ #
+        elif fraud_type == 'DISTRIBUTED_VELOCITY':
+            import uuid as _uuid
+            group_id = str(_uuid.uuid4())
+            tx['distributed_attack_group'] = group_id
+            per_min, per_max = characteristics.get('transactions_per_device', (2, 3))
+            tx['transactions_last_24h'] = random.randint(per_min, per_max)  # Per device
+            # Rotate device on each hit
+            tx['device_id'] = f"DEV_DIST_{random.randint(100000, 999999):06d}"
+            tx['ip_address'] = self._buf.next_ip()  # Fresh IP each time
+
         # FRAUD SCORE: Higher base score for pattern
         base_score = pattern.get('fraud_score_base', 0.5)
         tx['fraud_score'] = round(random.uniform(base_score * 100, 95), 2)
@@ -492,21 +573,23 @@ class TransactionGenerator:
         unusual_time = hour < 6 or hour > 23
         
         if is_fraud:
-            status = random.choices(
+            status = self._buf.next_weighted(
+                'status_fraud',
                 ['APPROVED', 'DECLINED', 'PENDING', 'BLOCKED'],
-                weights=[60, 25, 10, 5]
-            )[0]
-            fraud_score = round(random.uniform(65, 100), 2)
-            default_transactions_24h = random.randint(5, 50)
-            default_accumulated_amount = round(random.uniform(2000, 50000), 2)
+                [60, 25, 10, 5]
+            )
+            fraud_score = round(self._buf.next_uniform(65, 100), 2)
+            default_transactions_24h = self._buf.next_int(5, 50)
+            default_accumulated_amount = round(self._buf.next_uniform(2000, 50000), 2)
         else:
-            status = random.choices(
+            status = self._buf.next_weighted(
+                'status_normal',
                 ['APPROVED', 'DECLINED', 'PENDING'],
-                weights=[96, 3, 1]
-            )[0]
-            fraud_score = round(random.uniform(0, 35), 2)
-            default_transactions_24h = random.randint(1, 15)
-            default_accumulated_amount = round(random.uniform(50, 5000), 2)
+                [96, 3, 1]
+            )
+            fraud_score = round(self._buf.next_uniform(0, 35), 2)
+            default_transactions_24h = self._buf.next_int(1, 15)
+            default_accumulated_amount = round(self._buf.next_uniform(50, 5000), 2)
 
         # Improved risk indicators with session state (OTIMIZAÇÃO 2.2/2.3)
         if session_state:
@@ -536,20 +619,20 @@ class TransactionGenerator:
         else:
             # Fallback to random indicators
             if tx.get('distance_from_last_txn_km') is None:
-                tx['distance_from_last_txn_km'] = round(random.uniform(0, 100), 2) if random.random() > 0.5 else None
+                tx['distance_from_last_txn_km'] = round(self._buf.next_uniform(0, 100), 2) if self._buf.next_float() > 0.5 else None
             if tx.get('time_since_last_txn_min') is None:
-                tx['time_since_last_txn_min'] = random.randint(1, 1440) if random.random() > 0.3 else None
+                tx['time_since_last_txn_min'] = self._buf.next_int(1, 1440) if self._buf.next_float() > 0.3 else None
             if tx.get('transactions_last_24h') is None:
                 tx['transactions_last_24h'] = default_transactions_24h
             if tx.get('accumulated_amount_24h') is None:
                 tx['accumulated_amount_24h'] = default_accumulated_amount
             if tx.get('new_beneficiary') is None:
-                tx['new_beneficiary'] = random.random() < (0.7 if is_fraud else 0.15)
+                tx['new_beneficiary'] = self._buf.next_float() < (0.7 if is_fraud else 0.15)
         
         tx.update({
             'unusual_time': unusual_time,
             'status': status,
-            'refusal_reason': random.choice(REFUSAL_REASONS) if status == 'DECLINED' else None,
+            'refusal_reason': self._buf.next_choice(REFUSAL_REASONS) if status == 'DECLINED' else None,
             'fraud_score': fraud_score,
             'is_fraud': is_fraud,
             'fraud_type': fraud_type,
@@ -561,34 +644,22 @@ class TransactionGenerator:
         end_date: datetime,
         customer_profile: Optional[str]
     ) -> datetime:
-        """Generate realistic timestamp."""
-        # Random day
-        days_between = (end_date - start_date).days
-        random_day = start_date + timedelta(days=random.randint(0, days_between))
-        
-        # Hour based on profile
+        """Generate realistic timestamp with DOW + seasonality weighting."""
+        # ── T1: dia ponderado por dia-da-semana + sazonalidade ─────────────────
+        random_day = pick_weighted_date(start_date.date(), end_date.date())
+
+        # ── T1: hora com distribuição trimodal (picos 12h, 18h, 21h) ──────────
         if self.use_profiles and customer_profile:
             is_weekend = random_day.weekday() >= 5
             hour = get_transaction_hour_for_profile(customer_profile, is_weekend)
         else:
-            # Default hour distribution
-            hour_weights = {
-                0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
-                6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
-                12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
-                18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
-            }
-            hours = list(hour_weights.keys())
-            weights = list(hour_weights.values())
-            hour = random.choices(hours, weights=weights)[0]
-        
+            hour = pick_hour(HORA_WEIGHTS_PADRAO)
+
         minute = random.randint(0, 59)
         second = random.randint(0, 59)
         microsecond = random.randint(0, 999999)
-        
-        return random_day.replace(
-            hour=hour,
-            minute=minute,
-            second=second,
-            microsecond=microsecond
+
+        return datetime(
+            random_day.year, random_day.month, random_day.day,
+            hour, minute, second, microsecond
         )

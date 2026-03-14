@@ -146,6 +146,46 @@ docs/.sphinx/
 minio_credentials.json
 aws_credentials.json
 
+# ============================================================
+# SaaS / Produto Pago — NUNCA no repo público
+# Esses diretórios vivem apenas no repo privado synthfin-saas
+# ============================================================
+src/fraud_generator/licensing/
+src/fraud_generator/api/
+src/fraud_generator/email/
+admin_tools/
+license.env.example
+.env.server.example
+.env.server
+tests/unit/test_licensing.py
+tests/unit/test_api*.py
+
+# API - planejamento e código da API hospedada (repo privado)
+api/
+
+# Documentos confidenciais — estratégia interna, PDFs, pricing, monetização
+docs/documentodeestudos/
+"docs/Analise e comparacao com estudos das ferias/"
+docs/Analise*/
+docs/PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md
+docs/PRICING_ANALYSIS_COMPLETO.md
+docs/SHADOWTRAFFIC_ANALYSIS.md
+docs/ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md/
+
+# Landing page do produto (repo separado: synthfin-site)
+landpage/
+
+# Docker Compose do servidor SaaS
+docker-compose.server.yml
+Dockerfile.server
+
+# Outputs de teste temporários (não versionar dados gerados)
+after_t1/
+baseline_seed42/
+baseline_before/
+baseline_after/
+output_test/
+
 # Docker
 docker-compose.override.yml
 .docker/
@@ -187,6 +227,14 @@ benchmarks/.gitkeep
 docs/*.html
 docs/_build/
 
+# Documentação confidencial — re-ignorados DEPOIS do !*.md (última regra vence)
+# Estes arquivos contêm dados de pricing, estratégia e análise competitiva interna
+docs/PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md
+docs/PRICING_ANALYSIS_COMPLETO.md
+docs/SHADOWTRAFFIC_ANALYSIS.md
+docs/ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md
+docs/CHECKLIST_MELHORIAS_DISRUPTIVAS_E_UX.md
+
 # Local configuration
 config.local.yml
 settings.local.json
@@ -213,3 +261,9 @@ perf/
 *.pid
 *.seed
 *.pid.lock
+
+# License & secrets (never commit)
+license.env
+.env.server
+*.secret
+admin_tools/__pycache__/

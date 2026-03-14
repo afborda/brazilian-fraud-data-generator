@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-03-05T09:11:24",
+  "source_files": [
+    "transactions_00000.jsonl"
+  ],
+  "records_analyzed": 100000,
+  "score_realism": {
+    "temporal_score": 9.6,
+    "geo_score": 10.0,
+    "fraud_rate_score": 10.0,
+    "overall_score": 9.9,
+    "scale": "0-10 (10 = perfeito realismo)",
+    "targets_after_T1_T2": {
+      "temporal_score": "≥ 7.0",
+      "geo_score": "≥ 8.0",
+      "fraud_rate_score": "≥ 8.0",
+      "overall_score": "≥ 7.5"
+    }
+  },
+  "temporal": {
+    "temporal_entropy_normalized": 0.9213,
+    "temporal_realism_score": 9.2,
+    "hour_distribution_pct": {
+      "0": 1.02,
+      "1": 0.62,
+      "2": 0.45,
+      "3": 0.44,
+      "4": 0.32,
+      "5": 0.59,
+      "6": 1.53,
+      "7": 2.46,
+      "8": 3.8,
+      "9": 4.35,
+      "10": 4.96,
+      "11": 6.05,
+      "12": 8.01,
+      "13": 6.83,
+      "14": 5.01,
+      "15": 4.23,
+      "16": 4.83,
+      "17": 6.2,
+      "18": 8.61,
+      "19": 8.23,
+      "20": 6.27,
+      "21": 7.48,
+      "22": 5.23,
+      "23": 2.5
+    },
+    "dow_distribution_pct": {
+      "Seg": 15.04,
+      "Ter": 14.94,
+      "Qua": 15.77,
+      "Qui": 15.27,
+      "Sex": 22.38,
+      "Sab": 9.93,
+      "Dom": 6.67
+    },
+    "peak_hours_detected": [
+      12,
+      13,
+      18,
+      19,
+      20,
+      21
+    ],
+    "note": "Entropy ~1.0 = uniforme (atual, ruim para ML). Target: ~0.85 com picos visíveis em 12h, 18h, 21h."
+  },
+  "geo": {
+    "geo_entropy_normalized": 0.8756,
+    "geo_realism_score": 8.8,
+    "state_distribution_pct": {
+      "SP": 20.13,
+      "MG": 9.4,
+      "BA": 7.22,
+      "RJ": 6.96,
+      "RS": 6.42,
+      "PR": 5.67,
+      "GO": 4.59,
+      "PE": 4.43,
+      "CE": 4.2,
+      "PA": 3.66,
+      "MA": 3.08,
+      "SC": 3.07,
+      "DF": 2.18,
+      "AM": 2.14,
+      "AL": 2.09,
+      "MT": 1.99,
+      "ES": 1.88,
+      "PI": 1.87,
+      "RN": 1.79,
+      "PB": 1.72,
+      "SE": 1.2,
+      "MS": 0.95,
+      "RO": 0.92,
+      "AP": 0.82,
+      "TO": 0.79,
+      "AC": 0.5,
+      "RR": 0.33
+    },
+    "unique_states": 27,
+    "note": "Geo uniforme por estado é esperado agora (random). Após T2, transações legítimas devem ser concentradas em 3-5 estados por cliente."
+  },
+  "fraud": {
+    "total_records": 100000,
+    "fraud_count": 1967,
+    "fraud_rate_pct": 1.967,
+    "fraud_type_distribution_pct": {
+      "PIX_GOLPE": 20.44,
+      "ENGENHARIA_SOCIAL": 18.0,
+      "CONTA_TOMADA": 14.18,
+      "CARTAO_CLONADO": 11.39,
+      "FRAUDE_APLICATIVO": 11.24,
+      "COMPRA_TESTE": 6.81,
+      "CARD_TESTING": 5.54,
+      "MULA_FINANCEIRA": 4.93,
+      "MICRO_BURST_VELOCITY": 4.17,
+      "DISTRIBUTED_VELOCITY": 3.3
+    }
+  },
+  "amounts": {
+    "legitimate_transactions": {
+      "count": 98033,
+      "mean": 308.88,
+      "median": 140.23,
+      "p95": 1092.86,
+      "p99": 3262.39,
+      "max": 9427.66
+    },
+    "fraudulent_transactions": {
+      "count": 1967,
+      "mean": 1099.96,
+      "median": 577.54,
+      "p95": 3764.51,
+      "p99": 8899.85,
+      "max": 14920.46
+    }
+  }
+}

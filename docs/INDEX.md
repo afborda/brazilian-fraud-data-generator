@@ -6,6 +6,8 @@
 - [README](README.md) - Main project documentation (English)
 - [README.pt-BR](README.pt-BR.md) - Main project documentation (Portuguese)
 - [CHANGELOG](CHANGELOG.md) - Version history and release notes
+- [ARQUITETURA.md](ARQUITETURA.md) - Technical architecture deep-dive (Portuguese)
+- [ROADMAP_TECNICO_DETALHADO.md](ROADMAP_TECNICO_DETALHADO.md) - Detailed technical roadmap
 
 ---
 
@@ -27,54 +29,63 @@ Deep-dive analysis of project architecture, performance metrics, and behavioral 
 | [INDICE_ANALISE.md](analysis/INDICE_ANALISE.md) | Analysis index |
 | [MAPA_OPORTUNIDADES.md](analysis/MAPA_OPORTUNIDADES.md) | Opportunities map |
 
-### ⚡ Optimizations (`/optimizations`)
-Phase 1 optimization implementations, checklists, and detailed reports.
+### 🚨 Fraud Research (`/fraudes`)
+Fraud taxonomy, validation analysis, and implementation roadmap.
 
 | File | Purpose |
 |------|---------|
-| [OPTIMIZATIONS_SUMMARY_PHASE_1.md](optimizations/OPTIMIZATIONS_SUMMARY_PHASE_1.md) | Complete Phase 1 optimization summary (7 optimizations) |
-| [PHASE_1_CHECKLIST.md](optimizations/PHASE_1_CHECKLIST.md) | Phase 1 implementation verification checklist |
-| [IMPLEMENTACAO_FASE_1_COMPLETA.md](optimizations/IMPLEMENTACAO_FASE_1_COMPLETA.md) | Complete Phase 1 implementation guide |
-| [RELATORIO_OTIMIZACAO_1_1.md](optimizations/RELATORIO_OTIMIZACAO_1_1.md) | Detailed report for optimization 1.1 (WeightCache) |
+| [README.md](fraudes/README.md) | Fraud documentation index |
+| [INDICE_EXECUTIVO.md](fraudes/INDICE_EXECUTIVO.md) | Executive index: 64+ fraud patterns found, TOP 5 actions |
+| [FRAUDES_DESCOBERTAS.md](fraudes/FRAUDES_DESCOBERTAS.md) | Deep fraud research: 50+ patterns discovered |
+| [ANALISE_VALIDACAO_DADOS.md](fraudes/ANALISE_VALIDACAO_DADOS.md) | Data validation: synthetic vs. reality quality metrics |
+| [MATRIZ_FRAUDES.md](fraudes/MATRIZ_FRAUDES.md) | Fraud matrix quick reference table |
+| [TURNOS_IMPLEMENTACAO.md](fraudes/TURNOS_IMPLEMENTACAO.md) | Implementation shifts: 8 sequential phases |
 
-### 📈 Benchmarks (`/benchmarks`)
-Performance benchmarking data and before/after comparisons.
-
-| File | Purpose |
-|------|---------|
-| [BENCHMARKS_ANTES_DEPOIS.md](benchmarks/BENCHMARKS_ANTES_DEPOIS.md) | Before/after performance comparison |
-| [BENCHMARKS_1_1_1_2_1_3.md](benchmarks/BENCHMARKS_1_1_1_2_1_3.md) | Detailed benchmarks for optimizations 1.1, 1.2, 1.3 |
-
-### 🗺️ Planning (`/planning`)
-Phase 2 and future roadmap planning documents.
+### 🏪 Market Research (`/mercado`)
+Business strategy, market analysis, and monetization.
 
 | File | Purpose |
 |------|---------|
-| [PHASE_2_ROADMAP.md](planning/PHASE_2_ROADMAP.md) | Phase 2 optimization roadmap (2.1-2.9) |
-| [PHASE_2_1_DETAILED_PLAN.md](planning/PHASE_2_1_DETAILED_PLAN.md) | Detailed plan for Phase 2.1 (compression) |
-| [PLANO_IMPLEMENTACAO.md](planning/PLANO_IMPLEMENTACAO.md) | Implementation plan (Portuguese) |
+| [README.md](mercado/README.md) | Market analysis folder index |
+| [ANALISE_MERCADO_CONSOLIDADA.md](mercado/ANALISE_MERCADO_CONSOLIDADA.md) | Consolidated market analysis and demand signals |
+| [RISCO_COMMODITY.md](mercado/RISCO_COMMODITY.md) | Commodity risk analysis and differentiation strategy |
+| [PLANOS_PAGOS_IA.md](mercado/PLANOS_PAGOS_IA.md) | AI-driven paid plans concept (auto-updating fraud patterns) |
 
-### 🚀 Release (`/release`)
-Merge preparation, release procedures, and deployment guides.
+### 🔍 Competitive Research (`/pesquisa_mercado`)
+Research on competitors, pricing, and market positioning.
 
 | File | Purpose |
 |------|---------|
-| [MERGE_AND_RELEASE_PREPARATION.md](release/MERGE_AND_RELEASE_PREPARATION.md) | Complete merge and release preparation guide |
+| [README.md](pesquisa_mercado/README.md) | Market research folder index |
+| [01_SHADOWTRAFFIC_PESQUISA.md](pesquisa_mercado/01_SHADOWTRAFFIC_PESQUISA.md) | ShadowTraffic competitive research |
+| [02_ANALISE_COMPARATIVA.md](pesquisa_mercado/02_ANALISE_COMPARATIVA.md) | Feature-by-feature comparison: ShadowTraffic vs BFDG |
+| [03_CAPACIDADE_E_ESCALABILIDADE.md](pesquisa_mercado/03_CAPACIDADE_E_ESCALABILIDADE.md) | API capacity and scalability benchmarks |
+| [04_MODELO_NEGOCIO.md](pesquisa_mercado/04_MODELO_NEGOCIO.md) | Business model and pricing plans |
+| [05_HOSTED_API_GUIA_USUARIO.md](pesquisa_mercado/05_HOSTED_API_GUIA_USUARIO.md) | Hosted API user guide concept |
+| [06_PESQUISA_GIL_BYPASS.md](pesquisa_mercado/06_PESQUISA_GIL_BYPASS.md) | GIL bypass research: multiprocessing, Cython, Rust |
 
 ---
 
-## 🔧 Feature Documentation
+## 🔧 Technical Guides
 
-### Ride-Share Features
-- [RIDESHARE_TASKS.md](RIDESHARE_TASKS.md) - Ride-share feature task definitions
-- [RIDESHARE_IMPLEMENTATION_PLAN.md](RIDESHARE_IMPLEMENTATION_PLAN.md) - Implementation plan
+| File | Purpose |
+|------|---------|
+| [GUIA_TECNICO_COMPONENTES.md](GUIA_TECNICO_COMPONENTES.md) | Component usage guide with code examples |
+| [ANALISE_COMPLETA_PROJETO.md](ANALISE_COMPLETA_PROJETO.md) | Comprehensive project analysis (10,000+ lines) |
+| [ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md](ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md) | Competitive analysis vs ShadowTraffic |
+| [MEMORY_OPTIMIZATION.md](MEMORY_OPTIMIZATION.md) | Memory optimization strategies for 50GB+ datasets |
+| [CAPACITY_PLANNING.md](CAPACITY_PLANNING.md) | VPS sizing and throughput estimation |
+| [MULTIPROCESSING_BENCHMARK.md](MULTIPROCESSING_BENCHMARK.md) | Streaming multiprocessing GIL bypass results |
+| [DOCKER_HUB_PUBLISHING.md](DOCKER_HUB_PUBLISHING.md) - Docker Hub publishing guide with CI/CD workflow |
+| [REPOSITORY_ORGANIZATION.md](REPOSITORY_ORGANIZATION.md) | Repository structure and git workflow guide |
 
-### DevOps & Deployment
-- [DOCKER_HUB_PUBLISHING.md](DOCKER_HUB_PUBLISHING.md) - Docker Hub publishing guide
-- [DOCKER_HUB_RESEARCH.md](DOCKER_HUB_RESEARCH.md) - Docker Hub research and setup
+## 💼 Business & Monetization
 
-### Performance Optimization
-- [MEMORY_OPTIMIZATION.md](MEMORY_OPTIMIZATION.md) - Memory optimization strategies
+| File | Purpose |
+|------|---------|
+| [PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md](PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md) | 90-day monetization executive plan |
+| [PRICING_ANALYSIS_COMPLETO.md](PRICING_ANALYSIS_COMPLETO.md) | Comprehensive pricing analysis with competitor matrix |
+| [CHECKLIST_MELHORIAS_DISRUPTIVAS_E_UX.md](CHECKLIST_MELHORIAS_DISRUPTIVAS_E_UX.md) | Disruptive UX improvements checklist |
 
 ---
 
@@ -83,36 +94,35 @@ Merge preparation, release procedures, and deployment guides.
 ### For New Developers:
 1. Read [README](README.md) (5 min)
 2. Check [RESUMO_EXECUTIVO.md](analysis/RESUMO_EXECUTIVO.md) (10 min)
-3. Review [OPTIMIZATIONS_SUMMARY_PHASE_1.md](optimizations/OPTIMIZATIONS_SUMMARY_PHASE_1.md) (20 min)
+3. Review [GUIA_TECNICO_COMPONENTES.md](GUIA_TECNICO_COMPONENTES.md) (20 min)
 
-### For Release Process:
-1. Follow [MERGE_AND_RELEASE_PREPARATION.md](release/MERGE_AND_RELEASE_PREPARATION.md)
-2. Review [CHANGELOG](CHANGELOG.md)
-3. Check benchmarks in `/benchmarks`
+### For Architecture Understanding:
+1. Read [ARQUITETURA.md](ARQUITETURA.md)
+2. Review [ANALISE_PROFUNDA.md](analysis/ANALISE_PROFUNDA.md)
+3. Check [METRICAS_DETALHADAS.md](analysis/METRICAS_DETALHADAS.md)
 
-### For Performance Tuning:
-1. Start with [ANALISE_PROFUNDA.md](analysis/ANALISE_PROFUNDA.md)
-2. Review [METRICAS_DETALHADAS.md](analysis/METRICAS_DETALHADAS.md)
-3. Check [PHASE_2_ROADMAP.md](planning/PHASE_2_ROADMAP.md)
+### For Business/Roadmap:
+1. Read [ROADMAP_TECNICO_DETALHADO.md](ROADMAP_TECNICO_DETALHADO.md)
+2. Check [fraudes/TURNOS_IMPLEMENTACAO.md](fraudes/TURNOS_IMPLEMENTACAO.md)
+3. Review [PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md](PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md)
 
 ---
 
 ## 📊 Project Statistics
 
-- **Total Documentation Files**: 30+
+- **Total Documentation Files**: ~50
 - **Analysis Documents**: 10
-- **Optimization Documents**: 4
-- **Benchmark Documents**: 2
-- **Planning Documents**: 3
-- **Release Documents**: 1
-- **Feature Documents**: 2
-- **Infrastructure Documents**: 2
+- **Fraud Research Documents**: 6
+- **Market Research Documents**: 11
+- **Technical Guides**: 8
+- **Business Documents**: 3
+- **Análise Comparativa (Estudos das Férias)**: 5
 
 ---
 
 ## Version
 
-**Current Version**: 3.3.0 "Turbo"  
-**Last Updated**: January 30, 2025
+**Current Version**: 4.1.0 "guaraná"  
+**Last Updated**: March 13, 2026
 
 See [CHANGELOG](CHANGELOG.md) for version history.

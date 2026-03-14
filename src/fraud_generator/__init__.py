@@ -1,5 +1,5 @@
 """
-🇧🇷 Brazilian Fraud Data Generator v3.2.0
+🇧🇷 Brazilian Fraud Data Generator v4.1.0
 ==========================================
 Generate realistic Brazilian financial transaction data for testing,
 development, and machine learning model training.

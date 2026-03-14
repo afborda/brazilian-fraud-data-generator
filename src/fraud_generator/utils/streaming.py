@@ -14,12 +14,18 @@ class CustomerIndex(NamedTuple):
     Lightweight customer reference for memory-efficient processing.
     
     Memory usage: ~50-80 bytes vs ~800+ bytes for full Customer object.
+    
+    location_cluster: tuple of (lat, lon, weight) for 3-5 habitual locations
+    generated at customer creation time. Used by _get_geolocation to produce
+    realistic clustered coordinates instead of a random state-level spread.
+    Format: ((lat1, lon1, w1), (lat2, lon2, w2), ...)
     """
     customer_id: str
     state: str
     profile: Optional[str]
     bank_code: Optional[str] = None
     risk_level: Optional[str] = None
+    location_cluster: Optional[tuple] = None
 
 
 class DeviceIndex(NamedTuple):
@@ -152,15 +158,68 @@ class CustomerSessionState:
             return None
         return round(haversine_distance(last_lat, last_lon, lat, lon), 2)
 
+    def check_impossible_travel(
+        self,
+        lat: Optional[float],
+        lon: Optional[float],
+        current_time: datetime,
+        speed_km_h: float = 900.0,
+        min_dist_km: float = 400.0,
+        min_elapsed_min: float = 5.0,
+    ) -> tuple:
+        """Check if a new location is physically impossible given the last transaction.
+
+        Only flags genuinely inter-state impossible moves (>400 km) when the
+        elapsed time is at least 5 minutes and the distance exceeds what a
+        commercial flight could cover.  Returns (is_impossible: bool, distance_km: float).
+        """
+        if not self._transactions or lat is None or lon is None:
+            return False, 0.0
+        last_ts, _amt, _mid, last_lat, last_lon, _did = self._transactions[-1]
+        if last_lat is None or last_lon is None:
+            return False, 0.0
+        dist_km = haversine_distance(last_lat, last_lon, lat, lon)
+        elapsed_min = (current_time - last_ts).total_seconds() / 60.0
+        # Ignore backward timestamps and very short windows
+        if elapsed_min < min_elapsed_min:
+            return False, round(dist_km, 2)
+        # Only flag if distance exceeds min_dist_km threshold (inter-state)
+        if dist_km < min_dist_km:
+            return False, round(dist_km, 2)
+        elapsed_h = elapsed_min / 60.0
+        reachable_km = speed_km_h * elapsed_h
+        return dist_km > reachable_km, round(dist_km, 2)
+
 
 def create_customer_index(customer_dict: Dict[str, Any]) -> CustomerIndex:
     """Create a CustomerIndex from a customer dictionary."""
+    from ..config.geography import ESTADOS_BR
+    import random as _r
+
+    state = customer_dict.get('address', {}).get('state', 'SP')
+    info = ESTADOS_BR.get(state, ESTADOS_BR['SP'])
+    base_lat, base_lon = info['lat'], info['lon']
+    home_lat  = base_lat + _r.uniform(-0.25, 0.25)
+    home_lon  = base_lon + _r.uniform(-0.25, 0.25)
+    work_lat  = home_lat + _r.uniform(-0.20, 0.20)
+    work_lon  = home_lon + _r.uniform(-0.20, 0.20)
+    shop_lat  = home_lat + _r.uniform(-0.30, 0.30)
+    shop_lon  = home_lon + _r.uniform(-0.30, 0.30)
+    other_lat = base_lat + _r.uniform(-0.40, 0.40)
+    other_lon = base_lon + _r.uniform(-0.40, 0.40)
+    cluster = (
+        (round(home_lat, 6),  round(home_lon, 6),  0.55),
+        (round(work_lat, 6),  round(work_lon, 6),  0.20),
+        (round(shop_lat, 6),  round(shop_lon, 6),  0.15),
+        (round(other_lat, 6), round(other_lon, 6), 0.10),
+    )
     return CustomerIndex(
         customer_id=customer_dict['customer_id'],
-        state=customer_dict.get('address', {}).get('state', 'SP'),
+        state=state,
         profile=customer_dict.get('behavioral_profile'),
         bank_code=customer_dict.get('bank_code'),
         risk_level=customer_dict.get('risk_level'),
+        location_cluster=cluster,
     )
 
 

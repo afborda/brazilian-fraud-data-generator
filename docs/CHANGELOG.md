@@ -15,6 +15,37 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v3.0 | **Stream** | Kafka streaming + Conexões | 2025-Q1 |
 | v3.3 | **Turbo** | Performance Phase 1 (+18.9% speed, -85% storage) | 2025-01-30 |
 | v4.0 | **Quantum** | Phase 2.2-2.9: Session State + Parallelism + Analytics | 2026-01-30 |
+| v4.1 | **Guaraná** | SOLID CLI refactor + JSON schema mode | 2026-03-04 |
+
+---
+
+## 📚 Análise das Férias — Documentos de Estratégia (2026-03-13)
+
+### Criada pasta `docs/Analise e comparacao com estudos das ferias/` com 5 documentos
+- **01 - INVENTARIO_COMPLETO_DOCUMENTOS.md**: Inventário de todos os 32+ documentos analisados (PDFs confidenciais, JSONs, markdown, código-fonte), com resumos e nível de relevância para implementação.
+- **02 - ANALISE_COMPARATIVA_CRUZADA.md**: Cruzamento completo dos documentos — 7 conflitos identificados e resolvidos (fraud_score escala, velocity_transactions_24h, rooted_or_jailbreak, tamanho do trial, etc.), consensos documentados, gap matrix com 40+ campos faltantes, roadmap de 5 fases.
+- **03 - ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md**: Estratégia de 3 camadas para deployar atualizações sem expor o produto pago: (1) gate de API key em config/license.py, (2) GHCR privado para produto e Docker Hub público para OS, (3) 4 pipelines GitHub Actions com secrets.
+- **04 - AQUISICAO_DADOS_IBGE_BACEN.md**: Guia técnico completo para obter dados IBGE (SIDRA API, tabelas de renda/demografia/município) e BACEN (IF.data, dados abertos PIX, enums pacs.008), com scripts ETL de exemplo, schema PostgreSQL e checklist priorizado.
+- **05 - PARECER_STARTUP_VS_PRODUTO.md**: Análise honesta das 4 opções (lib OS, ferramenta CLI, SaaS bootstrap, startup VC) com recomendação: Bootstrap SaaS primeiros 12 meses → Startup apenas com MRR R$20k+ comprovado. ROI projetado do produto: 9.067% para cliente banco médio.
+
+---
+
+## 📚 Análise das Férias — Documentos de Estratégia (2026-03-13)
+
+### Criada pasta `docs/Analise e comparacao com estudos das ferias/` com 5 documentos
+- **01 - INVENTARIO_COMPLETO_DOCUMENTOS.md**: Inventário de todos os 32+ documentos analisados (PDFs confidenciais, JSONs, markdown, código-fonte), com resumos e nível de relevância para implementação.
+- **02 - ANALISE_COMPARATIVA_CRUZADA.md**: Cruzamento completo dos documentos — 7 conflitos identificados e resolvidos (fraud_score escala, velocity_transactions_24h, rooted_or_jailbreak, tamanho do trial, etc.), consensos documentados, gap matrix com 40+ campos faltantes, roadmap de 5 fases.
+- **03 - ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md**: Estratégia de 3 camadas para deployar atualizações sem expor o produto pago: (1) gate de API key em config/license.py, (2) GHCR privado para produto e Docker Hub público para OS, (3) 4 pipelines GitHub Actions com secrets.
+- **04 - AQUISICAO_DADOS_IBGE_BACEN.md**: Guia técnico completo para obter dados IBGE (SIDRA API, tabelas de renda/demografia/município) e BACEN (IF.data, dados abertos PIX, enums pacs.008), com scripts ETL de exemplo, schema PostgreSQL e checklist priorizado.
+- **05 - PARECER_STARTUP_VS_PRODUTO.md**: Análise honesta das 4 opções (lib OS, ferramenta CLI, SaaS bootstrap, startup VC) com recomendação: Bootstrap SaaS primeiros 12 meses → Startup apenas com MRR R$20k+ comprovado. ROI projetado do produto: 9.067% para cliente banco médio.
+
+---
+
+## 🧹 Limpeza de Documentação (2026-03-13)
+
+### Docs removidos (planejamento de trabalho já concluído)
+- Removidos 21 arquivos de documentação obsoletos: planos de implementação do rideshare (já implementado), guias e checklists das Phases 1 e 2 (já concluídas), relatórios de release já entregues, índices redundantes e notas de pesquisa supersedidas por documentos consolidados.
+- `docs/INDEX.md` atualizado para refletir o estado atual do projeto (v4.1.0).
 
 ---
 

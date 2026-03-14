@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "profile": "ride_share",
+  "fraud_rate": 0.04,
+  "description": "Schema para dados de ride-share (corridas de app)",
+
+  "output": {
+    "corrida_id":       "ride.ride_id",
+    "app":              "ride.app",
+    "categoria":        "ride.category",
+    "status":           "ride.status",
+    "data_hora":        "ride.timestamp",
+    "origem": {
+      "lat":            "ride.origin_lat",
+      "lon":            "ride.origin_lon",
+      "endereco":       "ride.origin_address"
+    },
+    "destino": {
+      "lat":            "ride.dest_lat",
+      "lon":            "ride.dest_lon",
+      "endereco":       "ride.dest_address"
+    },
+    "metricas": {
+      "distancia_km":   "ride.distance_km",
+      "duracao_min":    "ride.duration_min",
+      "tarifa_base":    "ride.base_fare",
+      "multiplicador":  "ride.surge_multiplier",
+      "tarifa_total":   "ride.total_fare",
+      "pagamento":      "ride.payment_method"
+    },
+    "passageiro": {
+      "id":             "customer.customer_id",
+      "nome":           "customer.name",
+      "cpf":            "customer.cpf",
+      "email":          "customer.email"
+    },
+    "motorista": {
+      "id":             "driver.driver_id",
+      "nome":           "driver.name",
+      "avaliacao":      "driver.rating",
+      "placa":          "driver.vehicle_plate",
+      "veiculo":        "driver.vehicle_model"
+    },
+    "fraude": {
+      "is_fraude":      "ride.is_fraud",
+      "tipo_fraude":    "ride.fraud_type",
+      "score":          "ride.fraud_score"
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "profile": "banking",
+  "fraud_rate": 0.08,
+  "description": "Schema completo com estrutura aninhada: cliente + transação + risco",
+
+  "output": {
+    "transacao": {
+      "id":           "transaction.transaction_id",
+      "tipo":         "transaction.type",
+      "valor_brl":    "transaction.amount",
+      "canal":        "transaction.channel",
+      "data_hora":    "transaction.timestamp",
+      "status":       "transaction.status",
+      "ip":           "transaction.ip_address",
+      "comerciante": {
+        "id":         "transaction.merchant_id",
+        "nome":       "transaction.merchant_name",
+        "categoria":  "transaction.merchant_category",
+        "mcc":        "transaction.mcc_code",
+        "risco_mcc":  "transaction.mcc_risk_level"
+      },
+      "cartao": {
+        "bandeira":   "transaction.card_brand",
+        "tipo":       "transaction.card_type",
+        "parcelas":   "transaction.installments",
+        "3ds":        "transaction.auth_3ds"
+      },
+      "pix": {
+        "tipo_chave":      "transaction.pix_key_type",
+        "banco_destino":   "transaction.destination_bank"
+      }
+    },
+    "cliente": {
+      "id":              "customer.customer_id",
+      "nome":            "customer.name",
+      "cpf":             "customer.cpf",
+      "email":           "customer.email",
+      "telefone":        "customer.phone",
+      "perfil":          "customer.behavioral_profile",
+      "score_credito":   "customer.credit_score",
+      "nivel_risco":     "customer.risk_level",
+      "banco":           "customer.bank_name",
+      "endereco": {
+        "cidade":        "customer.address.city",
+        "estado":        "customer.address.state",
+        "cep":           "customer.address.postal_code"
+      }
+    },
+    "dispositivo": {
+      "id":      "device.device_id",
+      "tipo":    "device.device_type",
+      "os":      "device.operating_system",
+      "mobile":  "device.is_mobile"
+    },
+    "risco": {
+      "is_fraude":                 "transaction.is_fraud",
+      "tipo_fraude":               "transaction.fraud_type",
+      "score_fraude":              "transaction.fraud_score",
+      "horario_incomum":           "transaction.unusual_time",
+      "novo_beneficiario":         "transaction.new_beneficiary",
+      "distancia_ultima_txn_km":   "transaction.distance_from_last_txn_km",
+      "txns_ultimas_24h":          "transaction.transactions_last_24h",
+      "valor_acumulado_24h":       "transaction.accumulated_amount_24h"
+    },
+    "_meta": {
+      "fonte":   "static:brazilian-fraud-data-generator",
+      "versao":  "static:4.0.0"
+    }
+  }
+}

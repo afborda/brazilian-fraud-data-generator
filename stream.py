@@ -50,6 +50,11 @@ from fraud_generator.utils import (
     is_redis_available, get_redis_client,
     load_cached_indexes, save_cached_indexes,
 )
+from fraud_generator.utils.parallel import ParallelStreamManager
+from fraud_generator.licensing.validator import validate_env, check_target_allowed
+
+# ── License validation (runs before anything else) ─────────────────────────
+_LICENSE = validate_env(phone_home=True)
 
 # Global flag for graceful shutdown
 _running = True
@@ -494,6 +499,84 @@ async def run_rides_streaming_async(
     return event_count, error_count, time.time() - start_time
 
 
+# ---------------------------------------------------------------------------
+# Parallel multiprocessing streaming (GIL bypass)
+# ---------------------------------------------------------------------------
+
+def _run_parallel(
+    is_rides: bool,
+    connection,
+    customers,
+    devices,
+    drivers,
+    args,
+    use_profiles: bool,
+):
+    """
+    Run streaming with multiple worker processes.
+
+    Each worker generates events independently; the main process
+    consumes them from a shared queue and forwards to the connection.
+    """
+    global _running
+
+    mgr = ParallelStreamManager(
+        num_workers=args.workers,
+        queue_size=args.queue_size,
+    )
+
+    print(f"   🔀 Launching {args.workers} parallel workers…")
+
+    if is_rides:
+        mgr.start_ride_workers(
+            customers=customers,
+            drivers=drivers,
+            fraud_rate=args.fraud_rate,
+            use_profiles=use_profiles,
+            seed=args.seed,
+        )
+    else:
+        mgr.start_tx_workers(
+            customers=customers,
+            devices=devices,
+            fraud_rate=args.fraud_rate,
+            use_profiles=use_profiles,
+            seed=args.seed,
+        )
+
+    event_count = 0
+    error_count = 0
+    start_time = time.time()
+
+    try:
+        for event in mgr.drain(
+            max_events=args.max_events,
+            rate=args.rate,
+            quiet=args.quiet,
+        ):
+            if not _running:
+                break
+
+            success = connection.send(event)
+            if success:
+                event_count += 1
+            else:
+                error_count += 1
+
+            if not args.quiet and event_count % 100 == 0:
+                elapsed = time.time() - start_time
+                actual_rate = event_count / elapsed if elapsed > 0 else 0
+                print(
+                    f"\r   📊 Events: {event_count:,} | Rate: {actual_rate:.1f}/s "
+                    f"| Errors: {error_count} | Workers: {args.workers}",
+                    end="", flush=True,
+                )
+    finally:
+        mgr.shutdown()
+
+    return event_count, error_count, time.time() - start_time
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="🇧🇷 Brazilian Fraud Data Generator - Streaming Mode v3.2.0",
@@ -647,7 +730,23 @@ Available targets: """ + ", ".join(list_targets())
         default=100,
         help='Max concurrent async sends. Default: 100'
     )
-    
+
+    parser.add_argument(
+        '--workers', '-w',
+        type=int,
+        default=1,
+        help='Number of parallel generator workers (multiprocessing). '
+             'Default: 1 (single-process, original behaviour). '
+             'Set to number of CPU cores for maximum throughput.'
+    )
+
+    parser.add_argument(
+        '--queue-size',
+        type=int,
+        default=10000,
+        help='Max events buffered between workers and sender. Default: 10000'
+    )
+
     # Output options
     parser.add_argument(
         '--quiet', '-q',
@@ -668,7 +767,14 @@ Available targets: """ + ", ".join(list_targets())
     )
     
     args = parser.parse_args()
-    
+
+    # ── License: check if this target is allowed on this plan ────────────────
+    try:
+        check_target_allowed(_LICENSE, args.target)
+    except Exception as e:
+        print(f"\n  ✗ {e}", file=sys.stderr)
+        sys.exit(1)
+
     # Validate target availability
     if not is_target_available(args.target):
         print(f"❌ Target '{args.target}' is not available.")
@@ -709,7 +815,9 @@ Available targets: """ + ", ".join(list_targets())
         num_drivers = max(100, args.customers // 10)
         print(f"🚗 Drivers: {num_drivers:,}")
     print(f"🧠 Profiles: {'❌ Disabled' if args.no_profiles else '✅ Enabled'}")
-    
+    if args.workers > 1:
+        print(f"🔀 Workers: {args.workers} (multiprocessing GIL bypass)")
+
     if args.target == 'kafka':
         print(f"📡 Kafka: {args.kafka_server} → {args.kafka_topic}")
     elif args.target == 'webhook':
@@ -825,7 +933,18 @@ Available targets: """ + ", ".join(list_targets())
     print("   Press Ctrl+C to stop\n")
     
     try:
-        if is_rides:
+        if args.workers > 1:
+            # ── Parallel multiprocessing mode ──────────────────────────
+            event_count, error_count, elapsed = _run_parallel(
+                is_rides=is_rides,
+                connection=connection,
+                customers=customers,
+                devices=devices,
+                drivers=drivers,
+                args=args,
+                use_profiles=use_profiles,
+            )
+        elif is_rides:
             ride_generator = RideGenerator(
                 fraud_rate=args.fraud_rate,
                 use_profiles=use_profiles,

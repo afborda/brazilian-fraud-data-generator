@@ -184,6 +184,64 @@ No automated test suite found in repo. Validation approach:
 
 **In-Progress**: Ride-share feature expansion (docs/RIDESHARE_TASKS.md)
 
+## Documentation Governance
+
+Rules that apply to **every change** made in this repository. Enforced by the AI agent on every task.
+
+### 1. Changelog is mandatory
+
+Every change that affects observable behavior (code, config, schema, CLI args, output format) **must** generate an entry in [docs/CHANGELOG.md](docs/CHANGELOG.md).
+- Follow existing format: version section → themed subsection → bullet describing what changed and why
+- Excluded: typo fixes, whitespace, comment-only changes with no behavioral impact
+- **Anti-pattern**: completing a task without updating CHANGELOG
+
+### 2. Keep `docs/INDEX.md` in sync
+
+[docs/INDEX.md](docs/INDEX.md) is the master documentation index. Any time a doc is **created, renamed, or deleted**, update INDEX.md accordingly.
+- **Anti-pattern**: creating a new `.md` file in `docs/` without registering it in INDEX.md
+
+### 3. Planning/release docs are ephemeral — delete when done
+
+Docs under `docs/planning/`, `docs/release/`, and root-level status reports (`STATUS_FINAL.md`, `ORGANIZATION_COMPLETE.md`, `PHASE_*_INTEGRATION_COMPLETE.md`, `RIDESHARE_TASKS.md`) exist to guide active work. Once the task/phase is **fully delivered**:
+1. Record relevant decisions/outcomes in CHANGELOG.md
+2. Delete the planning doc
+3. Update INDEX.md to remove the reference
+- **Do not accumulate**: completed planning docs must not remain in the repo
+
+### 4. Update existing docs — do not duplicate
+
+Before creating a new doc, check if one already covers the same topic using [docs/INDEX.md](docs/INDEX.md).
+- If a doc exists: update it
+- If the scope is genuinely new: create a new file AND update INDEX.md
+- **Anti-pattern**: creating `ANALISE_V2.md` alongside an existing `ANALISE.md`
+
+### 5. Mark before remove — deprecation header
+
+When a doc is identified as outdated but removal is deferred, add this header at the top before anything else:
+
+```markdown
+> ⚠️ DEPRECATED: [reason]. Replaced by [link to current doc].
+```
+
+Remove the file at the next opportunity (next PR/task touching the same area).
+
+### Permanent docs — never delete
+
+These docs must always exist and stay up to date:
+- [docs/CHANGELOG.md](docs/CHANGELOG.md)
+- [docs/INDEX.md](docs/INDEX.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [README.md](README.md)
+- [docs/README.md](docs/README.md)
+
+### Permanent reference docs — update, never delete
+
+- [docs/analysis/ANALISE_PROFUNDA.md](docs/analysis/ANALISE_PROFUNDA.md)
+- [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
+- [docs/fraudes/](docs/fraudes/) — fraud analysis reference
+- [docs/pesquisa_mercado/](docs/pesquisa_mercado/) — market research archive
+- [docs/documentodeestudos/](docs/documentodeestudos/) — historical research artifacts
+
 ## Documentation References
 
 - **Architecture deep-dive**: [docs/ANALISE_PROFUNDA.md](docs/ANALISE_PROFUNDA.md) (Portuguese)

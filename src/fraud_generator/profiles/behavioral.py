@@ -98,7 +98,8 @@ PROFILES: Dict[str, BehavioralProfile] = {
         },
         monthly_tx_frequency=(40, 100),
         typical_value_range=(15, 300),
-        preferred_hours=[10, 11, 12, 13, 14, 18, 19, 20, 21, 22, 23],
+        # T1: janela estreita (3-5h) → picos mais nítidos + menor entropia
+        preferred_hours=[12, 13, 19, 21, 22],
         weekend_multiplier=1.3,
         fraud_susceptibility=1.2,  # More susceptible to phishing/social engineering
     ),
@@ -133,7 +134,8 @@ PROFILES: Dict[str, BehavioralProfile] = {
         },
         monthly_tx_frequency=(15, 40),
         typical_value_range=(50, 800),
-        preferred_hours=[8, 9, 10, 11, 14, 15, 16, 17],
+        # T1: matinal e pós-almoço (sênior não usa noite)
+        preferred_hours=[9, 10, 15, 16],
         weekend_multiplier=0.6,  # Less active on weekends
         fraud_susceptibility=1.5,  # More susceptible to phone scams
     ),
@@ -169,7 +171,8 @@ PROFILES: Dict[str, BehavioralProfile] = {
         },
         monthly_tx_frequency=(50, 150),
         typical_value_range=(100, 5000),
-        preferred_hours=[8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20],
+        # T1: almoço comercial + fim do expediente
+        preferred_hours=[12, 13, 18, 19],
         weekend_multiplier=0.4,  # Less business activity on weekends
         fraud_susceptibility=1.3,  # Targeted by business fraud
     ),
@@ -203,7 +206,8 @@ PROFILES: Dict[str, BehavioralProfile] = {
         },
         monthly_tx_frequency=(30, 80),
         typical_value_range=(200, 10000),
-        preferred_hours=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        # T1: tarde/noite — compras de luxo e lazer
+        preferred_hours=[15, 19, 20, 21],
         weekend_multiplier=1.5,  # More leisure spending on weekends
         fraud_susceptibility=1.4,  # High value target
     ),
@@ -234,7 +238,8 @@ PROFILES: Dict[str, BehavioralProfile] = {
         },
         monthly_tx_frequency=(35, 70),
         typical_value_range=(10, 500),
-        preferred_hours=[6, 7, 8, 18, 19, 20, 21, 22, 23],
+        # T1: noite — streaming e assinaturas digitais
+        preferred_hours=[20, 21, 22],
         weekend_multiplier=1.2,
         fraud_susceptibility=1.1,
     ),
@@ -270,7 +275,8 @@ PROFILES: Dict[str, BehavioralProfile] = {
         },
         monthly_tx_frequency=(60, 120),
         typical_value_range=(30, 1500),
-        preferred_hours=[7, 8, 9, 12, 13, 17, 18, 19, 20, 21],
+        # T1: almoço em família + jantar/noite
+        preferred_hours=[12, 18, 19, 20],
         weekend_multiplier=1.4,  # More family activity on weekends
         fraud_susceptibility=1.0,
     ),
@@ -291,6 +297,31 @@ PROFILE_LIST = list(PROFILE_DISTRIBUTION.keys())
 PROFILE_WEIGHTS = list(PROFILE_DISTRIBUTION.values())
 
 
+# ── Pre-built WeightCaches for profile distributions ────────────
+# Eliminates repeated list() + random.choices() overhead per call.
+from ..utils.weight_cache import WeightCache
+
+_profile_tx_type_caches: Dict[str, WeightCache] = {}
+_profile_mcc_caches: Dict[str, WeightCache] = {}
+_profile_channel_caches: Dict[str, WeightCache] = {}
+
+for _pname, _prof in PROFILES.items():
+    _profile_tx_type_caches[_pname] = WeightCache(
+        list(_prof.transaction_types.keys()),
+        list(_prof.transaction_types.values()),
+    )
+    _profile_mcc_caches[_pname] = WeightCache(
+        list(_prof.preferred_mccs.keys()),
+        list(_prof.preferred_mccs.values()),
+    )
+    _profile_channel_caches[_pname] = WeightCache(
+        list(_prof.channel_preferences.keys()),
+        list(_prof.channel_preferences.values()),
+    )
+
+_profile_assign_cache = WeightCache(PROFILE_LIST, PROFILE_WEIGHTS)
+
+
 def get_profile(profile_name: str) -> Optional[BehavioralProfile]:
     """Get a behavioral profile by name."""
     return PROFILES.get(profile_name)
@@ -298,73 +329,63 @@ def get_profile(profile_name: str) -> Optional[BehavioralProfile]:
 
 def assign_random_profile() -> str:
     """Assign a random profile based on distribution weights."""
-    return random.choices(PROFILE_LIST, weights=PROFILE_WEIGHTS)[0]
+    return _profile_assign_cache.sample()
 
 
 def get_transaction_type_for_profile(profile_name: str) -> str:
     """Get a weighted random transaction type for a profile."""
-    profile = PROFILES.get(profile_name)
-    if not profile:
-        # Fallback to default distribution
-        from ..config.transactions import TX_TYPES_LIST, TX_TYPES_WEIGHTS
-        return random.choices(TX_TYPES_LIST, weights=TX_TYPES_WEIGHTS)[0]
-    
-    types = list(profile.transaction_types.keys())
-    weights = list(profile.transaction_types.values())
-    return random.choices(types, weights=weights)[0]
+    cache = _profile_tx_type_caches.get(profile_name)
+    if cache:
+        return cache.sample()
+    # Fallback to default distribution
+    from ..config.transactions import TX_TYPES_LIST, TX_TYPES_WEIGHTS
+    return random.choices(TX_TYPES_LIST, weights=TX_TYPES_WEIGHTS)[0]
 
 
 def get_mcc_for_profile(profile_name: str) -> str:
     """Get a weighted random MCC for a profile."""
-    profile = PROFILES.get(profile_name)
-    if not profile:
-        # Fallback to default distribution
-        from ..config.merchants import MCC_LIST, MCC_WEIGHTS
-        return random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
-    
-    mccs = list(profile.preferred_mccs.keys())
-    weights = list(profile.preferred_mccs.values())
-    return random.choices(mccs, weights=weights)[0]
+    cache = _profile_mcc_caches.get(profile_name)
+    if cache:
+        return cache.sample()
+    # Fallback to default distribution
+    from ..config.merchants import MCC_LIST, MCC_WEIGHTS
+    return random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
 
 
 def get_channel_for_profile(profile_name: str) -> str:
     """Get a weighted random channel for a profile."""
-    profile = PROFILES.get(profile_name)
-    if not profile:
-        from ..config.transactions import CHANNELS_LIST, CHANNELS_WEIGHTS
-        return random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
-    
-    channels = list(profile.channel_preferences.keys())
-    weights = list(profile.channel_preferences.values())
-    return random.choices(channels, weights=weights)[0]
+    cache = _profile_channel_caches.get(profile_name)
+    if cache:
+        return cache.sample()
+    from ..config.transactions import CHANNELS_LIST, CHANNELS_WEIGHTS
+    return random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
 
 
 def get_transaction_hour_for_profile(profile_name: str, is_weekend: bool = False) -> int:
-    """Get a realistic transaction hour for a profile."""
+    """Get a realistic transaction hour for a profile.
+
+    T1: fallback usa distribui\u00e7\u00e3o trimodal (picos 12h, 18h, 21h) em vez de uniforme.
+    """
+    from ..config.seasonality import pick_hour, HORA_WEIGHTS_PADRAO
+
     profile = PROFILES.get(profile_name)
-    
+
     if not profile:
-        # Default hour distribution
-        hour_weights = {
-            0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
-            6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
-            12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
-            18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
-        }
-        hours = list(hour_weights.keys())
-        weights = list(hour_weights.values())
-        return random.choices(hours, weights=weights)[0]
-    
-    # Prefer profile's preferred hours
+        # T1: distribui\u00e7\u00e3o trimodal realista (Br 2024)
+        return pick_hour(HORA_WEIGHTS_PADRAO)
+
+    # T1: usa HORA_WEIGHTS_PADRAO para ponderar mesmo dentro das horas preferenciais
+    # (antes: random.choice(preferred) distribuía uniformemente → alta entropia)
     preferred = profile.preferred_hours
-    other_hours = [h for h in range(24) if h not in preferred]
-    
-    # 70% chance of preferred hour, 30% other
+    w_preferred = [HORA_WEIGHTS_PADRAO[h] for h in preferred]
+
+    # 70% dentro das horas preferenciais (ponderadas por trimodal), 30% trimodal livre
     if random.random() < 0.7 and preferred:
-        hour = random.choice(preferred)
+        hour = random.choices(preferred, weights=w_preferred, k=1)[0]
     else:
-        hour = random.choice(other_hours) if other_hours else random.choice(preferred)
-    
+        # T1: sempre usa distribuição trimodal mesmo fora do horário preferido
+        hour = pick_hour(HORA_WEIGHTS_PADRAO)
+
     return hour
 
 

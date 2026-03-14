@@ -155,12 +155,17 @@ class CustomerIndex:
     all customer data into memory. Only essential fields are kept.
     
     Memory usage: ~50-80 bytes per customer vs ~800+ bytes for full Customer
+    
+    location_cluster: tuple of (lat, lon, weight) for 3-5 habitual locations.
+    Used by _get_geolocation to produce realistic clustered coordinates.
+    Format: ((lat1, lon1, w1), (lat2, lon2, w2), ...)
     """
     customer_id: str
     state: str  # estado
     behavioral_profile: Optional[str] = None  # perfil_comportamental
     bank_code: Optional[str] = None  # banco_codigo
     risk_level: Optional[str] = None  # nivel_risco
+    location_cluster: Optional[tuple] = None  # 3-5 locações habituais (lat, lon, weight)
     
     def __repr__(self) -> str:
         return f"CustomerIndex({self.customer_id}, {self.state}, {self.behavioral_profile})"
