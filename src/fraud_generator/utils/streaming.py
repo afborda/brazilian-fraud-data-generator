@@ -93,6 +93,9 @@ class CustomerSessionState:
         self._favorite_merchants: List[tuple] = []   # (merchant_id, merchant_name, mcc_code)
         self._favorite_ids: set = set()
         self._FAVORITE_MAX = 8
+        # T4: device consistency — first 2 devices seen become "primary"; others are anomalies
+        self._primary_devices: set = set()
+        self._PRIMARY_MAX = 2
 
     def _prune_old(self, current_time: datetime) -> None:
         """Remove transactions older than 24h from the rolling window."""
@@ -137,6 +140,9 @@ class CustomerSessionState:
                 self._favorite_ids.add(merchant_id)
         if device_id:
             self._device_counts[device_id] = self._device_counts.get(device_id, 0) + 1
+            # T4: first _PRIMARY_MAX distinct devices become "primary"
+            if len(self._primary_devices) < self._PRIMARY_MAX:
+                self._primary_devices.add(device_id)
 
     def get_favorite_merchant(self) -> Optional[tuple]:
         """Return a random (merchant_id, merchant_name, mcc_code) from favorites.
@@ -148,6 +154,16 @@ class CustomerSessionState:
             return None
         import random as _random
         return _random.choice(self._favorite_merchants)
+
+    def is_new_device(self, device_id: Optional[str]) -> bool:
+        """T4: True when device_id is not one of the customer's primary devices.
+
+        Returns False (not anomalous) when fewer than 2 primaries have been
+        accumulated, so first-time customers don't trigger a false signal.
+        """
+        if not device_id or len(self._primary_devices) < 1:
+            return False
+        return device_id not in self._primary_devices
 
     def get_velocity(self, current_time: datetime) -> int:
         """Transactions in last 24h."""

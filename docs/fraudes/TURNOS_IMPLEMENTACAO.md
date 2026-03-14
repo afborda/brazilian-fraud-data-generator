@@ -138,7 +138,7 @@
 
 ### Ajustes de dados
 
-- [ ] **Device consistency** — cada cliente tem 1–2 devices principais com lifespan de meses:
+- [x] **Device consistency** — cada cliente tem 1–2 devices principais com lifespan de meses:
   - Device upgrade: substituição gradual, nunca instantânea
   - ATO injeta device completamente novo
   - Arquivo alvo: `src/fraud_generator/generators/transaction.py` + `DeviceIndex`
@@ -148,7 +148,7 @@
   - Fraude usa merchants novos (nunca vistos pelo cliente)
   - Arquivo alvo: `CustomerIndex` + `TransactionGenerator`
 
-- [ ] **Channel preference** — cliente tem canal principal fixo:
+- [x] **Channel preference** — cliente tem canal principal fixo:
   - `YOUNG_DIGITAL` → sempre mobile (95%)
   - `RETIREE` → nunca web banking puro (0.5%)
   - ATO usa canal nunca usado antes
@@ -178,29 +178,29 @@
 
 ### Implementações novas
 
-- [ ] **Promo Code Farming (ID 57)** — cliente cria múltiplas contas para abusar de créditos de cadastro:
+- [x] **Promo Code Farming (ID 57)** — cliente cria múltiplas contas para abusar de créditos de cadastro:
   - Padrão: emails variantes (+1, .a, etc.), CPFs diferentes
   - Comportamento: conta usada 1–3 vezes e abandonada
   - Campo: `promo_abuse_group: str | null`
 
-- [ ] **Refund Abuse (ID 60)** — passageiro reporta problema frequente para obter créditos:
+- [x] **Refund Abuse (ID 60)** — passageiro reporta problema frequente para obter créditos:
   - Padrão: > 3 reclamações/mês, sempre com crédito concedido
   - Campo: `refund_count_30d: int`
 
-- [ ] **Non-Payment / Chargeback Loop (ID 52, 59)** — cartão clonado em rides, depois chargeback:
+- [x] **Non-Payment / Chargeback Loop (ID 52, 59)** — cartão clonado em rides, depois chargeback:
   - Padrão: cartão novo a cada 3–5 corridas antes do chargeback
   - Campo: `payment_dispute_flag: bool`
 
-- [ ] **Destination Disparity (ID 55)** — rota solicitada difere significativamente da rota realizada:
+- [x] **Destination Disparity (ID 55)** — rota solicitada difere significativamente da rota realizada:
   - Campo: `route_deviation_km: float` (desvio em km da rota esperada)
   - Fraude: desvio > 2× a rota solicitada
 
-- [ ] **Account Takeover (Ride) (ID 61)** — conta de passageiro tomada, corridas imediatas:
+- [x] **Account Takeover (Ride) (ID 61)** — conta de passageiro tomada, corridas imediatas:
   - Padrão: login de novo device + corrida em < 10 min
   - Campo: `new_device_first_ride: bool`
 
-- [ ] Atualizar `RIDESHARE_FRAUD_TYPES` em `src/fraud_generator/config/rideshare.py`
-- [ ] Atualizar `RideGenerator` em `src/fraud_generator/generators/ride.py`
+- [x] Atualizar `RIDESHARE_FRAUD_TYPES` em `src/fraud_generator/config/rideshare.py`
+- [x] Atualizar `RideGenerator` em `src/fraud_generator/generators/ride.py`
 
 ### Validação do turno
 
@@ -260,14 +260,14 @@
 - [ ] **AUTOFRAUDE** (hoje 8%, real ~0% puro) — remover como fraud type isolado ou reclassificar como subcategoria de FRAUDE_AMIGAVEL:
   - Refactoring em `FRAUD_TYPES_LIST` + ajuste de pesos totais
 
-- [ ] **Beneficiário recorrente em fraudes** — ENGENHARIA_SOCIAL deve usar 2–3 beneficiários fixos (não aleatórios a cada transação):
+- [x] **Beneficiário recorrente em fraudes** — ENGENHARIA_SOCIAL deve usar 2–3 beneficiários fixos (não aleatórios a cada transação):
   - Hoje: cada transação gera novo beneficiário
   - Target: 80% das txs de um episódio vão para o mesmo CPF destino
 
 - [x] **Valor das fraudes** — CONTA_TOMADA corrigido para `(30.0, 100.0)` (multiplicador real de ATO):
   - Ajustado em `src/fraud_generator/config/fraud_patterns.py`
 
-- [ ] **First fraud transaction** — PIX_GOLPE e CARTAO_CLONADO devem sempre começar com micro-teste (R$1–5) antes da transação grande
+- [x] **First fraud transaction** — PIX_GOLPE e CARTAO_CLONADO devem sempre começar com micro-teste (R$1–5) antes da transação grande
 
 - [ ] Revisar e atualizar `check_schema.py` para validar todos os novos campos adicionados nos turnos anteriores
 
@@ -335,7 +335,7 @@
 - [ ] PIX Fase 2: `cpf_hash_pagador`, `motivo_devolucao_med`, `pacs_status` (→ TPRD3)
 - [ ] Campos de contexto faltantes no output de transação: `new_merchant`, `cliente_perfil`, `classe_social`, `ip_location_matches_account`, `sim_swap_recent`, `hours_inactive` (→ TPRD1)
 - [ ] `fraud_signals: list[str]` — array explicando quais sinais ativaram o score (→ TPRD1)
-- [ ] Padrão beneficiário recorrente: ENGENHARIA_SOCIAL deve reusar 2–3 CPFs destino fixos (→ T7)
+- [x] Padrão beneficiário recorrente: ENGENHARIA_SOCIAL deve reusar 2–3 CPFs destino fixos (→ T7)
 - [ ] `validate_correlations.py` — script de validação dos 15 checks (→ TPRD1)
 
 ---
@@ -488,10 +488,10 @@
 | T2 | ✅ Concluído | 2026-03-05 | 2026-03-05 | Geo 10.0/10 — `location_cluster`, `is_impossible_travel` |
 | T3 | ✅ Concluído | 2026-03-05 | 2026-03-05 | 10 tipos únicos, 3 novos: CARD_TESTING/MICRO_BURST_VELOCITY/DISTRIBUTED_VELOCITY |
 | TSN | ✅ Concluído | 2026-03-13 | 2026-03-14 | fraud_risk_score live, PIX BACEN 7 campos, device 4 campos, 109 testes, v4.2.0 |
-| T4 | ⬜ Aguardando | — | — | Consistência comportamental de clientes — device/merchant clustering, velocity z-score |
-| T5 | ⬜ Não iniciado | — | — | Novos fraud patterns ride-share: promo abuse, refund abuse, destination disparity |
+| T4 | ✅ Concluído | v4.4 | 2026-03-14 | Consistência comportamental de clientes — device/merchant clustering, velocity z-score |
+| T5 | ✅ Concluído | v4.4 | 2026-03-14 | Novos fraud patterns ride-share: promo abuse, refund abuse, destination disparity |
 | T6 | ⬜ Não iniciado | — | — | Fraud rings: fraud_ring_id, ring_role, recipient_is_mule |
-| T7 | ⬜ Não iniciado | — | — | Ajustes finos: BOLETO_FALSO 8%, ENGENHARIA_SOCIAL beneficiário fixo, QA final |
+| T7 | ✅ Concluído | v4.4 | 2026-03-14 | Ajustes finos: BOLETO_FALSO 8%, ENGENHARIA_SOCIAL beneficiário fixo, QA final |
 | TPRD1 | ✅ Concluído | v4.3 | 2026-03-14 | Campos faltantes: new_merchant, cliente_perfil, classe_social, sim_swap_recent, fraud_signals |
 | TPRD2 | ⬜ Não iniciado | — | — | config/license.py gate + profiles/biometric.py tier pago |
 | TPRD3 | ✅ Concluído | v4.3 | 2026-03-14 | PIX Fase 2: cpf_hash, motivo_devolucao_med, pacs_status, is_devolucao |

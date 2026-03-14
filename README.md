@@ -41,22 +41,87 @@ This repository is built for teams that need a realistic Brazilian synthetic fra
   </tr>
 </table>
 
-## Open-Source Availability
+## Open Source and Commercial Plans
 
-The repository includes the full generator codebase. Runtime availability depends on the built-in license layer inside `src/fraud_generator/licensing/`.
+The entire generator codebase is in this repository under MIT. Running from source has **no technical limits** — you get every format, every target, every generator, and unlimited scale. The built-in license layer only activates when you load `FRAUDGEN_*` environment variables; without them the full code runs unrestricted.
 
-| Capability | Included in repo | Run without license | Run with signed license |
-|---|---|---|---|
-| Batch generation via `generate.py` | Yes | Yes | Yes |
-| Schema mode via `--schema` | Yes | Yes, inside free limits | Yes |
-| JSONL export | Yes | Yes | Yes |
-| CSV, JSON, Parquet, Arrow, DB export | Yes | No | Yes, by plan |
-| Stdout streaming | Yes | Yes | Yes |
-| Kafka, webhook, MinIO or S3 | Yes | No | Yes, by plan |
-| Self-hosted API server v1 | Yes | Yes | Yes |
-| Hosted API v2 generation service | Planned | Planned | Planned |
+Commercial plans add support, rate guarantees, and a future hosted API. The free 30-day trial gives you all open-source capabilities plus a webhook preview so you can evaluate paid streaming before paying.
 
-Without a license the project runs in free mode with JSONL output, stdout streaming, 50 MB per job, and a 5,000 events per month limit. Signed licenses unlock larger jobs, additional formats, advanced targets, and plan-based concurrency.
+### What open source gives you (no license)
+
+| Category | What is included |
+|---|---|
+| Generators | Banking transactions, ride-share rides, or both (`--type all`) |
+| Fraud simulation | 11 banking fraud patterns (`ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO`) |
+| Ride-share fraud | 7 types (`GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`) |
+| Fraud scoring | `fraud_risk_score` 0–100 built from 17 signals and 4 correlation rules |
+| Behavioral profiles | 7 transaction profiles + 7 ride profiles; sticky per customer |
+| Reproducibility | Deterministic seeds, custom date ranges, fixed customer pool |
+| Output formats | JSONL, JSON array, CSV, TSV, Parquet, Arrow IPC, database via SQLAlchemy |
+| Compression | JSONL: gzip / zstd / snappy; Parquet: snappy / zstd / gzip / brotli |
+| Streaming | stdout, Kafka, webhook |
+| Object storage | MinIO and S3-compatible upload |
+| Schema mode | Declarative JSON schemas with AI field correction (OpenAI / Anthropic / none) |
+| CLI | ~30 flags; full parallel worker control (`--workers`, `--parallel-mode`) |
+| Validation | `validate_realism.py`, `check_schema.py`, pytest integration suite |
+| API | Self-hosted FastAPI v1 for license issuance and telemetry |
+| Docker | Official image on Docker Hub |
+| Scale | Limited by your hardware only |
+| Cost | Free forever |
+
+### Plan comparison
+
+| Feature | OS (self-hosted) | Free Trial 30d | Starter R$49/mo | Pro R$149/mo | Team R$399/mo | Enterprise |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Generators** | | | | | | |
+| Banking transactions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Ride-share rides | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `--type all` (both in one run) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 11 banking fraud patterns | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 7 ride-share fraud types | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Configurable fraud rate | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 7 behavioral profiles | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Deterministic seeds | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Custom date range | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Output formats** | | | | | | |
+| JSONL | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| JSON array | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| CSV | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| TSV | ✓ | ✓ | – | – | ✓ | ✓ |
+| Parquet | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Arrow IPC | ✓ | ✓ | – | ✓ | ✓ | ✓ |
+| Database (SQLAlchemy) | ✓ | ✓ | – | – | ✓ | ✓ |
+| JSONL inline compression | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Parquet compression codecs | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Streaming** | | | | | | |
+| stdout | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Webhook (HTTP POST / PUT / PATCH) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Apache Kafka | ✓ | – | – | ✓ | ✓ | ✓ |
+| **Storage and infrastructure** | | | | | | |
+| MinIO / S3 upload | ✓ | – | – | ✓ | ✓ | ✓ |
+| Redis index cache | ✓ | ✓ | – | ✓ | ✓ | ✓ |
+| Multiprocessing workers | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Docker image | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Schema and quality** | | | | | | |
+| Schema mode (`--schema`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| AI schema correction | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `validate_realism.py` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `check_schema.py` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| pytest integration suite | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **API** | | | | | | |
+| Self-hosted API v1 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Hosted API v2 | – | – | – | Planned | Planned | Planned |
+| **Scale limits** | | | | | | |
+| Events per month | Unlimited | 1M | 5M | 100M | Unlimited | Unlimited |
+| Max job size | Hardware | 2 GB | 5 GB | 20 GB | Unlimited | Unlimited |
+| Concurrent jobs | Hardware | 2 | 3 | 10 | Unlimited | Unlimited |
+| Max events per API request | Hardware | 50K | 100K | 1M | Unlimited | Unlimited |
+| **Support** | | | | | | |
+| GitHub issues | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Email support | – | – | ✓ | ✓ | ✓ | ✓ |
+| WhatsApp support | – | – | – | ✓ | ✓ | ✓ |
+| Priority queue | – | – | – | – | ✓ | ✓ |
+| Dedicated / SLA | – | – | – | – | – | ✓ |
 
 ## Start Fast
 

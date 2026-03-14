@@ -259,9 +259,13 @@ RIDESHARE_FRAUD_TYPES = {
     'GPS_SPOOFING': 20,            # Location manipulation
     'SURGE_ABUSE': 15,             # Creating artificial demand
     'MULTI_ACCOUNT_DRIVER': 12,    # Same driver, multiple accounts
-    'PROMO_ABUSE': 18,             # Creating accounts for promotions
-    'RATING_FRAUD': 10,            # Rating manipulation
-    'SPLIT_FARE_FRAUD': 10,        # Fraud in shared rides
+    'PROMO_ABUSE': 18,             # Creating accounts for promotions (T5)
+    'RATING_FRAUD': 8,             # Rating manipulation
+    'SPLIT_FARE_FRAUD': 7,         # Fraud in shared rides
+    'REFUND_ABUSE': 10,            # Passenger claims issues repeatedly for credits (T5)
+    'PAYMENT_CHARGEBACK': 8,       # Stolen card → ride → chargeback cycle (T5 ID52/59)
+    'DESTINATION_DISPARITY': 5,    # Route realized differs significantly from requested (T5 ID55)
+    'ACCOUNT_TAKEOVER_RIDE': 7,    # Passenger account taken, immediate ride (T5 ID61)
 }
 
 FRAUD_TYPES_LIST = list(RIDESHARE_FRAUD_TYPES.keys())

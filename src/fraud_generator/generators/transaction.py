@@ -695,10 +695,39 @@ class TransactionGenerator:
             tx['device_id'] = f"DEV_DIST_{random.randint(100000, 999999):06d}"
             tx['ip_address'] = self._buf.next_ip()  # Fresh IP each time
 
+        # ---- T7: Micro-probe pattern (PIX_GOLPE, CARTAO_CLONADO) ----------- #
+        # Real attackers test with a small amount (R$1-5) before the main hit.
+        # 40% of such transactions are flagged as probe; original amount is preserved
+        # in `probe_original_amount` so models can reconstruct the episodic pattern.
+        if fraud_type in ('PIX_GOLPE', 'CARTAO_CLONADO') and random.random() < 0.40:
+            tx['probe_original_amount'] = tx['amount']
+            tx['amount'] = round(random.uniform(1.0, 5.0), 2)
+            tx['is_probe_transaction'] = True
+        else:
+            tx['is_probe_transaction'] = False
+            tx.setdefault('probe_original_amount', None)
+
+        # ---- T7: ENGENHARIA_SOCIAL fixed beneficiaries ------------------- #
+        # Real social-engineering episodes reuse 2-3 destination CPFs.
+        # Derive a stable set from customer_id hash so the same "episode" always
+        # sends money to the same beneficiaries (deterministic, no extra state).
+        if fraud_type == 'ENGENHARIA_SOCIAL':
+            import hashlib as _hl
+            seed_bytes = (tx.get('customer_id', '') + fraud_type).encode()
+            h = int(_hl.sha256(seed_bytes).hexdigest(), 16)
+            # Pick one of 3 fixed beneficiary suffixes for this customer episode
+            beneficiary_idx = h % 3
+            tx['beneficiary_cpf_hash'] = _hl.sha256(
+                f"BENE_{tx.get('customer_id', '')}_{beneficiary_idx}".encode()
+            ).hexdigest()
+            tx['new_beneficiary'] = True
+        else:
+            tx.setdefault('beneficiary_cpf_hash', None)
+
         # FRAUD SCORE: Higher base score for pattern
         base_score = pattern.get('fraud_score_base', 0.5)
         tx['fraud_score'] = int(random.uniform(base_score * 100, 95))
-        
+
         return tx
     
     def _add_risk_indicators(
@@ -756,6 +785,10 @@ class TransactionGenerator:
             tx['customer_velocity_z_score'] = round(
                 (current_v - v_mean) / max(v_std, 0.1), 2
             )
+
+            # T4: device_new_for_customer — True when ATO injects a fresh device
+            if tx.get('device_new_for_customer') is None:
+                tx['device_new_for_customer'] = session_state.is_new_device(tx.get('device_id'))
 
             # Time since last transaction
             if tx.get('time_since_last_txn_min') is None:

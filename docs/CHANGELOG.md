@@ -18,6 +18,36 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.1 | **Guaraná** | SOLID CLI refactor + JSON schema mode | 2026-03-04 |
 | v4.2 | **Sinal** | Fraud signal pipeline: 17 signals + 4 rules + PIX BACEN + device enrichment | 2026-03-14 |
 | v4.3 | **Consistência** | T7 distribuições + T4 padrões comportamentais + TPRD3 PIX Fase 2 | 2026-03-14 |
+| v4.4 | **Padrões** | T7 micro-probe + T4 device consistency + T5 ride-share fraud patterns | 2026-03-14 |
+
+---
+
+## v4.4 — Padrões (2026-03-14)
+
+### T7 — Padrões seqüenciais de fraude
+
+- **Micro-probe** para `PIX_GOLPE` e `CARTAO_CLONADO`: 40% das transações geram um micro-teste (R$1–5) antes do valor principal. Campo `is_probe_transaction: bool` e `probe_original_amount: float | null` adicionados ao output — modelos de ML podem reconstruir o padrão episódico.
+- **`ENGENHARIA_SOCIAL` beneficiários fixos**: cada cliente fraude usa 1 de 3 CPFs-destino derivados deterministicamente do `customer_id` (hash SHA-256). Campo `beneficiary_cpf_hash: str | null` adicionado. 80% das transações do episódio vão ao mesmo beneficiário — signal real para detecção.
+
+### T4 — Consistência de device
+
+- **`device_new_for_customer: bool`**: `CustomerSessionState` agora rastreia até 2 devices primários por cliente. Campo emitido quando device é desconhecido (ATO injeta device completamente novo). Disponibilizado em `_add_risk_indicators()` quando `session_state` está presente.
+
+### T5 — Expansão ride-share (novos fraud patterns)
+
+- 4 novos tipos de fraude em `RIDESHARE_FRAUD_TYPES`: `REFUND_ABUSE` (10%), `PAYMENT_CHARGEBACK` (8%), `DESTINATION_DISPARITY` (5%), `ACCOUNT_TAKEOVER_RIDE` (7%). Pesos de `RATING_FRAUD` e `SPLIT_FARE_FRAUD` ajustados proporcionalmente.
+- Campos de output adicionados a todas as corridas: `promo_abuse_group`, `refund_count_30d`, `payment_dispute_flag`, `route_deviation_km`, `new_device_first_ride`.
+- `_apply_fraud_fields()` popula os campos corretos por tipo:
+  - `PROMO_ABUSE`: `promo_abuse_group` derivado de hash do `passenger_id`
+  - `REFUND_ABUSE`: `refund_count_30d` = 3–9
+  - `PAYMENT_CHARGEBACK`: `payment_dispute_flag = True`
+  - `DESTINATION_DISPARITY`: `route_deviation_km` = 1.5–4× distância base
+  - `ACCOUNT_TAKEOVER_RIDE`: `new_device_first_ride = True`
+  - `GPS_SPOOFING`: `route_deviation_km` = 2–15 km
+
+### Testes
+
+- 180 passam, 3 skipped, 0 failed.
 
 ---
 
@@ -61,12 +91,20 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 - Seção "Start Fast" expandida com exemplos abrangentes cobrindo todos os formatos, flags comuns, Docker, streaming e schema mode.
 - Seção "CLI Reference" adicionada em ambos os READMEs com tabelas completas de todas as flags de `generate.py` e `stream.py`.
 - Seção "Output Schema" substituiu o JSON mínimo preexistente: expõe registros reais completos (transação com cartão, PIX com fraude e campos BACEN, cliente com CPF/perfil, device, corrida) e documenta a estrutura de arquivos de saída (`customers.jsonl`, `devices.jsonl`, `transactions_00000.jsonl`).
+- Seção "Open-Source Availability" substituída por "Open Source e planos comerciais": inclui tabela de 2 colunas descrevendo tudo que o código open source entrega sem restrições, e tabela comparativa de 6 planos (OS / Trial / Starter / Pro / Team / Enterprise) com mais de 40 linhas cobrindo geradores, formatos, streaming, storage, schema, qualidade, API, limites e suporte.
+
+### Licenciamento
+
+- Tier FREE atualizado em `limits.py`: agora concede todos os formatos (`jsonl`, `csv`, `parquet`, `json`, `arrow`, `tsv`, `ipc`), webhook como preview do streaming pago, jobs até 2 GB, 1M eventos/mês e 2 jobs simultâneos — alinhado com o que o código open source entrega, em vez de um subconjunto crippled de JSONL + stdout.
 
 ### Correções de Bug
 
 - Corrigido `SyntaxError` em `src/fraud_generator/generators/transaction.py` linha 439 causado por `\n` literal em trecho de string.
 - Corrigido `NameError: name 'customer_cpf' is not defined` em `_add_type_specific_fields`: o parâmetro `customer_cpf` agora é passado explicitamente da chamada em `generate()`.
 
+### Arquitetura
+
+- `ARCHITECTURE.md` atualizado para v4.2.0: lista correta de 11 padrões de fraude bancária e 7 tipos de fraude ride-share; assinatura atualizada de `_add_type_specific_fields` documentada; versão e data do cabeçalho corrigidas.
 ### Pipeline de Sinais de Fraude
 
 Implementação completa da arquitetura de pontuação de fraude baseada em sinais comportamentais e biométricos do dispositivo, alinhada com dados BACEN/IBGE 2023-2024.
