@@ -13,6 +13,30 @@
 
 ## 📚 Documentation Directories
 
+### 🧠 Análise das Férias — Estratégia e Decisões Técnicas (`/Analise e comparacao com estudos das ferias`)
+Análise cruzada de ~32 documentos (PDFs internos, JSONs, código) feita em março 2026. **Source of truth** para decisões de implementação e produto.
+
+| File | Purpose |
+|------|---------|
+| [01 - INVENTARIO_COMPLETO_DOCUMENTOS.md](Analise%20e%20comparacao%20com%20estudos%20das%20ferias/01%20-%20INVENTARIO_COMPLETO_DOCUMENTOS.md) | Inventário dos 32+ documentos analisados com resumos e relevância |
+| [02 - ANALISE_COMPARATIVA_CRUZADA.md](Analise%20e%20comparacao%20com%20estudos%20das%20ferias/02%20-%20ANALISE_COMPARATIVA_CRUZADA.md) | 7 conflitos resolvidos, gap matrix de 40+ campos, roadmap Fase 0–5 ← **LEIA ANTES DE IMPLEMENTAR** |
+| [03 - ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md](Analise%20e%20comparacao%20com%20estudos%20das%20ferias/03%20-%20ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md) | Estratégia de 3 camadas: license gate + GHCR privado + 4 pipelines CI/CD |
+| [04 - AQUISICAO_DADOS_IBGE_BACEN.md](Analise%20e%20comparacao%20com%20estudos%20das%20ferias/04%20-%20AQUISICAO_DADOS_IBGE_BACEN.md) | Guia de dados IBGE/BACEN reais: APIs, ETL scripts, schema PostgreSQL |
+| [05 - PARECER_STARTUP_VS_PRODUTO.md](Analise%20e%20comparacao%20com%20estudos%20das%20ferias/05%20-%20PARECER_STARTUP_VS_PRODUTO.md) | Recomendação: Bootstrap SaaS 12 meses → Startup se MRR ≥ R$20k |
+
+### 📂 Documentos de Estudos Técnicos (`/documentodeestudos`)
+Artefatos de referência: schema canônico, payloads de exemplo, pipelines CI/CD, benchmark TSTR.
+
+| File | Purpose |
+|------|---------|
+| [brazildata_schema.json](documentodeestudos/brazildata_schema.json) | Schema JSON canônico — contrato de campos ← **fonte de verdade de campos** |
+| [brazildata_entities.json](documentodeestudos/brazildata_entities.json) | Definição de entidades (Customer, Device, Transaction) |
+| [brazildata_sample_payloads.json](documentodeestudos/brazildata_sample_payloads.json) | Exemplos de payload JSON para validação manual |
+| [brazildata-infra-README.md](documentodeestudos/brazildata-infra-README.md) | Blueprint da VPS OVH: estrutura do repo `brazildata-infra`, 6 camadas de segurança |
+| [SynthLab_CICD_Pipelines.md](documentodeestudos/SynthLab_CICD_Pipelines.md) | YAML completo dos 4 pipelines GitHub Actions (produto, site, infra, OS release) |
+| [synthfin_tstr_benchmark.py](documentodeestudos/synthfin_tstr_benchmark.py) | Script TSTR: treina em sintético, testa em real — valida qualidade dos dados |
+| [synthfin_tstr_results.csv](documentodeestudos/synthfin_tstr_results.csv) | Resultados TSTR: AUC gap = 0.0% (LR/RF/XGBoost) — dados passam validação ML |
+
 ### 📊 Analysis & Insights (`/analysis`)
 Deep-dive analysis of project architecture, performance metrics, and behavioral patterns.
 

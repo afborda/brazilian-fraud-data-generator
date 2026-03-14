@@ -295,8 +295,187 @@
 | **T5** | Ride-Share (novos fraudes) | 1,5 semanas | `ride.py`, `rideshare.py` | T0 |
 | **T6** | Fraud Rings | 2 semanas | `transaction.py`, `CustomerIndex` | T3, T4 |
 | **T7** | Ajustes finos + QA | 1 semana | múltiplos + `check_schema.py` | T1–T6 |
+| **TSN** | Pipeline de Risco v4.2.0 | 1 semana | `score.py`, `correlations.py`, `session_context.py`, `pix.py` | T3 |
+| **TPRD1** | Campos de contexto faltantes | 3 dias | `transaction.py`, `session_context.py` | TSN |
+| **TPRD2** | Biometria (Tier Pago) | 1 semana | `profiles/biometric.py`, `config/license.py` | TSN |
+| **TPRD3** | PIX Fase 2 + Campos extras | 3 dias | `config/pix.py`, `transaction.py` | TSN |
+| **TPRD4** | Refactor Enricher/Pipeline | 2 semanas | `enrichers/`, `pipeline/` | TPRD1–3 |
+| **TPRD5** | Produção: CI/CD + VPS | 1 semana | `.github/workflows/`, `brazildata-infra/` | TPRD4 |
 
-**Total estimado**: ~9 semanas (paralelo T1+T2 e T3+T5 possível)
+**Total estimado**: ~9 semanas qualidade de dados + ~5 semanas produto (paralelo possível a partir de TPRD1)
+
+---
+
+## TURNO SN — Pipeline de Risco (v4.2.0 Sinal)
+
+> **Objetivo**: transformar `fraud_risk_score` de campo hardcoded=0 em score real baseado em 17 sinais comportamentais e biométricos.  
+> **Concluído em**: 2026-03-13/14  
+> **Status**: ✅ **CONCLUÍDO**
+
+### O que foi feito
+
+- [x] **`generators/score.py`** — wired: 17 sinais ponderados, resultado int 0–100
+- [x] **`generators/correlations.py`** — wired: 4 regras de correlação (MALWARE_ATS, ATO, FALSA_CENTRAL, CONTA_LARANJA)
+- [x] **`generators/session_context.py`** — `build_context_for_fraud()` converte dict de transação em `GenerationContext` para alimentar score.py + correlations.py
+- [x] **`config/pix.py`** — criado: constantes BACEN pacs.008 (ISPB_MAP 26 bancos, MODALIDADE_INICIACAO, TIPO_CONTA, HOLDER_TYPE) + `generate_end_to_end_id()`
+- [x] **PIX transações** — 7 campos BACEN emitidos: `end_to_end_id`, `ispb_pagador`, `ispb_recebedor`, `tipo_conta_pagador`, `tipo_conta_recebedor`, `holder_type_recebedor`, `modalidade_iniciacao`
+- [x] **Padrões de fraude que fazem upgrade para PIX** — também emitem os 7 campos BACEN
+- [x] **`models/device.py`** + **`generators/device.py`** — 4 campos novos: `device_age_days`, `emulator_detected`, `vpn_active`, `ip_type` (presentes em `devices.jsonl`)
+- [x] **Isolamento de RNG** — `build_context_for_fraud(rng=self._buf._rng)` garante que `sample_device_signals()` nunca toca o `random` global; seed determinística preservada
+- [x] **`schemas/banking_full.json`** — atualizado de v1.0 para v2.0 com todos os campos novos
+- [x] **VERSION** — bumped de 4.1.0 para 4.2.0
+- [x] **109 testes unitários novos** — `test_correlations.py` (35), `test_score.py` (28), `test_session_context.py` (27), `test_output_schema.py` (19) — todos passando
+- [x] **CHANGELOG.md** — atualizado com seção v4.2.0 Sinal
+- [x] **Git commit + tag** — `252ce35` / `v4.2.0`
+
+### O que NÃO foi feito (para próximos turnos)
+
+- [ ] `config/license.py` — gate OS/Pago com API key `sk-*` (→ TPRD2)
+- [ ] `profiles/biometric.py` — sinais biométricos detalhados para tier pago (→ TPRD2)
+- [ ] PIX Fase 2: `cpf_hash_pagador`, `motivo_devolucao_med`, `pacs_status` (→ TPRD3)
+- [ ] Campos de contexto faltantes no output de transação: `new_merchant`, `cliente_perfil`, `classe_social`, `ip_location_matches_account`, `sim_swap_recent`, `hours_inactive` (→ TPRD1)
+- [ ] `fraud_signals: list[str]` — array explicando quais sinais ativaram o score (→ TPRD1)
+- [ ] Padrão beneficiário recorrente: ENGENHARIA_SOCIAL deve reusar 2–3 CPFs destino fixos (→ T7)
+- [ ] `validate_correlations.py` — script de validação dos 15 checks (→ TPRD1)
+
+---
+
+## TURNO TPRD1 — Campos de Contexto Faltantes no Output
+
+> **Objetivo**: completar o output de transações com campos definidos no `brazildata_schema.json` mas ausentes no JSON gerado.  
+> **Esforço**: ~3 dias  
+> **Depende de**: TSN  
+> **Status**: ⬜ Não iniciado
+
+### Campos a adicionar ao output de transação
+
+- [ ] `new_merchant: bool` — se o merchant nunca foi usado pelo cliente antes (já calculado em CustomerSessionState, não serializado)
+- [ ] `cliente_perfil: str` — ex: `young_digital`, `business_owner` (já atribuído ao gerar cliente, não propagado para transação)
+- [ ] `classe_social: str` — ex: `C1`, `B2` (já existe no generator internamente)
+- [ ] `ip_location_matches_account: bool` — se IP bate com UF do cadastro
+- [ ] `sim_swap_recent: bool` — SIM swap nos últimos 30 dias (atualmente usado no score mas não emitido)
+- [ ] `hours_inactive: int` — horas desde última transação (calculado em CustomerSessionState, não serializado)
+- [ ] `fraud_signals: list[str]` — array de strings identificando quais sinais contribuíram para `fraud_risk_score` (usar `score_breakdown()`)
+- [ ] `num_failed_auth_attempts: int` — tentativas de autenticação falhadas na sessão
+
+### Validação
+- [ ] `check_schema.py` passa sem diff em todos os novos campos
+- [ ] `test_output_schema.py` atualizado para incluir os novos campos obrigatórios
+
+---
+
+## TURNO TPRD2 — Biometria e Gate OS/Pago
+
+> **Objetivo**: implementar a separação OS/Pago via `config/license.py` + campos biométricos detalhados para o tier pago.  
+> **Esforço**: ~1 semana  
+> **Depende de**: TSN  
+> **Status**: ⬜ Não iniciado  
+> **Fonte**: `02 - ANALISE_COMPARATIVA_CRUZADA.md` Fase 1 + Fase 4, `03 - ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md`
+
+### Implementações
+
+- [ ] **`config/license.py`** — gate `sk-*` que distingue OS de Pago:
+  ```python
+  def is_paid_tier(api_key: str) -> bool:
+      return api_key.startswith("sk-") and len(api_key) == 32
+  ```
+- [ ] **`profiles/biometric.py`** — perfis biométricos detalhados para tier pago (10 campos):
+  - `typing_speed_avg_ms`, `typing_rhythm_variance`, `touch_pressure_avg`
+  - `accelerometer_variance`, `gyroscope_variance`, `scroll_before_confirm`
+  - `time_to_confirm_tx_sec`, `session_duration_sec`, `copy_paste_on_key`, `navigation_order_anomaly`
+- [ ] Campos biométricos = `null` no tier OS, preenchidos no tier Pago
+- [ ] `active_call_during_tx: bool` — serializado no output (já existe em GenerationContext)
+- [ ] `network_type: str` — WIFI/4G/5G/3G
+- [ ] `language_locale: str` — ex: `pt-BR`
+
+### Validação
+- [ ] OS tier: campos biométricos = null em 100% dos registros
+- [ ] Paid tier: campos biométricos preenchidos com distribuições corretas por fraud_type
+
+---
+
+## TURNO TPRD3 — PIX Fase 2 e Campos BACEN Avançados
+
+> **Objetivo**: completar a conformidade com pacs.008 e adicionar campos de devolução/status.  
+> **Esforço**: ~3 dias  
+> **Depende de**: TSN  
+> **Status**: ⬜ Não iniciado  
+> **Fonte**: `02 - ANALISE_COMPARATIVA_CRUZADA.md` Fase 3
+
+### Implementações
+
+- [ ] `cpf_hash_pagador: str` — SHA-256 do CPF pagador (sem CPF em claro — LGPD)
+- [ ] `cpf_hash_recebedor: str` — SHA-256 do CPF recebedor
+- [ ] `motivo_devolucao_med: str | null` — FR01/MD06/BE08/REFU (apenas em devoluções; já definido em `config/pix.py`)
+- [ ] `pacs_status: str` — ACSC/RJCT/PDNG (status da liquidação)
+- [ ] `is_devolucao: bool` — se é transação de devolução MED
+- [ ] Serializar `motivo_devolucao_med` nos casos de fraude confirmada (is_fraud=True + PIX)
+
+### Validação
+- [ ] Nenhum CPF em claro no output (apenas hashes)
+- [ ] `motivo_devolucao_med` presente em 100% das devoluções e null em transações normais
+- [ ] Schema `banking_full.json` atualizado para v2.1 com campos PIX Fase 2
+
+---
+
+## TURNO TPRD4 — Refactor Enricher / Pipeline
+
+> **Objetivo**: substituir o `TransactionGenerator` monolítico por uma pipeline de enriquecedores modulares.  
+> **Esforço**: ~2 semanas  
+> **Depende de**: TPRD1, TPRD2, TPRD3  
+> **Status**: ⬜ Não iniciado  
+> **Fonte**: `02 - ANALISE_COMPARATIVA_CRUZADA.md` Fase 4, `03 - ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md`
+
+### Arquivos a criar
+
+- [ ] `pipeline/context.py` — `TransactionContext` dataclass com todos os campos intermediários
+- [ ] `pipeline/transaction_pipeline.py` — orquestrador que chama enrichers em ordem
+- [ ] `enrichers/base.py` — `EnricherProtocol` abstrato
+- [ ] `enrichers/temporal.py` — enriquecimento de timestamp, horario_incomum, sazonalidade
+- [ ] `enrichers/geo.py` — lat/lon, is_impossible_travel, location_cluster
+- [ ] `enrichers/device.py` — campos de device mergeados na transação
+- [ ] `enrichers/session.py` — velocity, accumulated_amount, new_merchant, new_beneficiary
+- [ ] `enrichers/fraud.py` — injeção de padrão de fraude
+- [ ] `enrichers/risk.py` — fraud_risk_score, fraud_signals, correlations
+- [ ] `enrichers/pix.py` — campos BACEN PIX
+- [ ] `enrichers/biometric.py` — campos biométricos (com gate OS/Pago)
+
+### Validação
+- [ ] `pytest tests/` — zero regressões
+- [ ] Dataset gerado com novo pipeline idêntico ao anterior (diff no output = zero para mesmo seed)
+- [ ] `scripts/validate_correlations.py` — 15 checks passam
+
+---
+
+## TURNO TPRD5 — Produção: CI/CD + VPS
+
+> **Objetivo**: colocar SynthFin em produção na VPS OVH Value com os 4 pipelines CI/CD.  
+> **Esforço**: ~1 semana  
+> **Depende de**: TPRD4  
+> **Status**: ⬜ Não iniciado  
+> **Fonte**: `docs/documentodeestudos/SynthLab_CICD_Pipelines.md`, `docs/documentodeestudos/brazildata-infra-README.md`
+
+### Pipelines GitHub Actions
+
+- [x] **Pipeline 4: OS Release** — `.github/workflows/docker-publish.yml` já existe ✅
+- [ ] **Pipeline 1: Produto** — `.github/workflows/deploy-product.yml` — push main → test → build GHCR → deploy VPS
+- [ ] **Pipeline 2: Site** — `.github/workflows/deploy-site.yml` — push main → build Next.js → deploy VPS
+- [ ] **Pipeline 3: Infra** — `.github/workflows/deploy-infra.yml` — apply configs na VPS via SSH
+
+### VPS Setup (brazildata-infra)
+
+- [ ] Criar repo `brazildata-infra` com estrutura definida em `brazildata-infra-README.md`
+- [ ] `security/01-07-*.sh` — hardening do OS (SSH porta 2222, UFW, fail2ban, kernel)
+- [ ] `traefik/` — reverse proxy + SSL Let's Encrypt + rate limiting
+- [ ] `services/docker-compose.services.yml` — PostgreSQL, Redis, MinIO, API, Worker, Beat
+- [ ] `monitoring/` — Prometheus + Grafana dashboards
+- [ ] `backup/backup.sh` — backup diário automático (PostgreSQL + acme.json)
+
+### Validação
+- [ ] Push para main dispara deploy automático
+- [ ] `api.synthlab.io/health` retorna 200
+- [ ] SSL A+ no SSL Labs
+- [ ] Rate limit: 1000 req/min para trial, 10k para pro
 
 ---
 
@@ -310,14 +489,20 @@
 | T1 | ✅ Concluído | 2026-03-05 | 2026-03-05 | Temporal 9.6/10 (era 6.7) — picos [12,13,18,19,20,21] |
 | T2 | ✅ Concluído | 2026-03-05 | 2026-03-05 | Geo 10.0/10 — `location_cluster`, `is_impossible_travel` |
 | T3 | ✅ Concluído | 2026-03-05 | 2026-03-05 | 10 tipos únicos, 3 novos: CARD_TESTING/MICRO_BURST_VELOCITY/DISTRIBUTED_VELOCITY |
-| T4 | ⬜ Aguardando | — | — | Consistência comportamental de clientes |
-| T5 | ⬜ Não iniciado | — | — | — |
-| T6 | ⬜ Não iniciado | — | — | — |
-| T7 | ⬜ Não iniciado | — | — | — |
+| TSN | ✅ Concluído | 2026-03-13 | 2026-03-14 | fraud_risk_score live, PIX BACEN 7 campos, device 4 campos, 109 testes, v4.2.0 |
+| T4 | ⬜ Aguardando | — | — | Consistência comportamental de clientes — device/merchant clustering, velocity z-score |
+| T5 | ⬜ Não iniciado | — | — | Novos fraud patterns ride-share: promo abuse, refund abuse, destination disparity |
+| T6 | ⬜ Não iniciado | — | — | Fraud rings: fraud_ring_id, ring_role, recipient_is_mule |
+| T7 | ⬜ Não iniciado | — | — | Ajustes finos: BOLETO_FALSO 8%, ENGENHARIA_SOCIAL beneficiário fixo, QA final |
+| TPRD1 | ⬜ Não iniciado | — | — | Campos faltantes: new_merchant, cliente_perfil, classe_social, sim_swap_recent, fraud_signals |
+| TPRD2 | ⬜ Não iniciado | — | — | config/license.py gate + profiles/biometric.py tier pago |
+| TPRD3 | ⬜ Não iniciado | — | — | PIX Fase 2: cpf_hash, motivo_devolucao_med, pacs_status |
+| TPRD4 | ⬜ Não iniciado | — | — | Refactor enricher/pipeline |
+| TPRD5 | ⬜ Não iniciado | — | — | CI/CD Pipelines 1-3 + VPS OVH setup |
 
 **Legenda**: ⬜ Não iniciado · 🟡 Em andamento · ✅ Concluído · 🔴 Bloqueado
 
 ---
 
-*Fontes: FRAUDES_DESCOBERTAS.md · ANALISE_VALIDACAO_DADOS.md · INDICE_EXECUTIVO.md · MATRIZ_FRAUDES.md*  
-*Última atualização: Março 2026*
+*Fontes: FRAUDES_DESCOBERTAS.md · ANALISE_VALIDACAO_DADOS.md · INDICE_EXECUTIVO.md · MATRIZ_FRAUDES.md · docs/Analise e comparacao com estudos das ferias/ · docs/documentodeestudos/SynthLab_CICD_Pipelines.md*  
+*Última atualização: 2026-03-14*

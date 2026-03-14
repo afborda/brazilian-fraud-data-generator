@@ -16,15 +16,22 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v3.3 | **Turbo** | Performance Phase 1 (+18.9% speed, -85% storage) | 2025-01-30 |
 | v4.0 | **Quantum** | Phase 2.2-2.9: Session State + Parallelism + Analytics | 2026-01-30 |
 | v4.1 | **Guaraná** | SOLID CLI refactor + JSON schema mode | 2026-03-04 |
-| v4.2 | **Sinal** | Fraud signal pipeline: 17 signals + 4 rules + victim profiles | 2026-07 |
+| v4.2 | **Sinal** | Fraud signal pipeline: 17 signals + 4 rules + PIX BACEN + device enrichment | 2026-03-14 |
 
 ---
 
-## v4.2 — Sinal (2026-07)
+## v4.2 — Sinal (2026-03-14)
 
 ### Pipeline de Sinais de Fraude
 
 Implementação completa da arquitetura de pontuação de fraude baseada em sinais comportamentais e biométricos do dispositivo, alinhada com dados BACEN/IBGE 2023-2024.
+
+#### Validação de Qualidade — TSTR Benchmark
+Os dados gerados na v4.2 foram validados com o benchmark Train-Synthetic-Test-Real (`docs/documentodeestudos/synthfin_tstr_benchmark.py`):
+- **AUC gap = 0.0%** entre TRTR e TSTR para Logistic Regression, Random Forest e XGBoost
+- **AUC-ROC = 1.000** nos 3 modelos — separabilidade perfeita de classes
+- **Top feature no XGBoost**: `dict_fraud_marker` (label explícito) → `novo_beneficiario` → `horario_incomum` → `tipo_conta_rec` (campo PIX novo)
+- Resultado: dados sintéticos são tão informantes quanto dados reais para treinamento de modelos de fraude
 
 #### Correções de Schema (breaking → compat)
 - **`fraud_score`**: tipo alterado de `float` para `int` (escala 0-100, sem decimais)
