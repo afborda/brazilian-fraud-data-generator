@@ -239,3 +239,70 @@ def _sample_dest_account_age(fraud_type: Optional[str], rng) -> int:
         return rng.randint(0, 30)      # recently opened mule account
     else:
         return rng.randint(30, 3650)   # established account
+
+
+def build_context_for_fraud(
+    tx: Dict[str, Any],
+    is_fraud: bool,
+    fraud_type: Optional[str],
+    customer_typical_amount: float = 200.0,
+    rng=None,
+) -> "GenerationContext":
+    """
+    Build a GenerationContext from an already-generated transaction dict.
+
+    Used by generators/transaction.py after all fields are populated to feed
+    generators/correlations.py and generators/score.py without requiring a
+    full SessionContextGenerator.build() call.
+
+    Biometric device signals are sampled from the appropriate DeviceSignalProfile
+    for the fraud_type so the 17-signal score reflects realistic device behaviour.
+    """
+    profile: DeviceSignalProfile = get_device_profile(fraud_type if is_fraud else None)
+    signals = sample_device_signals(profile, rng=rng)
+
+    # Derive account-state signals from the transaction fields that are already set.
+    is_new_device = bool(tx.get("new_device", False))
+    ip_mismatch = bool(tx.get("ip_mismatch", False))
+    hours_inactive = int(tx.get("hours_inactive", 0))
+    sim_swap = bool(tx.get("sim_swap_recent", False))
+    dest_age = int(tx.get("dest_account_age_days", 180))
+    new_beneficiary = bool(tx.get("new_beneficiary", False))
+    velocity = int(tx.get("velocity_transactions_24h") or 1)
+    accumulated = float(tx.get("accumulated_amount_24h") or 0.0)
+    time_since = tx.get("time_since_last_txn_min")
+    amount = float(tx.get("amount", 0.0))
+    notification_ignored = bool(tx.get("notification_ignored", False))
+    multiple_accounts = bool(tx.get("multiple_accounts", False))
+
+    return GenerationContext(
+        # device signals from profile
+        touch_pressure=signals["touch_pressure"],
+        typing_interval_ms=signals["typing_interval_ms"],
+        accel_magnitude=signals["accel_magnitude"],
+        session_duration_s=signals["session_duration_s"],
+        confirm_latency_s=signals["confirm_latency_s"],
+        is_emulator=signals["is_emulator"],
+        is_rooted=signals["is_rooted"] or bool(tx.get("rooted_or_jailbreak", False)),
+        is_vpn=signals["is_vpn"],
+        active_call=signals["active_call"],
+        nav_anomaly=signals["nav_anomaly"],
+        multiple_accounts=signals["multiple_accounts"] or multiple_accounts,
+        # account state
+        hours_inactive=hours_inactive,
+        new_device=is_new_device,
+        ip_mismatch=ip_mismatch,
+        sim_swap_recent=sim_swap,
+        # velocity
+        velocity_transactions_24h=velocity,
+        accumulated_amount_24h=accumulated,
+        time_since_last_txn_min=time_since,
+        # destination
+        dest_account_age_days=dest_age,
+        new_beneficiary=new_beneficiary,
+        # amounts
+        amount=amount,
+        typical_amount=customer_typical_amount,
+        # notification
+        notification_ignored=notification_ignored,
+    )

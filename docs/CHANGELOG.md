@@ -74,6 +74,49 @@ Implementação completa da arquitetura de pontuação de fraude baseada em sina
   - **`malware_ats_victim`** — 18-45 anos, usuário Android de risco, APK sideload
 - Perfis de vítima têm peso 0 em `PROFILE_DISTRIBUTION` — não são selecionados aleatoriamente; só via injeção explícita de fraude
 
+#### Novo: `config/pix.py`
+- Constantes BACEN padrão pacs.008/pacs.004 para campos PIX obrigatórios
+- `MODALIDADE_INICIACAO_LIST/WEIGHTS`: CHAVE(55%), MANUAL(15%), QRCODE_ESTATICO(20%), QRCODE_DINAMICO(10%)
+- `TIPO_CONTA_LIST/WEIGHTS`: CACC(70%), SVGS(15%), SLRY(8%), TRAN(7%)
+- `HOLDER_TYPE_LIST/WEIGHTS`: CUSTOMER(75%), BUSINESS(25%)
+- `ISPB_MAP`: 26 bancos brasileiros reais (BB=00000000, Nubank=18236120, Itaú=60701190, etc.)
+- `generate_end_to_end_id(ispb, timestamp_str, seq)` — formato oficial `E{ISPB8}{YYYYMMDDHHmmss}{seq10}`
+
+#### Atualizado: `generators/transaction.py` — campos PIX/BACEN
+- Transações do tipo PIX agora emitem 7 campos BACEN padrão pacs.008:
+  - `end_to_end_id`, `ispb_pagador`, `ispb_recebedor`, `tipo_conta_pagador`, `tipo_conta_recebedor`, `holder_type_recebedor`, `modalidade_iniciacao`
+- Padrões de fraude que fazem upgrade de tipo para PIX também emitem os mesmos 7 campos
+- Todos os sorteios usam `self._buf` (rng isolado) — zero impacto no estado global `random`
+
+#### Atualizado: `models/device.py` e `generators/device.py` — campos extras de dispositivo
+- Modelo `Device` recebeu 4 novos campos opcionais com defaults seguros: `device_age_days: Optional[int]`, `emulator_detected: bool = False`, `vpn_active: bool = False`, `ip_type: Optional[str]`
+- `DeviceGenerator` agora calcula e emite todos os 4 campos com distribuições realistas:
+  - `emulator_detected`: 2% dos dispositivos
+  - `vpn_active`: 8%; se ativo, `ip_type` ∈ {VPN(70%), DATACENTER(25%), TOR(5%)}; se inativo: `RESIDENTIAL(94%)` ou `DATACENTER(6%)`
+  - `device_age_days`: dias desde `primeiro_uso` até hoje
+
+#### Pipeline wired: `fraud_risk_score` agora computado em tempo real
+- Anteriormente `fraud_risk_score` era sempre 0 (hardcoded)
+- `_add_risk_indicators()` agora chama `build_context_for_fraud()` → `match_fraud_rule()` → `compute_fraud_risk_score()` para cada transação
+- Fraudes legítimas: score médio 40-80; transações normais: score médio 0-8
+
+#### Isolamento de RNG: sem regressão de determinismo
+- `build_context_for_fraud()` recebe `rng` opcional; quando chamada pelo gerador usa `self._buf._rng` (instância `random.Random` privada)
+- `sample_device_signals()` nunca toca o `random` global quando o `rng` é passado
+- Garante que datasets gerados com `--seed` continuam 100% determinísticos
+
+#### Atualizado: `schemas/banking_full.json` v1.0 → v2.0
+- `transacao.pix` expandido com 7 campos BACEN obrigatórios
+- `dispositivo` expandido com `device_age_days`, `emulator_detected`, `vpn_active`, `ip_type`
+- `risco` expandido com `fraud_risk_score` e `tempo_desde_ultima_txn_min`
+- `_meta.versao` atualizado para `4.2.0`
+
+#### Novos testes: 109 testes unitários
+- `tests/unit/test_correlations.py` (35 testes) — 4 regras de correlação (`MALWARE_ATS`, `ATO`, `FALSA_CENTRAL`, `CONTA_LARANJA`), contexto limpo, matcher
+- `tests/unit/test_score.py` (28 testes) — bounds 0-100, 17 sinais individuais, `score_breakdown()`, ordenação
+- `tests/unit/test_session_context.py` (27 testes) — defaults de `GenerationContext`, mapeamento de campos em `build_context_for_fraud()`, comportamentos de `SessionContextGenerator.build()`
+- `tests/unit/test_output_schema.py` (19 testes) — 27 campos obrigatórios presentes, tipos corretos, distribuição de `fraud_risk_score`, regras PIX/cartão
+
 ---
 
 ## 📚 Análise das Férias — Documentos de Estratégia (2026-03-13)

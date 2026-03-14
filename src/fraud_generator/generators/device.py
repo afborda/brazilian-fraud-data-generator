@@ -4,7 +4,7 @@ Device generator for Brazilian Fraud Data Generator.
 
 import random
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from typing import Dict, Any, Optional, Iterator
 from faker import Faker
 
@@ -93,7 +93,16 @@ class DeviceGenerator:
         # Trust and security status
         is_trusted = random.choices([True, False], weights=[85, 15])[0]
         is_rooted = random.choices([False, True], weights=[97, 3])[0]
-        
+
+        # New security fields
+        device_age_days = (datetime.today().date() - first_use).days
+        emulator_detected = random.choices([False, True], weights=[98, 2])[0]
+        vpn_active = random.choices([False, True], weights=[92, 8])[0]
+        if vpn_active:
+            ip_type = random.choices(["VPN", "DATACENTER", "TOR"], weights=[70, 25, 5])[0]
+        else:
+            ip_type = random.choices(["RESIDENTIAL", "DATACENTER"], weights=[94, 6])[0]
+
         return {
             'device_id': device_id,
             'customer_id': customer_id,
@@ -105,6 +114,10 @@ class DeviceGenerator:
             'first_use': first_use.isoformat(),
             'is_trusted': is_trusted,
             'rooted_or_jailbreak': is_rooted,
+            'device_age_days': device_age_days,
+            'emulator_detected': emulator_detected,
+            'vpn_active': vpn_active,
+            'ip_type': ip_type,
         }
     
     def generate_for_customer(

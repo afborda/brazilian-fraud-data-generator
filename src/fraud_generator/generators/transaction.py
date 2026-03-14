@@ -47,6 +47,16 @@ from ..utils.helpers import generate_ip_brazil, generate_random_hash
 from ..utils.streaming import CustomerSessionState
 from ..utils.weight_cache import WeightCache  # OTIMIZAÇÃO 1.1
 from ..utils.precompute import PrecomputeBuffers  # OTIMIZAÇÃO 3: RAM pre-compute
+from .session_context import build_context_for_fraud
+from .correlations import match_fraud_rule
+from .score import compute_fraud_risk_score
+from ..config.pix import (
+    MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS,
+    TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS,
+    HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS,
+    ISPB_LIST,
+    generate_end_to_end_id,
+)
 
 
 class TransactionGenerator:
@@ -91,6 +101,7 @@ class TransactionGenerator:
         self._installment_cache = WeightCache(INSTALLMENT_LIST, INSTALLMENT_WEIGHTS)
         self._card_entry_cache = WeightCache(CARD_ENTRY_LIST, CARD_ENTRY_WEIGHTS)
         self._pix_type_cache = WeightCache(PIX_TYPES_LIST, PIX_TYPES_WEIGHTS)
+        self._ispb_list = ISPB_LIST
         
         # OTIMIZAÇÃO 1.2: Cache merchant lists by MCC (avoid repeated dict lookups)
         from ..config.merchants import MERCHANTS_BY_MCC
@@ -350,9 +361,23 @@ class TransactionGenerator:
                 'pix_key_type': None,
                 'pix_key_destination': None,
                 'destination_bank': None,
+                # PIX/BACEN fields — null for card transactions
+                'end_to_end_id': None,
+                'ispb_pagador': None,
+                'ispb_recebedor': None,
+                'tipo_conta_pagador': None,
+                'tipo_conta_recebedor': None,
+                'holder_type_recebedor': None,
+                'modalidade_iniciacao': None,
             })
         elif tx_type == 'PIX':
             pix_key_type = self._pix_type_cache.sample()
+            ispb_pagador = self._buf.next_choice(self._ispb_list)
+            ispb_recebedor = self._buf.next_choice(self._ispb_list)
+            modalidade = self._buf.next_weighted('modalidade', MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS)
+            ts_str = tx.get('timestamp', '')[:14].replace('-', '').replace('T', '').replace(':', '')
+            seq = self._buf.next_hash16()[:10]
+            e2e_id = generate_end_to_end_id(ispb_pagador, ts_str, seq)
             tx.update({
                 'card_number_hash': None,
                 'card_brand': None,
@@ -364,6 +389,14 @@ class TransactionGenerator:
                 'pix_key_type': pix_key_type,
                 'pix_key_destination': self._buf.next_hash32(),
                 'destination_bank': banco_destino,
+                # PIX/BACEN fields
+                'end_to_end_id': e2e_id,
+                'ispb_pagador': ispb_pagador,
+                'ispb_recebedor': ispb_recebedor,
+                'tipo_conta_pagador': self._buf.next_weighted('tipo_conta', TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS),
+                'tipo_conta_recebedor': self._buf.next_weighted('tipo_conta', TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS),
+                'holder_type_recebedor': self._buf.next_weighted('holder', HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS),
+                'modalidade_iniciacao': modalidade,
             })
         else:
             tx.update({
@@ -377,6 +410,14 @@ class TransactionGenerator:
                 'pix_key_type': None,
                 'pix_key_destination': None,
                 'destination_bank': banco_destino if tx_type in ['TED', 'BOLETO', 'DOC'] else None,
+                # PIX/BACEN fields — null for non-PIX transactions
+                'end_to_end_id': None,
+                'ispb_pagador': None,
+                'ispb_recebedor': None,
+                'tipo_conta_pagador': None,
+                'tipo_conta_recebedor': None,
+                'holder_type_recebedor': None,
+                'modalidade_iniciacao': None,
             })
     
     def _apply_fraud_pattern(
@@ -494,6 +535,19 @@ class TransactionGenerator:
                 tx['card_number_hash'] = None
                 tx['card_brand'] = None
                 tx['card_type'] = None
+                # Add PIX/BACEN fields that were not set (fraud pattern changed type to PIX)
+                if not tx.get('end_to_end_id'):
+                    ispb_pag = self._buf.next_choice(self._ispb_list)
+                    ispb_rec = self._buf.next_choice(self._ispb_list)
+                    ts_str = tx.get('timestamp', '')[:14].replace('-', '').replace('T', '').replace(':', '')
+                    seq = self._buf.next_hash16()[:10]
+                    tx['end_to_end_id'] = generate_end_to_end_id(ispb_pag, ts_str, seq)
+                    tx['ispb_pagador'] = ispb_pag
+                    tx['ispb_recebedor'] = ispb_rec
+                    tx['tipo_conta_pagador'] = self._buf.next_weighted('tipo_conta', TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS)
+                    tx['tipo_conta_recebedor'] = self._buf.next_weighted('tipo_conta', TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS)
+                    tx['holder_type_recebedor'] = self._buf.next_weighted('holder', HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS)
+                    tx['modalidade_iniciacao'] = self._buf.next_weighted('modalidade', MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS)
         
         # MCC PREFERENCE: Common MCCs for fraud type
         if 'mcc_preference' in characteristics:
@@ -634,10 +688,14 @@ class TransactionGenerator:
             'status': status,
             'refusal_reason': self._buf.next_choice(REFUSAL_REASONS) if status == 'DECLINED' else None,
             'fraud_score': fraud_score,
-            'fraud_risk_score': 0,  # populated by generators/score.py
             'is_fraud': is_fraud,
             'fraud_type': fraud_type,
         })
+
+        # Compute fraud_risk_score via the 17-signal pipeline
+        ctx = build_context_for_fraud(tx, is_fraud, fraud_type, rng=self._buf._rng)
+        match_fraud_rule(ctx)
+        tx['fraud_risk_score'] = compute_fraud_risk_score(ctx)
     
     def _generate_timestamp(
         self,

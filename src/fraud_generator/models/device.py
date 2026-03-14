@@ -37,6 +37,10 @@ class Device:
     first_use: date  # primeiro_uso
     is_trusted: bool = True
     rooted_or_jailbreak: bool = False
+    device_age_days: Optional[int] = None    # age since first_use
+    emulator_detected: bool = False          # Android/iOS emulator
+    vpn_active: bool = False
+    ip_type: Optional[str] = None            # RESIDENTIAL | DATACENTER | VPN | TOR
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
@@ -51,6 +55,10 @@ class Device:
             'first_use': self.first_use.isoformat() if isinstance(self.first_use, date) else self.first_use,
             'is_trusted': self.is_trusted,
             'rooted_or_jailbreak': self.rooted_or_jailbreak,
+            'device_age_days': self.device_age_days,
+            'emulator_detected': self.emulator_detected,
+            'vpn_active': self.vpn_active,
+            'ip_type': self.ip_type,
         }
     
     def to_json(self) -> str:
