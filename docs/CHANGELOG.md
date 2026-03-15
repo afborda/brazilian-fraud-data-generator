@@ -22,6 +22,40 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.5 | **Separação** | Remoção de docs estratégicos para repo privado | 2026-03-14 |
 | v4.6 | **Contexto** | TPRD2 campos OS comportamentais + T6 Fraud Rings + test_licensing fix | 2026-03-14 |
 | v4.7 | **Pipeline** | TPRD4 enricher pipeline modular — 8 enrichers + generate_with_pipeline() | 2026-03-14 |
+| v4.8 | **Produção** | TPRD5 CI/CD Pipelines 1-3 + brazildata-infra VPS setup | 2026-03-14 |
+
+---
+
+## v4.8 — Produção (2026-03-14)
+
+### TPRD5 — CI/CD Pipelines + VPS OVH Setup
+
+Implementação completa da infraestrutura de produção: 3 novos pipelines GitHub Actions + repositório `brazildata-infra` com setup automatizado de VPS OVH Value.
+
+#### Pipelines GitHub Actions (`.github/workflows/`)
+
+- **`deploy-product.yml`** (Pipeline 1 — Produto): push para `main` com mudanças em `src/`, `api/`, `requirements*.txt`, `Dockerfile` → roda pytest → build imagem privada `ghcr.io/afborda/synthlab-api:latest` → SSH deploy na VPS → health check `/health`
+- **`deploy-site.yml`** (Pipeline 2 — Site): push para `main` com mudanças em `site/` → build Next.js → push `ghcr.io/afborda/synthlab-site:latest` → SSH deploy → verifica `localhost:3000`
+- **`deploy-infra.yml`** (Pipeline 3 — Infra): push para `main` com mudanças em `security/`, `traefik/`, `services/`, `monitoring/` → `git pull` na VPS → reaplica configs → health check de segurança; `concurrency: cancel-in-progress: false` (nunca cancelar deploy de infra)
+- **`docker-publish.yml`** (Pipeline 4 — OS Release): já existia — tag `v*.*.*` → Docker Hub público multi-platform
+
+#### Repositório `brazildata-infra` (novo — `/home/afborda/projetos/pessoal/brazildata-infra/`)
+
+Setup em 6 camadas, cada uma com scripts e compose files:
+
+- **`security/`**: 7 scripts de hardening (`01-initial-hardening.sh` → `07-docker-hardening.sh`) + `audit-security.sh`; SSH porta 2222, UFW deny-all + allow 2222/80/443, fail2ban jails (sshd/traefik-auth/api-abuse/recidive), kernel sysctl (SYN cookies, ASLR, anti spoofing), Docker daemon com `no-new-privileges + iptables: false` (evita bypass de UFW pelo Docker)
+- **`traefik/`**: Reverse proxy Traefik v3.1 + SSL automático Let's Encrypt; TLS 1.2 mínimo com cipher suites fortes; middlewares de rate limit (API: 100 req/min, API+key: 500, site: 300); HSTS com preload; IP whitelist para MinIO e dashboard
+- **`services/`**: `docker-compose.services.yml` com PostgreSQL 16, Redis 7, MinIO, API, Celery Worker e Beat; NENHUMA porta de banco exposta externamente (apenas rede Docker interna `synthlab-net`); `services/postgres/init.sql` com schema inicial (license_plans, users, api_usage)
+- **`monitoring/`**: Prometheus + Grafana; scrape de Traefik, API, PostgreSQL, Redis, node-exporter
+- **`backup/`**: `backup.sh` — pg_dump + acme.json + .env → comprimido → upload S3; cron às 4h; retenção 7 dias local
+- **`scripts/`**: `install-docker.sh`, `health-check.sh` + utilitários (`renew-certs.sh`, `scale-workers.sh`)
+
+#### Garantias de segurança
+
+- `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MINIO_ROOT_PASSWORD`, `STRIPE_SECRET_KEY` — todos em `.env` (gitignored), nunca hardcoded
+- `traefik/acme.json` — gitignored (certificados privados)
+- Pipeline 3 sem trigger `pull_request` — só push direto a `main` por maintainers
+- PostgreSQL e Redis: zero portas públicas expostas
 
 ---
 

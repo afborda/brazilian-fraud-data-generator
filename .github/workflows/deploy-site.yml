@@ -1,0 +1,107 @@
+# ==============================================================================
+# Pipeline 2: Deploy Site (synthlab.io)
+# ==============================================================================
+# Trigger: push para main com mudanças em site/
+# Steps:  build Next.js → push GHCR (privado) → SSH deploy VPS
+# Imagem: ghcr.io/afborda/synthlab-site:latest
+# ==============================================================================
+
+name: Deploy Site (synthlab.io)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: afborda/synthlab-site
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build e push imagem do site para GHCR
+  # ---------------------------------------------------------------------------
+  build-and-push:
+    name: Build & Push Site to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./site
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Deploy na VPS via SSH
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy Site to VPS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Deploy site to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          timeout: 60s
+          script: |
+            set -euo pipefail
+            cd /opt/synthlab/site
+
+            # Autenticar no GHCR
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u afborda --password-stdin
+
+            # Pull e restart do container do site
+            docker compose -f docker-compose.site.yml pull
+            docker compose -f docker-compose.site.yml up -d --no-deps site
+            docker image prune -af --filter "until=24h"
+
+            # Verificar que o site responde
+            sleep 3
+            curl -sf http://localhost:3000 || (
+              echo "❌ Site health check falhou"
+              docker compose -f docker-compose.site.yml logs --tail=30 site
+              exit 1
+            )
+
+            echo "✅ Site deploy concluído: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "   Imagem: ghcr.io/afborda/synthlab-site:${{ needs.build-and-push.outputs.image_tag }}"

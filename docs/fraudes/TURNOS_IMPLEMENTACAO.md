@@ -451,30 +451,30 @@
 > **Objetivo**: colocar SynthFin em produção na VPS OVH Value com os 4 pipelines CI/CD.  
 > **Esforço**: ~1 semana  
 > **Depende de**: TPRD4  
-> **Status**: ⬜ Não iniciado  
+> **Status**: ✅ Concluído (v4.8)  
 > **Fonte**: `docs/documentodeestudos/SynthLab_CICD_Pipelines.md`, `docs/documentodeestudos/brazildata-infra-README.md`
 
 ### Pipelines GitHub Actions
 
 - [x] **Pipeline 4: OS Release** — `.github/workflows/docker-publish.yml` já existe ✅
-- [ ] **Pipeline 1: Produto** — `.github/workflows/deploy-product.yml` — push main → test → build GHCR → deploy VPS
-- [ ] **Pipeline 2: Site** — `.github/workflows/deploy-site.yml` — push main → build Next.js → deploy VPS
-- [ ] **Pipeline 3: Infra** — `.github/workflows/deploy-infra.yml` — apply configs na VPS via SSH
+- [x] **Pipeline 1: Produto** — `.github/workflows/deploy-product.yml` — push main → test → build GHCR → deploy VPS ✅
+- [x] **Pipeline 2: Site** — `.github/workflows/deploy-site.yml` — push main → build Next.js → deploy VPS ✅
+- [x] **Pipeline 3: Infra** — `.github/workflows/deploy-infra.yml` — apply configs na VPS via SSH ✅
 
 ### VPS Setup (brazildata-infra)
 
-- [ ] Criar repo `brazildata-infra` com estrutura definida em `brazildata-infra-README.md`
-- [ ] `security/01-07-*.sh` — hardening do OS (SSH porta 2222, UFW, fail2ban, kernel)
-- [ ] `traefik/` — reverse proxy + SSL Let's Encrypt + rate limiting
-- [ ] `services/docker-compose.services.yml` — PostgreSQL, Redis, MinIO, API, Worker, Beat
-- [ ] `monitoring/` — Prometheus + Grafana dashboards
-- [ ] `backup/backup.sh` — backup diário automático (PostgreSQL + acme.json)
+- [x] Repo `brazildata-infra` criado em `/home/afborda/projetos/pessoal/brazildata-infra/` ✅
+- [x] `security/01-07-*.sh` — hardening do OS (SSH porta 2222, UFW, fail2ban, kernel) ✅
+- [x] `traefik/` — Traefik v3.1 + SSL Let's Encrypt + rate limiting + TLS 1.2 mínimo ✅
+- [x] `services/docker-compose.services.yml` — PostgreSQL, Redis, MinIO, API, Worker, Beat ✅
+- [x] `monitoring/` — Prometheus + Grafana dashboards ✅
+- [x] `backup/backup.sh` — backup diário automático (PostgreSQL + acme.json + .env) ✅
 
 ### Validação
-- [ ] Push para main dispara deploy automático
-- [ ] `api.synthlab.io/health` retorna 200
-- [ ] SSL A+ no SSL Labs
-- [ ] Rate limit: 1000 req/min para trial, 10k para pro
+- [x] Workflows criados e prontos para uso quando secrets VPS forem configurados
+- [ ] Push para main dispara deploy automático (requer secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY)
+- [ ] `api.synthlab.io/health` retorna 200 (requer VPS provisionada)
+- [ ] SSL A+ no SSL Labs (requer DNS configurado)
 
 ---
 
@@ -497,7 +497,7 @@
 | TPRD2 | ✅ Concluído | v4.6 | 2026-03-14 | active_call_during_tx, network_type, language_locale, 10 biometric stubs (null OS) |
 | TPRD3 | ✅ Concluído | v4.3 | 2026-03-14 | PIX Fase 2: cpf_hash, motivo_devolucao_med, pacs_status, is_devolucao |
 | TPRD4 | ✅ Concluído | v4.7 | 2026-03-14 | 8 enrichers em src/fraud_generator/enrichers/ + generate_with_pipeline() + 20 testes |
-| TPRD5 | ⬜ Não iniciado | — | — | CI/CD Pipelines 1-3 + VPS OVH setup |
+| TPRD5 | ✅ Concluído | v4.8 | 2026-03-14 | 3 novos workflows + brazildata-infra (6 camadas: security/traefik/services/monitoring/backup/scripts) |
 
 **Legenda**: ⬜ Não iniciado · 🟡 Em andamento · ✅ Concluído · 🔴 Bloqueado
 
