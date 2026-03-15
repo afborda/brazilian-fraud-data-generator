@@ -214,7 +214,178 @@ class TransactionGenerator:
 
         # OTIMIZAÇÃO 3: RAM pre-compute buffers
         self._buf = PrecomputeBuffers(seed=seed)
-    
+
+        # TPRD4: Enricher pipeline (lazy-loaded on first call to generate_with_pipeline)
+        self._pipeline = None
+
+    def _build_bag(
+        self,
+        is_fraud: bool,
+        fraud_type: Optional[str],
+        customer_profile: Optional[str],
+        timestamp,
+        session_state=None,
+        customer_state: Optional[str] = None,
+        location_cluster=None,
+        license=None,
+    ):
+        """Build a GeneratorBag from this generator's shared caches."""
+        from ..enrichers.base import GeneratorBag
+        bag = GeneratorBag(
+            is_fraud=is_fraud,
+            fraud_type=fraud_type,
+            customer_profile=customer_profile,
+            timestamp=timestamp,
+            buf=self._buf,
+            tx_type_cache=self._tx_type_cache,
+            fraud_type_cache=self._fraud_type_cache,
+            mcc_cache=self._mcc_cache,
+            channel_cache=self._channel_cache,
+            bank_cache=self._bank_cache,
+            estado_cache=self._estado_cache,
+            brand_cache=self._brand_cache,
+            installment_cache=self._installment_cache,
+            card_entry_cache=self._card_entry_cache,
+            pix_type_cache=self._pix_type_cache,
+            ispb_list=self._ispb_list,
+            merchants_cache=self._merchants_cache,
+            fraud_patterns=self._fraud_patterns,
+            use_profiles=self.use_profiles,
+            ring_registry=_ring_registry,
+            session_state=session_state,
+            license=license,
+        )
+        bag.customer_state = customer_state
+        bag.location_cluster = location_cluster
+        return bag
+
+    def generate_with_pipeline(
+        self,
+        tx_id: str,
+        customer_id: str,
+        device_id: str,
+        timestamp,
+        customer_state: Optional[str] = None,
+        customer_profile: Optional[str] = None,
+        force_fraud: Optional[bool] = None,
+        session_state=None,
+        location_cluster=None,
+        customer_cpf: Optional[str] = None,
+        license=None,
+    ) -> Dict[str, Any]:
+        """
+        Generate a single transaction using the modular enricher pipeline.
+
+        Equivalent to `generate()` but routes through the TPRD4 enricher chain.
+        The caller is still responsible for calling session.check_impossible_travel()
+        and session.add_transaction() after this method returns — same as generate().
+        """
+        from ..enrichers.pipeline_factory import get_default_pipeline
+
+        if self._pipeline is None:
+            self._pipeline = get_default_pipeline()
+
+        # ── Determine fraud ───────────────────────────────────────────────
+        if force_fraud is not None:
+            is_fraud = force_fraud
+        else:
+            is_fraud = random.random() < self.fraud_rate
+
+        fraud_type: Optional[str] = self._fraud_type_cache.sample() if is_fraud else None
+
+        # ── Select transaction type ───────────────────────────────────────
+        if self.use_profiles and customer_profile:
+            tx_type = get_transaction_type_for_profile(customer_profile)
+        else:
+            tx_type = self._tx_type_cache.sample()
+
+        # ── Merchant / MCC ────────────────────────────────────────────────
+        _fav_from_session = (
+            not is_fraud
+            and session_state is not None
+            and random.random() < 0.70
+        )
+        _fav_merchant_id = None
+        if _fav_from_session:
+            _fav = session_state.get_favorite_merchant()
+            if _fav is not None:
+                _fav_merchant_id, _fav_name, _fav_mcc = _fav
+                mcc_code = _fav_mcc if _fav_mcc else (
+                    get_mcc_for_profile(customer_profile)
+                    if (self.use_profiles and customer_profile)
+                    else self._mcc_cache.sample()
+                )
+                mcc_info = get_mcc_info(mcc_code)
+                merchant_name = _fav_name
+            else:
+                _fav_from_session = False
+
+        if not _fav_from_session:
+            if self.use_profiles and customer_profile:
+                mcc_code = get_mcc_for_profile(customer_profile)
+            else:
+                mcc_code = self._mcc_cache.sample()
+            mcc_info = get_mcc_info(mcc_code)
+            merchants = self._merchants_cache.get(mcc_code, ["Local Merchant"])
+            merchant_name = random.choice(merchants)
+
+        # ── Value ─────────────────────────────────────────────────────────
+        valor = self._calculate_value(is_fraud, fraud_type, mcc_info, customer_profile)
+
+        # ── Channel / Bank ────────────────────────────────────────────────
+        if self.use_profiles and customer_profile:
+            canal = get_channel_for_profile(customer_profile)
+        else:
+            canal = self._channel_cache.sample()
+        banco_destino = self._bank_cache.sample()
+
+        # ── Build base transaction dict ───────────────────────────────────
+        tx: Dict[str, Any] = {
+            "transaction_id": f"TXN_{tx_id}",
+            "customer_id": customer_id,
+            "session_id": f"SESS_{tx_id}",
+            "device_id": device_id,
+            "timestamp": timestamp.isoformat(),
+            "type": tx_type,
+            "amount": valor,
+            "currency": "BRL",
+            "channel": canal,
+            "ip_address": self._buf.next_ip(),
+            "geolocation_lat": None,  # filled by GeoEnricher
+            "geolocation_lon": None,
+            "merchant_id": _fav_merchant_id or self._buf.next_merchant_id(),
+            "merchant_name": merchant_name,
+            "merchant_category": mcc_info["category"],
+            "mcc_code": mcc_code,
+            "mcc_risk_level": mcc_info["risk"],
+            "cliente_perfil": customer_profile,
+            "classe_social": _profile_to_classe_social(customer_profile),
+            # T3 velocity fields (set by FraudEnricher)
+            "card_test_phase": None,
+            "velocity_burst_id": None,
+            "distributed_attack_group": None,
+        }
+
+        # ── Type-specific fields (card / PIX / other) ─────────────────────
+        self._add_type_specific_fields(tx, tx_type, banco_destino, customer_id, customer_cpf)
+
+        # ── Run enricher pipeline ─────────────────────────────────────────
+        bag = self._build_bag(
+            is_fraud=is_fraud,
+            fraud_type=fraud_type,
+            customer_profile=customer_profile,
+            timestamp=timestamp,
+            session_state=session_state,
+            customer_state=customer_state,
+            location_cluster=location_cluster,
+            license=license,
+        )
+
+        for enricher in self._pipeline:
+            enricher.enrich(tx, bag)
+
+        return tx
+
     def generate(
         self,
         tx_id: str,

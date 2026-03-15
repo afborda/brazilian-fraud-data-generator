@@ -2,10 +2,10 @@
 # =====================
 # This file is used by build scripts to determine the current version
 
-VERSION=4.6.0
-VERSION_TAG=v4.6.0
+VERSION=4.7.0
+VERSION_TAG=v4.7.0
 RELEASE_DATE=2026-03-14
-CODENAME=contexto
+CODENAME=pipeline
 
 # Version history:
 # ----------------

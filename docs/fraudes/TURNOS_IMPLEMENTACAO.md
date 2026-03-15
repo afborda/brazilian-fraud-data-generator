@@ -422,7 +422,7 @@
 > **Objetivo**: substituir o `TransactionGenerator` monolítico por uma pipeline de enriquecedores modulares.  
 > **Esforço**: ~2 semanas  
 > **Depende de**: TPRD1, TPRD2, TPRD3  
-> **Status**: ⬜ Não iniciado  
+> **Status**: ✅ **CONCLUÍDO** (v4.7 — 2026-03-14)  
 > **Fonte**: `02 - ANALISE_COMPARATIVA_CRUZADA.md` Fase 4, `03 - ESTRATEGIA_DEPLOY_SEM_EXPOSICAO.md`
 
 ### Arquivos a criar
@@ -496,7 +496,7 @@
 | TPRD1 | ✅ Concluído | v4.3 | 2026-03-14 | Campos faltantes: new_merchant, cliente_perfil, classe_social, sim_swap_recent, fraud_signals |
 | TPRD2 | ✅ Concluído | v4.6 | 2026-03-14 | active_call_during_tx, network_type, language_locale, 10 biometric stubs (null OS) |
 | TPRD3 | ✅ Concluído | v4.3 | 2026-03-14 | PIX Fase 2: cpf_hash, motivo_devolucao_med, pacs_status, is_devolucao |
-| TPRD4 | ⬜ Não iniciado | — | — | Refactor enricher/pipeline |
+| TPRD4 | ✅ Concluído | v4.7 | 2026-03-14 | 8 enrichers em src/fraud_generator/enrichers/ + generate_with_pipeline() + 20 testes |
 | TPRD5 | ⬜ Não iniciado | — | — | CI/CD Pipelines 1-3 + VPS OVH setup |
 
 **Legenda**: ⬜ Não iniciado · 🟡 Em andamento · ✅ Concluído · 🔴 Bloqueado

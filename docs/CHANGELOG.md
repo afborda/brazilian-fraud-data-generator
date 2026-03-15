@@ -21,6 +21,44 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.4 | **Padrões** | T7 micro-probe + T4 device consistency + T5 ride-share fraud patterns | 2026-03-14 |
 | v4.5 | **Separação** | Remoção de docs estratégicos para repo privado | 2026-03-14 |
 | v4.6 | **Contexto** | TPRD2 campos OS comportamentais + T6 Fraud Rings + test_licensing fix | 2026-03-14 |
+| v4.7 | **Pipeline** | TPRD4 enricher pipeline modular — 8 enrichers + generate_with_pipeline() | 2026-03-14 |
+
+---
+
+## v4.7 — Pipeline (2026-03-14)
+
+### TPRD4 — Enricher Pipeline Modular
+
+Substitui o bloco monolítico `_add_risk_indicators` / `_apply_fraud_pattern` do `TransactionGenerator` por uma pipeline de enriquecedores modulares. O método original `generate()` permanece intacto (sem regressão), e o novo `generate_with_pipeline()` roteia pelo chain de enrichers.
+
+#### Novo pacote `src/fraud_generator/enrichers/`
+
+- **`base.py`**: `EnricherProtocol` (Protocol runtime-checkable) + `GeneratorBag` (dataclass com todos os caches e flags do gerador)
+- **`temporal.py`**: `TemporalEnricher` — flag `unusual_time` derivada do horário da transação
+- **`geo.py`**: `GeoEnricher` — lat/lon do cliente, com HIGH location anomaly para fraudes; cluster-weighted para legítimas
+- **`fraud.py`**: `FraudEnricher` — overrides de amount/location/device/channel/MCC por padrão de fraude; T3 (CARD_TESTING, MICRO_BURST, DISTRIBUTED_VELOCITY); T7 (micro-probe, ENGENHARIA_SOCIAL beneficiários fixos)
+- **`pix.py`**: `PIXEnricher` — campos BACEN pacs.008 (7 campos) + TPRD3 MED devolution; nullifica campos PIX em transações não-PIX
+- **`device.py`**: `DeviceEnricher` — copia sinais do device (`device_age_days`, `emulator_detected`, `vpn_active`, `ip_type`) para a transação
+- **`session.py`**: `SessionEnricher` — velocity, accumulated_amount, new_beneficiary, customer_velocity_z_score, device_new_for_customer; fallback randômico quando sem session_state
+- **`risk.py`**: `RiskEnricher` — status/fraud_score, 17-signal pipeline (fraud_risk_score + fraud_signals), TPRD2 (active_call, network_type, language_locale), T6 (ring_id, ring_role, recipient_is_mule)
+- **`biometric.py`**: `BiometricEnricher` — **OS tier**: todos os 10 campos biométricos = `null`; **Paid tier** (PRO/TEAM/ENTERPRISE): campos preenchidos com distribuições realistas (fraudadores digitam mais rápido, copy-paste alto, menor session_duration)
+- **`pipeline_factory.py`**: `get_default_pipeline()` — retorna lista de 8 enrichers na ordem canônica
+
+#### `TransactionGenerator` — novos métodos
+
+- **`generate_with_pipeline()`**: equivalente a `generate()`, roteando pelo enricher chain. Aceita o parâmetro `license=` para gate biométrico. Lazy-inicializa a pipeline na primeira chamada.
+- **`_build_bag()`**: monta o `GeneratorBag` a partir dos caches existentes do gerador
+
+#### Testes
+
+- **`tests/unit/test_enricher_pipeline.py`**: 20 novos testes — protocol check, unit tests por enricher, integração `generate_with_pipeline()`, gate biométrico OS/Paid
+- **Total de testes**: 192 → 212 (20 novos testes); 212 passando, 3 skipped, 0 failed
+
+#### Garantias de compatibilidade
+
+- `generate()` existente: **sem modificações** — zero regressão
+- `generate_with_pipeline()`: produz o mesmo conjunto de campos que `generate()` + 4 campos adicionais de device (`device_age_days`, `emulator_detected`, `ip_type`, `vpn_active`)
+- Verificado com smoke test de 1.000 transações — campos idênticos em todos os registros
 
 ---
 
