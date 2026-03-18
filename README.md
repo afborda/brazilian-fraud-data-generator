@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.2.0-sinal-0F766E" alt="Version 4.2.0" /></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.8.0-0F766E" alt="Version 4.8.0" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-166534" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-1D4ED8" alt="Python 3.8 or newer" />
   <img src="https://img.shields.io/badge/domains-banking%20%7C%20ride--share-0F172A" alt="Banking and ride-share domains" />
@@ -41,87 +41,32 @@ This repository is built for teams that need a realistic Brazilian synthetic fra
   </tr>
 </table>
 
-## Open Source and Commercial Plans
+## Open Source and Hosted API
 
-The entire generator codebase is in this repository under MIT. Running from source has **no technical limits** — you get every format, every target, every generator, and unlimited scale. The built-in license layer only activates when you load `FRAUDGEN_*` environment variables; without them the full code runs unrestricted.
+The entire generator codebase is in this repository under MIT. Running from source has **no technical limits** — you get every format, every target, every generator, and unlimited scale.
 
-Commercial plans add support, rate guarantees, and a future hosted API. The free 30-day trial gives you all open-source capabilities plus a webhook preview so you can evaluate paid streaming before paying.
+A hosted cloud API is available at [synthfin.com.br](https://synthfin.com.br) for teams that want managed generation without running their own infrastructure.
 
-### What open source gives you (no license)
+### What you get from the open-source library
 
-| Category | What is included |
+| Category | Included |
 |---|---|
 | Generators | Banking transactions, ride-share rides, or both (`--type all`) |
-| Fraud simulation | 11 banking fraud patterns (`ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO`) |
-| Ride-share fraud | 7 types (`GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`) |
-| Fraud scoring | `fraud_risk_score` 0–100 built from 17 signals and 4 correlation rules |
+| Banking fraud | 11 patterns: `ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO` |
+| Ride-share fraud | 7 types: `GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD` |
+| Fraud scoring | `fraud_risk_score` 0–100 from 17 signals and 4 correlation rules |
 | Behavioral profiles | 7 transaction profiles + 7 ride profiles; sticky per customer |
 | Reproducibility | Deterministic seeds, custom date ranges, fixed customer pool |
 | Output formats | JSONL, JSON array, CSV, TSV, Parquet, Arrow IPC, database via SQLAlchemy |
 | Compression | JSONL: gzip / zstd / snappy; Parquet: snappy / zstd / gzip / brotli |
-| Streaming | stdout, Kafka, webhook |
+| Streaming | stdout, Kafka, webhook — see [Streaming](#streaming) below |
 | Object storage | MinIO and S3-compatible upload |
-| Schema mode | Declarative JSON schemas with AI field correction (OpenAI / Anthropic / none) |
-| CLI | ~30 flags; full parallel worker control (`--workers`, `--parallel-mode`) |
-| Validation | `validate_realism.py`, `check_schema.py`, pytest integration suite |
-| API | Self-hosted FastAPI v1 for license issuance and telemetry |
+| Schema mode | Declarative JSON schemas with optional AI field correction |
+| CLI | ~30 flags; full parallel worker control |
+| Validation | `validate_realism.py`, `check_schema.py`, pytest suite |
 | Docker | Official image on Docker Hub |
-| Scale | Limited by your hardware only |
+| Scale | Hardware-only limit |
 | Cost | Free forever |
-
-### Plan comparison
-
-| Feature | OS (self-hosted) | Free Trial 30d | Starter R$49/mo | Pro R$149/mo | Team R$399/mo | Enterprise |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Generators** | | | | | | |
-| Banking transactions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Ride-share rides | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `--type all` (both in one run) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 11 banking fraud patterns | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 7 ride-share fraud types | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Configurable fraud rate | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 7 behavioral profiles | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Deterministic seeds | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Custom date range | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Output formats** | | | | | | |
-| JSONL | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| JSON array | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| CSV | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| TSV | ✓ | ✓ | – | – | ✓ | ✓ |
-| Parquet | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Arrow IPC | ✓ | ✓ | – | ✓ | ✓ | ✓ |
-| Database (SQLAlchemy) | ✓ | ✓ | – | – | ✓ | ✓ |
-| JSONL inline compression | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Parquet compression codecs | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Streaming** | | | | | | |
-| stdout | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Webhook (HTTP POST / PUT / PATCH) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Apache Kafka | ✓ | – | – | ✓ | ✓ | ✓ |
-| **Storage and infrastructure** | | | | | | |
-| MinIO / S3 upload | ✓ | – | – | ✓ | ✓ | ✓ |
-| Redis index cache | ✓ | ✓ | – | ✓ | ✓ | ✓ |
-| Multiprocessing workers | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Docker image | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Schema and quality** | | | | | | |
-| Schema mode (`--schema`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| AI schema correction | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `validate_realism.py` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `check_schema.py` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| pytest integration suite | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **API** | | | | | | |
-| Self-hosted API v1 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Hosted API v2 | – | – | – | Planned | Planned | Planned |
-| **Scale limits** | | | | | | |
-| Events per month | Unlimited | 1M | 5M | 100M | Unlimited | Unlimited |
-| Max job size | Hardware | 2 GB | 5 GB | 20 GB | Unlimited | Unlimited |
-| Concurrent jobs | Hardware | 2 | 3 | 10 | Unlimited | Unlimited |
-| Max events per API request | Hardware | 50K | 100K | 1M | Unlimited | Unlimited |
-| **Support** | | | | | | |
-| GitHub issues | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Email support | – | – | ✓ | ✓ | ✓ | ✓ |
-| WhatsApp support | – | – | – | ✓ | ✓ | ✓ |
-| Priority queue | – | – | – | – | ✓ | ✓ |
-| Dedicated / SLA | – | – | – | – | – | ✓ |
 
 ## Start Fast
 
@@ -164,6 +109,47 @@ python validate_realism.py --input data/transactions_*.jsonl
 
 ### Streaming
 
+Streaming mode generates events **continuously in real time** instead of writing a batch file. It is the right tool when you need live traffic rather than a static dataset.
+
+**How it works:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Generator workers (--workers N)                    │
+│  Each worker produces events independently,         │
+│  bypassing the GIL via multiprocessing              │
+└───────────────┬─────────────────────────────────────┘
+                │  shared queue (--queue-size)
+                ▼
+┌─────────────────────────────────────────────────────┐
+│  Rate controller (token bucket)                     │
+│  Drains the queue at --rate events/second           │
+│  Bursts are absorbed; long gaps are filled          │
+└───────────────┬─────────────────────────────────────┘
+                │
+        ┌───────┼───────────┐
+        ▼       ▼           ▼
+     stdout   Kafka      Webhook
+  (terminal) (topics)  (HTTP POST)
+```
+
+**Two send modes:**
+
+| Mode | Flag | Behaviour |
+|---|---|---|
+| Synchronous (default) | — | Each event is sent before the next is generated. Predictable pacing, easy to debug |
+| Async | `--async` | A thread pool sends up to `--async-concurrency` events in parallel. Use for burst or high-throughput scenarios |
+
+**Common use cases:**
+
+| Use case | Target | Example |
+|---|---|---|
+| Debug event shape locally | stdout | `--target stdout --pretty` |
+| Test Kafka consumer lag | kafka | `--target kafka --rate 500` |
+| Load-test an ML scoring endpoint | webhook | `--target webhook --rate 100 --async` |
+| Validate streaming pipeline end-to-end | webhook | `--type all --rate 50 --max-events 100000` |
+| Simulate sustained PIX traffic | stdout / kafka | `--type transactions --rate 200 --seed 42` |
+
 ```bash
 pip install -r requirements-streaming.txt
 
@@ -175,6 +161,9 @@ python stream.py --target kafka --kafka-server localhost:9092 --kafka-topic tran
 
 # Stream ride events to a REST endpoint
 python stream.py --target webhook --type rides --webhook-url http://api:8080/ingest --rate 50
+
+# Burst test: async sends, up to 50 concurrent HTTP requests
+python stream.py --target webhook --webhook-url http://api:8080/ingest --rate 200 --async --async-concurrency 50
 
 # Stop after 10,000 events
 python stream.py --target stdout --rate 20 --max-events 10000
@@ -625,16 +614,7 @@ If you need the raw benchmark data, see `benchmarks/multiprocessing_results.json
 
 ## Self-Hosted API Server
 
-The repository also includes a FastAPI service for license issuance and telemetry. The currently implemented v1 endpoints cover registration, health checks, heartbeats, and admin revocation.
-
-```bash
-pip install -r requirements-api.txt
-FRAUDGEN_SECRET_KEY=your-secret \
-RESEND_API_KEY=re_xxxx \
-uvicorn src.fraud_generator.api.app:app --host 0.0.0.0 --port 8000
-```
-
-For product or commercial positioning, this gives you a path to run the generator as a controlled self-hosted offering while keeping the core data generation logic in the same repository.
+The repository includes a FastAPI service (`src/fraud_generator/api/app.py`) for teams that want to expose the generator over HTTP. The v1 endpoints cover registration, health checks, heartbeats, and admin revocation. See the API README for setup instructions.
 
 ## Repository Map
 
@@ -647,7 +627,7 @@ For product or commercial positioning, this gives you a path to run the generato
 | `src/fraud_generator/exporters/` | Output formats and storage adapters |
 | `src/fraud_generator/connections/` | Kafka, webhook and stdout connections |
 | `src/fraud_generator/api/app.py` | Self-hosted API server v1 |
-| `ARCHITECTURE.md` | English architecture overview |
+| `ARCHITECTURE.md` | Architecture overview |
 | `docs/README.md` | Documentation hub |
 
 ## FAQ
@@ -681,4 +661,3 @@ Yes. The project was designed for fraud detection model training, synthetic data
 - Changelog: [docs/CHANGELOG.md](docs/CHANGELOG.md)
 - Docker publishing: [docs/DOCKER_HUB_PUBLISHING.md](docs/DOCKER_HUB_PUBLISHING.md)
 
-If you are evaluating the project for SEO-sensitive discovery terms, the key coverage in this repository today is: Brazilian synthetic fraud data, PIX fraud dataset generation, banking transaction simulation, ride-share fraud simulation, fraud risk scoring, schema-driven test data, and streaming fraud events.
