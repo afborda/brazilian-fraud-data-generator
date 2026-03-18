@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "fraud-generator"
+version = "4.8.0"
+description = "Brazilian fraud data generator for ML and testing"
+requires-python = ">=3.10"
+dependencies = [
+    "faker>=24.0.0",
+    "numpy>=1.26.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
