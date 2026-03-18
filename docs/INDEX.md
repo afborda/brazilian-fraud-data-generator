@@ -66,6 +66,8 @@ Fraud taxonomy, validation analysis, and implementation roadmap.
 | [MULTIPROCESSING_BENCHMARK.md](MULTIPROCESSING_BENCHMARK.md) | Streaming multiprocessing GIL bypass results |
 | [DOCKER_HUB_PUBLISHING.md](DOCKER_HUB_PUBLISHING.md) | Docker Hub publishing guide with CI/CD workflow |
 | [REPOSITORY_ORGANIZATION.md](REPOSITORY_ORGANIZATION.md) | Repository structure and git workflow guide |
+| [ROTEIRO_PRODUCAO.md](ROTEIRO_PRODUCAO.md) | Passo a passo completo para colocar em produção na VPS OVH (secrets, DNS, setup.sh, validação) |
+| [GAP_ANALYSIS.md](GAP_ANALYSIS.md) | Análise de gaps v4.8: o que está implementado, o que falta, priorização de próximos passos |
 
 ---
 
@@ -99,7 +101,7 @@ Fraud taxonomy, validation analysis, and implementation roadmap.
 
 ## Version
 
-**Current Version**: 4.5.0  
-**Last Updated**: March 14, 2026
+**Current Version**: 4.8.0
+**Last Updated**: March 18, 2026
 
 See [CHANGELOG](CHANGELOG.md) for version history.
