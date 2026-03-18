@@ -608,9 +608,36 @@ pytest tests/ --cov=src/fraud_generator --cov-report=html
 
 ## Performance Snapshot
 
-The included multiprocessing benchmark shows the current generator reaching about 123k to 196k banking events per second with 8 to 16 workers, and about 123k to 220k ride events per second on the recorded benchmark machine. Actual throughput depends on format, worker count, disk, compression and hardware.
+Measured on an 18-core x86_64 Linux machine, Python 3.12, using the in-process benchmark (`benchmarks/comprehensive_benchmark.py`).
 
-If you need the raw benchmark data, see `benchmarks/multiprocessing_results.json` and `docs/MULTIPROCESSING_BENCHMARK.md`.
+### Batch Generation
+
+| Type | Count | Workers | Time (s) | Events/s | MB/s | Bytes/evt |
+|---|---:|---:|---:|---:|---:|---:|
+| transactions |     10,000 |       1 |     0.58 |   17,197 | 37.2 |      2,271 |
+| transactions |     10,000 |       4 |     0.24 |   41,876 | 90.7 |      2,271 |
+| transactions |     10,000 |       8 |     0.18 |   56,153 | 121.6 |     2,271 |
+| transactions |     50,000 |       4 |     1.20 |   41,821 | 90.5 |      2,269 |
+| transactions |     50,000 |       8 |     0.88 |   56,937 | 123.2 |     2,269 |
+| transactions |    100,000 |       8 |     1.73 |   57,889 | 124.8 |     2,260 |
+| rides        |     10,000 |       1 |     0.34 |   29,778 | 34.0 |      1,198 |
+| rides        |     50,000 |       4 |     0.74 |   67,495 | 77.2 |      1,199 |
+| all types    |    100,000 |       4 |     1.82 |   54,884 | 118.8 |     2,269 |
+
+**Peak: ~67k events/s for rides (4w), ~58k events/s for transactions (8w)**
+
+### Streaming (token-bucket pacing)
+
+| Type | Count | Target (evt/s) | Actual (evt/s) | Accuracy |
+|---|---:|---:|---:|---:|
+| transactions | 2,000 |    10 |    10 | 99.8% |
+| transactions | 2,000 |   100 |    98 | 97.7% |
+| transactions | 2,000 |   500 |   445 | 89.0% |
+| rides        | 2,000 |   100 |    99 | 98.8% |
+
+Streaming accuracy degrades at high rates (≥500 evt/s) due to OS scheduling jitter. For rates above ~200 evt/s the generator keeps up; use `--rate` values your consumer can actually handle.
+
+Raw results: `benchmarks/comprehensive_results.json` · Regenerate: `python3 benchmarks/comprehensive_benchmark.py`
 
 ## Self-Hosted API Server
 
