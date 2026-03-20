@@ -32,6 +32,10 @@ class DeviceIndex(NamedTuple):
     """Lightweight device reference."""
     device_id: str
     customer_id: str
+    device_age_days: int = 365
+    emulator_detected: bool = False
+    vpn_active: bool = False
+    ip_type: str = "RESIDENTIAL"
 
 
 class DriverIndex(NamedTuple):
@@ -79,13 +83,14 @@ class CustomerSessionState:
     """
     Track customer activity in a session for correlated transactions.
 
-    Maintains a rolling 24h window of activity for realistic velocity,
-    accumulated amount, merchant novelty, and distance-based indicators.
+    Maintains a rolling 24h window for velocity/novelty checks and a
+    separate 30d window for extended Pro+ velocity features (1h/6h/7d/30d).
     """
 
     def __init__(self, customer_id: str):
         self.customer_id = customer_id
-        self._transactions = deque()  # (timestamp, amount, merchant_id, lat, lon, device_id)
+        # 24h window — (timestamp, amount, merchant_id, lat, lon, device_id)
+        self._transactions = deque()
         self._merchant_counts: Dict[str, int] = {}
         self._device_counts: Dict[str, int] = {}
         self._accumulated_amount = 0.0
@@ -96,11 +101,13 @@ class CustomerSessionState:
         # T4: device consistency — first 2 devices seen become "primary"; others are anomalies
         self._primary_devices: set = set()
         self._PRIMARY_MAX = 2
+        # Pro+: 30d extended window — (timestamp, amount, device_id, merchant_id)
+        self._transactions_30d: deque = deque()
 
     def _prune_old(self, current_time: datetime) -> None:
-        """Remove transactions older than 24h from the rolling window."""
-        cutoff = current_time - timedelta(hours=24)
-        while self._transactions and self._transactions[0][0] < cutoff:
+        """Remove transactions older than 24h (24h window) and 30d (extended window)."""
+        cutoff_24h = current_time - timedelta(hours=24)
+        while self._transactions and self._transactions[0][0] < cutoff_24h:
             ts, amount, merchant_id, _lat, _lon, device_id = self._transactions.popleft()
             self._accumulated_amount -= amount
 
@@ -114,6 +121,10 @@ class CustomerSessionState:
                 if self._device_counts[device_id] <= 0:
                     del self._device_counts[device_id]
 
+        cutoff_30d = current_time - timedelta(days=30)
+        while self._transactions_30d and self._transactions_30d[0][0] < cutoff_30d:
+            self._transactions_30d.popleft()
+
     def add_transaction(self, tx: Dict[str, Any], timestamp: datetime) -> None:
         """Add transaction to session state."""
         self._prune_old(timestamp)
@@ -124,8 +135,11 @@ class CustomerSessionState:
         lon = tx.get('geolocation_lon')
         amount = float(tx.get('amount', 0.0))
 
+        # 24h window
         self._transactions.append((timestamp, amount, merchant_id, lat, lon, device_id))
         self._accumulated_amount += amount
+        # 30d extended window
+        self._transactions_30d.append((timestamp, amount, device_id, merchant_id))
 
         if merchant_id:
             self._merchant_counts[merchant_id] = self._merchant_counts.get(merchant_id, 0) + 1
@@ -143,6 +157,40 @@ class CustomerSessionState:
             # T4: first _PRIMARY_MAX distinct devices become "primary"
             if len(self._primary_devices) < self._PRIMARY_MAX:
                 self._primary_devices.add(device_id)
+
+    def get_velocity_window(self, current_time: datetime, hours: float) -> int:
+        """Count transactions in the last `hours` window (Pro+ extended velocity)."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return sum(1 for ts, *_ in self._transactions if ts >= cutoff)
+        else:
+            return sum(1 for ts, *_ in self._transactions_30d if ts >= cutoff)
+
+    def get_accumulated_window(self, current_time: datetime, hours: float) -> float:
+        """Total amount in the last `hours` window."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return round(sum(amt for ts, amt, *_ in self._transactions if ts >= cutoff), 2)
+        else:
+            return round(sum(amt for ts, amt, *_ in self._transactions_30d if ts >= cutoff), 2)
+
+    def get_unique_merchants_window(self, current_time: datetime, hours: float) -> int:
+        """Unique merchant count in the last `hours` window."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return len({m for ts, amt, m, *_ in self._transactions if ts >= cutoff and m})
+        else:
+            # _transactions_30d: (ts, amount, device_id, merchant_id)
+            return len({m for ts, amt, d, m in self._transactions_30d if ts >= cutoff and m})
+
+    def get_unique_devices_window(self, current_time: datetime, hours: float) -> int:
+        """Unique device count in the last `hours` window."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return len({d for ts, amt, m, lat, lon, d in self._transactions if ts >= cutoff and d})
+        else:
+            # _transactions_30d: (ts, amount, device_id, merchant_id)
+            return len({d for ts, amt, d, m in self._transactions_30d if ts >= cutoff and d})
 
     def get_favorite_merchant(self) -> Optional[tuple]:
         """Return a random (merchant_id, merchant_name, mcc_code) from favorites.
@@ -268,6 +316,10 @@ def create_device_index(device_dict: Dict[str, Any]) -> DeviceIndex:
     return DeviceIndex(
         device_id=device_dict['device_id'],
         customer_id=device_dict['customer_id'],
+        device_age_days=device_dict.get('device_age_days', 365),
+        emulator_detected=device_dict.get('emulator_detected', False),
+        vpn_active=device_dict.get('vpn_active', False),
+        ip_type=device_dict.get('ip_type', 'RESIDENTIAL'),
     )
 
 

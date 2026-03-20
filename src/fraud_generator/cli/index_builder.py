@@ -86,6 +86,10 @@ def generate_customers_and_devices(
             device_idx = DeviceIndex(
                 device_id=device["device_id"],
                 customer_id=device["customer_id"],
+                device_age_days=device.get("device_age_days", 365),
+                emulator_detected=device.get("emulator_detected", False),
+                vpn_active=device.get("vpn_active", False),
+                ip_type=device.get("ip_type", "RESIDENTIAL"),
             )
             device_indexes.append(tuple(device_idx))
             device_counter += 1

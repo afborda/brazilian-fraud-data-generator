@@ -170,6 +170,10 @@ class DeviceGenerator:
         return DeviceIndex(
             device_id=device_data['device_id'],
             customer_id=device_data['customer_id'],
+            device_age_days=device_data.get('device_age_days', 365),
+            emulator_detected=device_data.get('emulator_detected', False),
+            vpn_active=device_data.get('vpn_active', False),
+            ip_type=device_data.get('ip_type', 'RESIDENTIAL'),
         )
     
     def _get_preferred_types(self, profile: Optional[str]) -> list:
