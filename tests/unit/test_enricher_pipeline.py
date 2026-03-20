@@ -226,6 +226,7 @@ def test_biometric_paid_tier_populated():
         value = "pro"
     class _FakeLicense:
         plan = _FakePlan()
+        _verified = True
 
     e = BiometricEnricher()
     bag = _make_bag(license=_FakeLicense())

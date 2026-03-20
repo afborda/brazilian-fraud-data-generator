@@ -23,6 +23,30 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.6 | **Contexto** | TPRD2 campos OS comportamentais + T6 Fraud Rings + test_licensing fix | 2026-03-14 |
 | v4.7 | **Pipeline** | TPRD4 enricher pipeline modular — 8 enrichers + generate_with_pipeline() | 2026-03-14 |
 | v4.8 | **Produção** | TPRD5 CI/CD Pipelines 1-3 + brazildata-infra VPS setup | 2026-03-14 |
+| v4.8.1 | **Higiene** | Sprint 1 bugs críticos: Redis auth, retenção 48h, heartbeat URL synthfin | 2026-03-19 |
+
+---
+
+## v4.8.1 — Higiene (2026-03-19)
+
+### Sprint 1 — Bugs Críticos
+
+Correção de 4 problemas que afetavam segurança e experiência do usuário em produção.
+
+#### Segurança
+
+- **Redis com senha**: `docker-compose.yml` agora exige `REDIS_PASSWORD` via `--requirepass`; `REDIS_URL` inclui credenciais; healthcheck usa `-a` flag
+- **Dependência pinada por tag**: `api/requirements.txt` alterado de `@v4-beta` (branch instável) para `@v4.8.0` (tag imutável)
+
+#### Configuração
+
+- **Retenção de arquivos 1h → 48h**: `JOBS_FILE_MAX_AGE_SECONDS` alterado de `3600` para `172800` em ambos `.env.example` (SaaS + API)
+
+#### Rebranding
+
+- **Heartbeat URL corrigida**: `api.automabothub.com/v1/heartbeat` → `api.synthfin.com.br/v2/license/heartbeat`
+- **Todas as URLs de licenciamento** atualizadas de `automabothub.com` para `synthfin.com.br` / `app.synthfin.com.br`
+- **Email de suporte**: `suporte@automabothub.com` → `suporte@synthfin.com.br`
 
 ---
 
