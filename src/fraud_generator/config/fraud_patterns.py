@@ -19,7 +19,7 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         'description': 'Vítima é enganada e faz transação legítima para fraudador',
         'characteristics': {
             'value_anomaly': 'LOW',              # Valor parece normal
-            'new_beneficiary_prob': 0.95,        # Quase sempre novo destino
+            'new_beneficiary_prob': 0.55,        # Nem sempre novo destino (vítima pode pagar "conta atrasada")
             'velocity': 'LOW',                    # Velocidade normal
             'time_anomaly': 'LOW',                # Horário normal
             'location_anomaly': 'NONE',           # Mesma localização
@@ -37,14 +37,14 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         'description': 'Fraudador obtém acesso à conta da vítima',
         'characteristics': {
             'value_anomaly': 'HIGH',              # Valores muito altos
-            'new_beneficiary_prob': 0.85,        # Quase sempre novo destino
+            'new_beneficiary_prob': 0.60,        # Fraudador pode usar destinos recorrentes
             'velocity': 'HIGH',                   # Múltiplas transações rápidas
             'time_anomaly': 'HIGH',               # Madrugada (22h-5h)
             'location_anomaly': 'HIGH',           # IP/geo diferente
             'device_anomaly': 'HIGH',             # Device completamente novo
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX', 'TED'],
-            'amount_multiplier': (30.0, 100.0),    # 30x-100x valor típico (T7: real ATO é muito mais agressivo)
+            'amount_multiplier': (1.5, 5.0),      # 1.5x-5x valor típico
             'transaction_burst': (5, 15),         # 5-15 transações em sequência
         },
         'prevalence': 0.15,
@@ -61,9 +61,9 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
             'time_anomaly': 'MEDIUM',             # Pode ser qualquer hora
             'location_anomaly': 'HIGH',           # Geograficamente distante
             'device_anomaly': 'HIGH',             # Terminal diferente
-            'channel_preference': ['ATM', 'BRANCH', 'WEB_BANKING', 'MOBILE_APP'],
+            'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['CREDIT_CARD', 'DEBIT_CARD'],
-            'amount_multiplier': (1.5, 4.0),      # 1.5x-4x valor típico
+            'amount_multiplier': (1.2, 3.0),      # 1.2x-3x valor típico
             'mcc_preference': ['5541', '5542', '5912', '5411'],  # Posto, farmácia, supermercado
         },
         'prevalence': 0.14,
@@ -75,14 +75,14 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         'description': 'Fraude específica de PIX (QR code falso, falso sequestro, etc)',
         'characteristics': {
             'value_anomaly': 'MEDIUM',            # Valores altos mas não absurdos
-            'new_beneficiary_prob': 0.95,        # Quase sempre chave PIX desconhecida
+            'new_beneficiary_prob': 0.65,        # Chave PIX frequentemente nova mas não sempre
             'velocity': 'MEDIUM',                 # 2-5 transações rápidas
             'time_anomaly': 'MEDIUM',             # Urgência: qualquer hora
             'location_anomaly': 'LOW',            # Pode ser mesma localização
             'device_anomaly': 'LOW',              # Mesmo device (vítima opera)
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX'],           # Exclusivamente PIX
-            'amount_multiplier': (2.0, 6.0),      # 2x-6x valor típico
+            'amount_multiplier': (1.5, 4.0),      # 1.5x-4x valor típico
             'pix_key_type': ['CPF', 'PHONE', 'RANDOM'],  # Tipos de chave suspeitos
         },
         'prevalence': 0.25,  # PIX é muito comum no Brasil
@@ -94,14 +94,14 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         'description': 'App malicioso ou app legítimo comprometido',
         'characteristics': {
             'value_anomaly': 'MEDIUM',
-            'new_beneficiary_prob': 0.80,
+            'new_beneficiary_prob': 0.50,
             'velocity': 'HIGH',
             'time_anomaly': 'LOW',
             'location_anomaly': 'MEDIUM',         # IP pode ser proxy/VPN
             'device_anomaly': 'HIGH',             # Device ID suspeito
             'channel_preference': ['MOBILE_APP'],
             'type_preference': ['PIX', 'CREDIT_CARD'],
-            'amount_multiplier': (1.5, 5.0),
+            'amount_multiplier': (1.2, 3.0),
         },
         'prevalence': 0.12,
         'fraud_score_base': 0.60,
@@ -112,12 +112,12 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         'description': 'Testes com cartões roubados para validar',
         'characteristics': {
             'value_anomaly': 'NONE',              # Valores MUITO baixos (R$1-10)
-            'new_beneficiary_prob': 0.20,        # Merchants comuns
+            'new_beneficiary_prob': 0.15,        # Merchants comuns
             'velocity': 'HIGH',                   # Múltiplas tentativas
             'time_anomaly': 'LOW',
             'location_anomaly': 'HIGH',           # Pode ser internacional
             'device_anomaly': 'HIGH',
-            'channel_preference': ['WEB_BANKING', 'MOBILE_APP', 'ATM', 'BRANCH'],
+            'channel_preference': ['WEB_BANKING', 'MOBILE_APP'],
             'type_preference': ['CREDIT_CARD', 'DEBIT_CARD'],
             'amount_multiplier': (0.01, 0.1),     # 1%-10% do valor típico
             'amount_override': (1.0, 30.0),       # Force very low amounts (R$1-30)
@@ -132,14 +132,14 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         'description': 'Conta usada para receber/transferir dinheiro de fraudes',
         'characteristics': {
             'value_anomaly': 'HIGH',              # Valores altos
-            'new_beneficiary_prob': 0.60,        # Mulas podem ter destinos recorrentes
+            'new_beneficiary_prob': 0.40,        # Mulas têm destinos recorrentes
             'velocity': 'MEDIUM',                 # Distribuição ao longo do dia
             'time_anomaly': 'LOW',
             'location_anomaly': 'LOW',
             'device_anomaly': 'LOW',
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX', 'TED'],
-            'amount_multiplier': (3.0, 8.0),
+            'amount_multiplier': (1.5, 3.0),
             'transaction_pattern': 'PASSTHROUGH',  # Recebe e transfere rápido
         },
         'prevalence': 0.06,
@@ -159,18 +159,18 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         ),
         'characteristics': {
             'value_anomaly': 'MEDIUM',            # Varia por fase (baixo→alto)
-            'new_beneficiary_prob': 0.20,        # Merchants comuns
+            'new_beneficiary_prob': 0.15,        # Merchants comuns
             'velocity': 'HIGH',                   # Burst na fase 1
             'time_anomaly': 'LOW',
             'location_anomaly': 'HIGH',           # International / VPN
             'device_anomaly': 'HIGH',             # Device nunca visto
-            'channel_preference': ['WEB_BANKING', 'MOBILE_APP', 'ATM', 'BRANCH'],
+            'channel_preference': ['WEB_BANKING', 'MOBILE_APP'],
             'type_preference': ['CREDIT_CARD', 'DEBIT_CARD'],
             'transaction_burst': (3, 8),          # Fase-1: 3-8 micro-transações
             # Fase 1 (65% prob): micro-amounts
             'card_test_phase_1_amount': (0.01, 1.00),
-            # Fase 3 (35% prob): grandes
-            'card_test_phase_3_amount': (3000.0, 15000.0),
+            # Fase 3 (35% prob): valores médios-altos
+            'card_test_phase_3_amount': (500.0, 3000.0),
             'mcc_preference': ['5999', '5732', '5411', '5912'],
         },
         'prevalence': 0.07,
@@ -261,14 +261,14 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         ),
         'characteristics': {
             'value_anomaly': 'HIGH',
-            'new_beneficiary_prob': 0.85,
+            'new_beneficiary_prob': 0.65,
             'velocity': 'HIGH',
             'time_anomaly': 'HIGH',               # Madrugada — vítima dormindo
             'location_anomaly': 'NONE',           # Device legítimo = localização correta
             'device_anomaly': 'NONE',             # Mesmo device da vítima
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX', 'TED'],
-            'amount_multiplier': (10.0, 50.0),
+            'amount_multiplier': (2.0, 8.0),
             'transaction_burst': (3, 10),
             'pix_key_type': ['CPF', 'PHONE', 'RANDOM'],
         },
@@ -288,12 +288,12 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         ),
         'characteristics': {
             'value_anomaly': 'LOW',               # Parece pedido normal de familiar
-            'new_beneficiary_prob': 0.98,        # Sempre nova chave PIX — esse é o ponto
+            'new_beneficiary_prob': 0.70,        # Alta mas não determinística
             'velocity': 'LOW',
             'time_anomaly': 'NONE',               # Horário normal
             'location_anomaly': 'NONE',           # Vítima em casa
             'device_anomaly': 'NONE',             # Device legítimo
-            'channel_preference': ['MOBILE_APP', 'WHATSAPP_PAY'],
+            'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX'],
             'amount_multiplier': (0.5, 2.5),
             'pix_key_type': ['CPF', 'PHONE'],
@@ -313,14 +313,14 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         ),
         'characteristics': {
             'value_anomaly': 'HIGH',
-            'new_beneficiary_prob': 0.90,
+            'new_beneficiary_prob': 0.65,
             'velocity': 'HIGH',
             'time_anomaly': 'MEDIUM',
             'location_anomaly': 'HIGH',
             'device_anomaly': 'HIGH',             # Novo device logo após SIM swap
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX', 'TED'],
-            'amount_multiplier': (20.0, 80.0),
+            'amount_multiplier': (3.0, 10.0),
             'transaction_burst': (3, 8),
             'pix_key_type': ['CPF', 'PHONE', 'RANDOM'],
         },
@@ -373,7 +373,7 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
             'device_anomaly': 'NONE',             # Parece humano normal
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX', 'TED', 'CREDIT_CARD'],
-            'amount_multiplier': (5.0, 20.0),     # Ativação: saque grande
+            'amount_multiplier': (2.0, 6.0),     # Ativação: saque grande
         },
         'prevalence': 0.02,
         'fraud_score_base': 0.20,                 # Muito difícil de detectar
@@ -391,14 +391,14 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
         ),
         'characteristics': {
             'value_anomaly': 'HIGH',
-            'new_beneficiary_prob': 0.95,
+            'new_beneficiary_prob': 0.70,
             'velocity': 'MEDIUM',
             'time_anomaly': 'HIGH',               # Noite / madrugada
             'location_anomaly': 'LOW',            # Vítima está "em algum lugar" — pode ser distante
             'device_anomaly': 'NONE',             # Dispositivo legítimo
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['PIX', 'TED'],
-            'amount_multiplier': (10.0, 50.0),
+            'amount_multiplier': (2.0, 8.0),
             'transaction_burst': (2, 6),          # Múltiplas transferências
             'pix_key_type': ['CPF', 'PHONE', 'RANDOM'],
         },

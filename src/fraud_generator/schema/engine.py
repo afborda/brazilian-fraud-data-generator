@@ -50,7 +50,7 @@ class SchemaEngine:
         """
         self._schema = parsed_schema
         self._profile = parsed_schema["profile"]
-        self._fraud_rate = parsed_schema.get("fraud_rate", 0.02)
+        self._fraud_rate = parsed_schema.get("fraud_rate", 0.008)
         self._seed = parsed_schema.get("seed")
         self._output_template = parsed_schema["output"]
         self._mapper = FieldMapper()

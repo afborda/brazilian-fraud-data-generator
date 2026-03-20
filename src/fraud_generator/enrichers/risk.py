@@ -34,25 +34,34 @@ class RiskEnricher:
                     ["APPROVED", "DECLINED", "PENDING", "BLOCKED"],
                     [60, 25, 10, 5],
                 )
-                # fraud_score já definido pelo FraudEnricher com ruído por padrão;
-                # só preenche aqui como fallback (sem pipeline ou fraud enricher)
-                fraud_score = tx.get("fraud_score") or int(buf.next_uniform(50, 95))
+                # fraud_score com ruído pesado: usa base do FraudEnricher + N(0,25)
+                # para que distribuições fraud/legit se sobreponham fortemente,
+                # evitando que o score seja feature discriminadora perfeita.
+                raw = tx.get("fraud_score")
+                if raw is None:
+                    raw = int(buf.next_uniform(25, 75))
+                noise = int(buf.next_gauss(0, 25))
+                fraud_score = max(0, min(100, raw + noise))
             else:
                 status = buf.next_weighted(
                     "status_normal",
                     ["APPROVED", "DECLINED", "PENDING"],
                     [96, 3, 1],
                 )
-                # 85%: score baixo (0-40) — claramente legítimo
-                # 12%: borderline (40-65) — falsos positivos realistas
-                #  3%: alto risco legítimo (65-80) — compra incomum, viagem
+                # Distribuição legítima com sobreposição significativa:
+                # 70%: score baixo (0-35)
+                # 20%: borderline (35-60) — falsos positivos realistas
+                #  8%: alto risco legítimo (60-80) — compra incomum, viagem
+                #  2%: muito alto (80-95) — atividade atípica mas legítima
                 r = buf.next_float()
-                if r < 0.85:
-                    fraud_score = int(buf.next_uniform(0, 40))
-                elif r < 0.97:
-                    fraud_score = int(buf.next_uniform(40, 65))
+                if r < 0.70:
+                    fraud_score = int(buf.next_uniform(0, 35))
+                elif r < 0.90:
+                    fraud_score = int(buf.next_uniform(35, 60))
+                elif r < 0.98:
+                    fraud_score = int(buf.next_uniform(60, 80))
                 else:
-                    fraud_score = int(buf.next_uniform(65, 80))
+                    fraud_score = int(buf.next_uniform(80, 95))
 
             tx["status"] = status
             tx["fraud_score"] = fraud_score

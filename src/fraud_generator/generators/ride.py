@@ -251,7 +251,7 @@ class RideGenerator:
     
     def __init__(
         self,
-        fraud_rate: float = 0.02,
+        fraud_rate: float = 0.008,
         use_profiles: bool = True,
         seed: Optional[int] = None
     ):

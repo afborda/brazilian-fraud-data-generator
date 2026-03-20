@@ -157,7 +157,11 @@ class SessionContextGenerator:
 
         # 7. Destination account
         dest_age = _sample_dest_account_age(fraud_type, r)
-        new_beneficiary = dest_age < 30 or (fraud_type is not None and r.random() < 0.75)
+        # new_beneficiary: mulas/contas novas são novo destino, mas não sempre
+        if fraud_type is not None:
+            new_beneficiary = dest_age < 7 or r.random() < 0.40
+        else:
+            new_beneficiary = dest_age < 30 and r.random() < 0.15
 
         # 8. Notification ignored
         notification_ignored = False

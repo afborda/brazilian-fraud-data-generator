@@ -167,7 +167,7 @@ class SessionEnricher:
             if tx.get("accumulated_amount_24h") is None:
                 tx["accumulated_amount_24h"] = default_accumulated_amount
             if tx.get("new_beneficiary") is None:
-                tx["new_beneficiary"] = buf.next_float() < (0.7 if is_fraud else 0.15)
+                tx["new_beneficiary"] = buf.next_float() < (0.45 if is_fraud else 0.20)
             # No session state — all extended fields null
             for f in _VELOCITY_WINDOW_FIELDS:
                 tx.setdefault(f, None)

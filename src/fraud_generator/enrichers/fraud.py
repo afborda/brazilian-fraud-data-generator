@@ -307,21 +307,21 @@ class FraudEnricher:
             tx["beneficiary_cpf_hash"] = _hl.sha256(
                 f"BENE_{tx.get('customer_id', '')}_{beneficiary_idx}".encode()
             ).hexdigest()
-            # Usa a prob do padrão (0.95) — não força 100% hardcoded
+            # Usa a prob do padrão — não força 100% hardcoded
             if tx.get("new_beneficiary") is None:
-                prob = characteristics.get("new_beneficiary_prob", 0.95)
+                prob = characteristics.get("new_beneficiary_prob", 0.55)
                 tx["new_beneficiary"] = random.random() < prob
         else:
             tx.setdefault("beneficiary_cpf_hash", None)
 
-        # ── Fraud score com ruído realista ────────────────────────────────
-        # Fraudes difíceis de detectar (base baixa) ficam próximas ao score legítimo.
-        # Fraudes óbvias têm score alto mas com variância — evita separação perfeita.
+        # ── Fraud score com ruído pesado ─────────────────────────────────
+        # Base do padrão + N(0,20) para forte sobreposição com legítimo.
+        # RiskEnricher adicionará ruído extra — a soma produz overlap ~60%
+        # entre classes, impedindo separação por score sozinho.
         base_score = pattern.get("fraud_score_base", 0.5)
         base_pts = int(base_score * 100)
-        lo = max(10, base_pts - 25)
-        hi = min(97, base_pts + 20)
-        tx["fraud_score"] = int(random.uniform(lo, hi))
+        noise = int(random.gauss(0, 20))
+        tx["fraud_score"] = max(5, min(95, base_pts + noise))
 
         # ── Pro+: multi-label fraud taxonomy ──────────────────────────────
         is_pro_plus = is_plan(bag.license, "pro", "team", "enterprise")

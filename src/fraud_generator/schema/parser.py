@@ -206,7 +206,7 @@ class SchemaParser:
         return {
             "schema_version": self.SCHEMA_VERSION,
             "profile": profile,
-            "fraud_rate": float(raw.get("fraud_rate", 0.02)),
+            "fraud_rate": float(raw.get("fraud_rate", 0.008)),
             "seed": raw.get("seed"),
             "output": validated_output,
             # pass-through extras (e.g. description, author)

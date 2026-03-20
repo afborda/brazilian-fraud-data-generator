@@ -172,13 +172,14 @@ def test_pix_enricher_nulls_for_non_pix():
 
 # ── DeviceEnricher ───────────────────────────────────────────────────────────
 
-def test_device_enricher_nulls_when_no_device():
+def test_device_enricher_generates_values_when_no_device():
     e = DeviceEnricher()
     bag = _make_bag()
     tx = _base_tx()
     e.enrich(tx, bag)
+    # When no device object, enricher generates realistic fallback values
     for f in ("device_age_days", "emulator_detected", "vpn_active", "ip_type"):
-        assert tx.get(f) is None
+        assert tx.get(f) is not None
 
 
 # ── SessionEnricher ──────────────────────────────────────────────────────────

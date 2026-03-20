@@ -175,7 +175,7 @@ class TransactionGenerator:
     
     def __init__(
         self,
-        fraud_rate: float = 0.02,
+        fraud_rate: float = 0.008,
         use_profiles: bool = True,
         seed: Optional[int] = None,
         license=None,
@@ -618,17 +618,15 @@ class TransactionGenerator:
     def _calculate_fraud_value(self, fraud_type: Optional[str]) -> float:
         """Calculate fraud transaction value using log-normal distribution.
 
-        Parâmetros calibrados contra dados BCB/FEBRABAN 2024:
-          - LAVAGEM/TRIANGULACAO: mediana ~R$8.000 (alta cauda)
-          - CARTAO_CLONADO/CONTA_TOMADA: mediana ~R$1.500
-          - Demais fraudes: mediana ~R$400 (range PIX golpe / engenharia social)
+        Parâmetros calibrados para ratio fraude/legítimo ~5-8x,
+        compatível com distribuições Sparkov e PaySim reais.
         """
         if fraud_type in ['LAVAGEM_DINHEIRO', 'TRIANGULACAO']:
-            mu, sigma, max_val = math.log(8_000), 1.0, 100_000.0
+            mu, sigma, max_val = math.log(2_000), 1.1, 30_000.0
         elif fraud_type in ['CARTAO_CLONADO', 'CONTA_TOMADA']:
-            mu, sigma, max_val = math.log(1_500), 1.1, 50_000.0
+            mu, sigma, max_val = math.log(600), 1.1, 15_000.0
         else:
-            mu, sigma, max_val = math.log(400), 1.2, 30_000.0
+            mu, sigma, max_val = math.log(250), 1.2, 10_000.0
         value = math.exp(random.gauss(mu, sigma))
         return round(max(5.0, min(value, max_val)), 2)
     

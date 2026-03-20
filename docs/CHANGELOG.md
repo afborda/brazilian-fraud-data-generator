@@ -24,6 +24,62 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.7 | **Pipeline** | TPRD4 enricher pipeline modular — 8 enrichers + generate_with_pipeline() | 2026-03-14 |
 | v4.8 | **Produção** | TPRD5 CI/CD Pipelines 1-3 + brazildata-infra VPS setup | 2026-03-14 |
 | v4.8.1 | **Higiene** | Sprint 1 bugs críticos: Redis auth, retenção 48h, heartbeat URL synthfin | 2026-03-19 |
+| v4.9 | **Realismo** | Quality scorecard: fraud_score overlap, new_beneficiary, device fields, amount calibration | 2026-03-19 |
+
+---
+
+## v4.9 — Realismo (2026-03-19)
+
+### Quality Scorecard — De Grade D (0/8) para Grade B+
+
+Correções abrangentes de qualidade estatística baseadas em avaliação comparativa contra datasets reais (Sparkov, PaySim). Foco em melhorar TSTR AUC, eliminar data leakage, e aproximar distribuições dos dados sintéticos de padrões reais.
+
+#### fraud_score / fraud_risk_score — Eliminação de data leakage
+
+- **Antes**: fraud_score era semi-determinístico (base fixa + ruído uniforme pequeno); AUC=0.3238 (pior que random)
+- **Depois**: Ruído gaussiano pesado N(0,25) no RiskEnricher + N(0,20) no FraudEnricher; distribuições legit/fraud agora possuem ~60% de sobreposição
+- Faixas legítimas alargadas: 70% em [0,35], 20% em [35,60], 8% em [60,80], 2% em [80,95] (antes 85/12/3%)
+- **Arquivos**: `enrichers/risk.py`, `enrichers/fraud.py`
+
+#### new_beneficiary — Remoção de determinismo
+
+- **Antes**: 100% dos frauds tinham `new_beneficiary=True` (3 camadas forçavam True)
+- **Depois**: Probabilidades reduzidas em 15+ padrões de fraude (0.85-0.98 → 0.30-0.70); `session_context.py` usa condição mais seletiva (`dest_age < 7` ao invés de `< 30`); fallback em `session.py` ajustado (0.45/0.20)
+- **Resultado**: ~72% dos frauds com new_beneficiary (target <70%)
+- **Arquivos**: `config/fraud_patterns.py`, `generators/session_context.py`, `enrichers/session.py`
+
+#### Taxa de fraude padrão
+
+- **Antes**: Default 2% (`--fraud-rate 0.02`) + boosters de perfil → 3.12% efetivo
+- **Depois**: Default 0.8% (`--fraud-rate 0.008`) → ~0.65% efetivo
+- **Arquivos**: `cli/args.py`, `generators/transaction.py`, `generators/ride.py`, `schema/parser.py`, `schema/engine.py`
+
+#### Canais com 100% fraude — Eliminados
+
+- **Antes**: 6 canais (ATM, BRANCH, WHATSAPP_PAY, etc.) usados exclusivamente por fraudes
+- **Depois**: Removidos ATM/BRANCH de channel_preference de COMPRA_TESTE, CARD_TESTING, CARTAO_CLONADO; WHATSAPP_CLONE alterado de WHATSAPP_PAY para MOBILE_APP/WEB_BANKING
+- **Resultado**: 0 canais com taxa de fraude = 100%
+- **Arquivo**: `config/fraud_patterns.py`
+
+#### Campos de device sempre nulos — Corrigidos
+
+- **Antes**: `device_age_days`, `emulator_detected`, `vpn_active`, `ip_type` sempre None (20 colunas nulas)
+- **Causa raiz**: `DeviceEnricher` verificava `bag.device` que nunca era definido no pipeline
+- **Depois**: Geração de valores realísticos como fallback — fraude: device_age 0-90 dias, emulator 8%, vpn 25%; legítimo: device_age 30-730 dias, emulator 0.5%, vpn 6%
+- **Resultado**: 0 colunas sempre nulas
+- **Arquivo**: `enrichers/device.py`
+
+#### Calibração de valores de fraude
+
+- **Antes**: Multiplicadores extremos (CONTA_TOMADA 30-100x, MAO_FANTASMA 10-50x) → razão média 72x
+- **Depois**: 3 rodadas de ajuste iterativo — multiplicadores reduzidos (CONTA_TOMADA 1.5-5x, PIX_GOLPE 1.5-4x, etc.) + medianas de `_calculate_fraud_value` rebaixadas
+- **Resultado**: Razão média 8.5x, mediana 8.2x (benchmark Sparkov: 7.84x) ✅
+- **Arquivos**: `config/fraud_patterns.py`, `generators/transaction.py`
+
+#### Testes
+
+- Teste `test_device_enricher_nulls_when_no_device` renomeado para `test_device_enricher_generates_values_when_no_device`; asserções alteradas de `is None` para `is not None`
+- 212/215 testes passando (3 falhas pré-existentes em database exporter, não relacionadas)
 
 ---
 
