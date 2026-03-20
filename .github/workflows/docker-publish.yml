@@ -69,11 +69,10 @@ jobs:
           python -c "from src.fraud_generator.generators.ride import RideGenerator"
           python -c "from src.fraud_generator.exporters import MinIOExporter"
           
-          # Test basic generation
+          # Test basic generation (uses --size, not --num-transactions)
           python generate.py \
-            --num-transactions 100 \
-            --num-customers 10 \
-            --output-dir /tmp/test_output \
+            --size 1MB \
+            --output /tmp/test_output \
             --format jsonl
           
           # Verify output files exist

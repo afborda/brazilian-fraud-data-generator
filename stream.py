@@ -51,7 +51,12 @@ from fraud_generator.utils import (
     load_cached_indexes, save_cached_indexes,
 )
 from fraud_generator.utils.parallel import ParallelStreamManager
-from fraud_generator.licensing.validator import validate_env, check_target_allowed
+
+try:
+    from fraud_generator.licensing.validator import validate_env, check_target_allowed
+except ImportError:
+    def validate_env(phone_home=True):      return None
+    def check_target_allowed(lic, target):  pass
 
 # ── License validation (runs before anything else) ─────────────────────────
 _LICENSE = validate_env(phone_home=True)

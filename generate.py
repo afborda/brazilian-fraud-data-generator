@@ -17,8 +17,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 from fraud_generator.cli.args import build_parser
 from fraud_generator.cli.runners import BatchRunner, MinIORunner, SchemaRunner
 from fraud_generator.exporters import is_minio_url, list_formats, MINIO_AVAILABLE, is_format_available
-from fraud_generator.licensing.validator import validate_env, check_format_allowed, check_size_allowed
 from fraud_generator.utils.helpers import parse_size
+
+try:
+    from fraud_generator.licensing.validator import validate_env, check_format_allowed, check_size_allowed
+except ImportError:
+    # Licensing module is proprietary and not shipped in the open-source repo.
+    # Fall back to unrestricted free-tier stubs.
+    def validate_env(phone_home=True):   return None
+    def check_format_allowed(lic, fmt):  pass
+    def check_size_allowed(lic, size):   pass
 
 
 def main() -> None:
