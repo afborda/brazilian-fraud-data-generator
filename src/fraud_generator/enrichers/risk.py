@@ -11,7 +11,7 @@ Extracted from TransactionGenerator._add_risk_indicators (risk/score block):
 
 from typing import Any, Dict
 
-from .base import EnricherProtocol, GeneratorBag
+from .base import EnricherProtocol, GeneratorBag, is_plan
 from ..config.transactions import REFUSAL_REASONS
 from ..generators.session_context import build_context_for_fraud
 from ..generators.correlations import match_fraud_rule
@@ -34,14 +34,25 @@ class RiskEnricher:
                     ["APPROVED", "DECLINED", "PENDING", "BLOCKED"],
                     [60, 25, 10, 5],
                 )
-                fraud_score = int(buf.next_uniform(65, 100))
+                # fraud_score já definido pelo FraudEnricher com ruído por padrão;
+                # só preenche aqui como fallback (sem pipeline ou fraud enricher)
+                fraud_score = tx.get("fraud_score") or int(buf.next_uniform(50, 95))
             else:
                 status = buf.next_weighted(
                     "status_normal",
                     ["APPROVED", "DECLINED", "PENDING"],
                     [96, 3, 1],
                 )
-                fraud_score = int(buf.next_uniform(0, 35))
+                # 85%: score baixo (0-40) — claramente legítimo
+                # 12%: borderline (40-65) — falsos positivos realistas
+                #  3%: alto risco legítimo (65-80) — compra incomum, viagem
+                r = buf.next_float()
+                if r < 0.85:
+                    fraud_score = int(buf.next_uniform(0, 40))
+                elif r < 0.97:
+                    fraud_score = int(buf.next_uniform(40, 65))
+                else:
+                    fraud_score = int(buf.next_uniform(65, 80))
 
             tx["status"] = status
             tx["fraud_score"] = fraud_score
@@ -119,3 +130,28 @@ class RiskEnricher:
             and tx.get("type") in ("PIX", "TED")
             and is_fraud
         ) if ring_id else False
+
+        # ── Team+: enhanced mule graph structure ──────────────────────────
+        is_team_plus = is_plan(bag.license, "team", "enterprise")
+        if is_team_plus and ring_id and ring_role:
+            # Mule tier: direct (1) or layered (2) — mulas may have sub-mulas
+            if ring_role == "mule":
+                tx["mule_tier"] = buf.next_weighted(
+                    "mule_tier", [1, 2], [75, 25]
+                )
+            else:
+                tx["mule_tier"] = None
+            # Forward ratio: mulas keep 5-30% and forward the rest
+            if ring_role == "mule":
+                kept_pct = round(buf.next_uniform(0.05, 0.30), 3)
+                tx["mule_forward_ratio"] = round(1.0 - kept_pct, 3)
+            elif ring_role == "orchestrator":
+                tx["mule_forward_ratio"] = 0.0   # retains all
+            else:
+                tx["mule_forward_ratio"] = None
+            # Network size estimate (how many accounts in this ring)
+            tx["mule_network_size"] = buf.next_int(4, 18)
+        else:
+            tx.setdefault("mule_tier", None)
+            tx.setdefault("mule_forward_ratio", None)
+            tx.setdefault("mule_network_size", None)

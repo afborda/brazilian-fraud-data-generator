@@ -67,3 +67,28 @@ class GeneratorBag:
 
     # ── License (optional — gates biometric tier) ─────────────────────────
     license: Any = None           # fraud_generator.licensing.license.License | None
+
+
+def is_plan(bag_license, *plans: str) -> bool:
+    """
+    Check if bag.license grants access to one of the given plan tiers.
+
+    Returns True only when:
+      - A license object is present
+      - The license has _verified=True (set by validate_env after HMAC check,
+        or by server-side _PlanLicense objects)
+      - The plan value matches one of the requested plans
+
+    Usage:
+        if is_plan(bag.license, "pro", "team", "enterprise"):
+            # populate Pro+ fields
+    """
+    if bag_license is None:
+        return False
+    if not getattr(bag_license, "_verified", False):
+        return False
+    plan_value = ""
+    plan_obj = getattr(bag_license, "plan", None)
+    if plan_obj is not None:
+        plan_value = getattr(plan_obj, "value", "") or str(plan_obj).lower()
+    return plan_value in plans

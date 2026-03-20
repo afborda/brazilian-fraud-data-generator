@@ -9,11 +9,14 @@ set here — those come from `session.check_impossible_travel()` which the calle
 (tx_worker / batch_gen) invokes *after* generate() returns, and then sets the
 fields directly on the tx dict.  The enricher only fills the fields that the
 existing `generate()` method already fills.
+
+Pro+ extended velocity windows (1h/6h/7d/30d) and geo clustering fields are
+gated behind the license plan check.
 """
 
 from typing import Any, Dict
 
-from .base import EnricherProtocol, GeneratorBag
+from .base import EnricherProtocol, GeneratorBag, is_plan
 
 # Profile velocity baselines (mean txns/24h, std)
 _PROFILE_VELOCITY_BASELINE: dict = {
@@ -29,6 +32,31 @@ _PROFILE_VELOCITY_BASELINE: dict = {
 }
 _PROFILE_VELOCITY_DEFAULT = (8, 3.0)
 
+# Extended velocity window fields (Pro+) — set to None for lower plans
+_VELOCITY_WINDOW_FIELDS = (
+    "velocity_transactions_1h",
+    "velocity_transactions_6h",
+    "velocity_transactions_7d",
+    "velocity_transactions_30d",
+    "accumulated_amount_1h",
+    "accumulated_amount_6h",
+    "accumulated_amount_7d",
+    "accumulated_amount_30d",
+    "velocity_unique_merchants_7d",
+    "velocity_unique_devices_7d",
+)
+
+# Geo clustering fields (Pro+) — set to None for lower plans
+_GEO_CLUSTER_FIELDS = (
+    "distance_from_home_km",
+    "is_known_location",
+    "location_cluster_id",
+    "first_time_at_this_location",
+    "merchant_visit_count",
+    "days_since_first_merchant_visit",
+    "new_merchant_flag",
+)
+
 
 class SessionEnricher:
     """
@@ -43,6 +71,13 @@ class SessionEnricher:
     - time_since_last_txn_min
     - distance_from_last_txn_km
 
+    Pro+ additional fields (gated by license):
+    - velocity_transactions_1h/6h/7d/30d
+    - accumulated_amount_1h/6h/7d/30d
+    - velocity_unique_merchants_7d, velocity_unique_devices_7d
+    - distance_from_home_km, is_known_location, location_cluster_id
+    - first_time_at_this_location, merchant_visit_count, new_merchant_flag
+
     Falls back to random values when session_state is None.
     """
 
@@ -52,6 +87,7 @@ class SessionEnricher:
         timestamp = bag.timestamp
         customer_profile = bag.customer_profile
         is_fraud = bag.is_fraud
+        is_pro_plus = is_plan(bag.license, "pro", "team", "enterprise")
 
         if is_fraud:
             default_transactions_24h = buf.next_int(5, 50)
@@ -91,6 +127,32 @@ class SessionEnricher:
                     tx.get("geolocation_lon"),
                 )
 
+            # ── Pro+: extended velocity windows ───────────────────────────
+            if is_pro_plus:
+                tx.setdefault("velocity_transactions_1h",
+                    session_state.get_velocity_window(timestamp, 1))
+                tx.setdefault("velocity_transactions_6h",
+                    session_state.get_velocity_window(timestamp, 6))
+                tx.setdefault("velocity_transactions_7d",
+                    session_state.get_velocity_window(timestamp, 168))
+                tx.setdefault("velocity_transactions_30d",
+                    session_state.get_velocity_window(timestamp, 720))
+                tx.setdefault("accumulated_amount_1h",
+                    session_state.get_accumulated_window(timestamp, 1))
+                tx.setdefault("accumulated_amount_6h",
+                    session_state.get_accumulated_window(timestamp, 6))
+                tx.setdefault("accumulated_amount_7d",
+                    session_state.get_accumulated_window(timestamp, 168))
+                tx.setdefault("accumulated_amount_30d",
+                    session_state.get_accumulated_window(timestamp, 720))
+                tx.setdefault("velocity_unique_merchants_7d",
+                    session_state.get_unique_merchants_window(timestamp, 168))
+                tx.setdefault("velocity_unique_devices_7d",
+                    session_state.get_unique_devices_window(timestamp, 168))
+            else:
+                for f in _VELOCITY_WINDOW_FIELDS:
+                    tx.setdefault(f, None)
+
         else:
             if tx.get("distance_from_last_txn_km") is None:
                 tx["distance_from_last_txn_km"] = (
@@ -106,4 +168,7 @@ class SessionEnricher:
                 tx["accumulated_amount_24h"] = default_accumulated_amount
             if tx.get("new_beneficiary") is None:
                 tx["new_beneficiary"] = buf.next_float() < (0.7 if is_fraud else 0.15)
+            # No session state — all extended fields null
+            for f in _VELOCITY_WINDOW_FIELDS:
+                tx.setdefault(f, None)
 

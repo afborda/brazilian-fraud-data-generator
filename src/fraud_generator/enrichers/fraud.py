@@ -11,7 +11,7 @@ import uuid as _uuid
 from datetime import timedelta as _td
 from typing import Any, Dict, Optional
 
-from .base import EnricherProtocol, GeneratorBag
+from .base import EnricherProtocol, GeneratorBag, is_plan
 from ..config.merchants import get_mcc_info
 from ..config.geography import ESTADOS_BR, ESTADOS_LIST
 from ..config.fraud_patterns import get_fraud_pattern, get_time_window_for_anomaly
@@ -23,6 +23,83 @@ from ..config.pix import (
 )
 from ..utils.helpers import generate_random_hash
 from ..profiles.behavioral import get_transaction_value_for_profile
+
+# ── Fraud types that may produce impossible travel events (Pro+) ──────────────
+_IMPOSSIBLE_TRAVEL_TYPES = frozenset({
+    "CONTA_TOMADA", "SIM_SWAP", "MAO_FANTASMA", "CREDENTIAL_STUFFING",
+    "CARTAO_CLONADO", "FRAUDE_APLICATIVO",
+})
+
+# ── Multi-label taxonomy: maps fraud_type → list of labels ───────────────────
+_FRAUD_LABELS: dict = {
+    "CONTA_TOMADA":          ["ATO", "CONTA_TOMADA"],
+    "ENGENHARIA_SOCIAL":     ["ENGENHARIA_SOCIAL"],
+    "PIX_GOLPE":             ["PIX_GOLPE", "ENGENHARIA_SOCIAL"],
+    "CARTAO_CLONADO":        ["CARTAO_CLONADO"],
+    "MULA_FINANCEIRA":       ["MULA_FINANCEIRA", "LAVAGEM_DINHEIRO"],
+    "FRAUDE_APLICATIVO":     ["FRAUDE_APLICATIVO", "ATO"],
+    "CARD_TESTING":          ["CARD_TESTING"],
+    "COMPRA_TESTE":          ["CARD_TESTING"],
+    "MICRO_BURST_VELOCITY":  ["MICRO_BURST_VELOCITY", "BOT"],
+    "DISTRIBUTED_VELOCITY":  ["DISTRIBUTED_VELOCITY", "BOT"],
+    "BOLETO_FALSO":          ["BOLETO_FALSO"],
+    "MAO_FANTASMA":          ["RAT_FRAUD", "ATO", "MAO_FANTASMA"],
+    "WHATSAPP_CLONE":        ["ENGENHARIA_SOCIAL", "WHATSAPP_CLONE", "IMPERSONATION"],
+    "SIM_SWAP":              ["SIM_SWAP", "ATO"],
+    "CREDENTIAL_STUFFING":   ["CREDENTIAL_STUFFING", "BOT", "ATO"],
+    "SYNTHETIC_IDENTITY":    ["SYNTHETIC_IDENTITY", "IDENTITY_FRAUD"],
+    "SEQUESTRO_RELAMPAGO":   ["SEQUESTRO_RELAMPAGO", "ENGENHARIA_SOCIAL"],
+}
+
+# ── Chain roles: position in the fraud chain ──────────────────────────────────
+_FRAUD_CHAIN_ROLES: dict = {
+    "MULA_FINANCEIRA":      "LAUNDERING",
+    "DISTRIBUTED_VELOCITY": "TRANSFER",
+    "MICRO_BURST_VELOCITY": "TRANSFER",
+}
+# All others default to "INITIATION"
+
+# ── Detection latency ranges (days) if not in pattern config ─────────────────
+_FRAUD_DETECTION_DELAY: dict = {
+    "BOLETO_FALSO":        (2, 7),
+    "CARTAO_CLONADO":      (1, 5),
+    "CONTA_TOMADA":        (1, 3),
+    "MULA_FINANCEIRA":     (7, 30),
+    "ENGENHARIA_SOCIAL":   (1, 14),
+    "PIX_GOLPE":           (1, 3),
+    "SYNTHETIC_IDENTITY":  (30, 90),
+    "WHATSAPP_CLONE":      (1, 7),
+    "SEQUESTRO_RELAMPAGO": (1, 3),
+    "SIM_SWAP":            (1, 5),
+    "CREDENTIAL_STUFFING": (0, 2),
+    "MAO_FANTASMA":        (1, 3),
+}
+
+# ── Bot signature profiles ────────────────────────────────────────────────────
+_BOT_FRAUD_TYPES = frozenset({
+    "MICRO_BURST_VELOCITY", "DISTRIBUTED_VELOCITY", "CARD_TESTING",
+    "COMPRA_TESTE", "CREDENTIAL_STUFFING", "MAO_FANTASMA",
+})
+
+
+def _get_bot_signature(fraud_type: str, buf) -> tuple:
+    """Return (automation_signature: str, bot_confidence_score: float)."""
+    if fraud_type in _BOT_FRAUD_TYPES:
+        if fraud_type in ("CREDENTIAL_STUFFING", "MICRO_BURST_VELOCITY"):
+            return "BOT_TOOLKIT", round(random.uniform(0.85, 0.99), 3)
+        if fraud_type == "MAO_FANTASMA":
+            return "SCRIPTED", round(random.uniform(0.70, 0.90), 3)
+        return "SCRIPTED", round(random.uniform(0.60, 0.85), 3)
+    return "HUMAN", round(random.uniform(0.0, 0.20), 3)
+
+
+# ── Fields that must be null on non-fraud records ────────────────────────────
+_NEW_PRO_FIELDS_NULL = (
+    "fraud_labels", "fraud_chain_id", "fraud_chain_role",
+    "fraud_reported_days_after", "credential_breach_days_before",
+    "is_impossible_travel", "min_travel_time_required_hours",
+    "actual_gap_hours", "impossible_travel_group_id",
+)
 
 
 class FraudEnricher:
@@ -42,6 +119,10 @@ class FraudEnricher:
             tx.setdefault("is_probe_transaction", False)
             tx.setdefault("probe_original_amount", None)
             tx.setdefault("beneficiary_cpf_hash", None)
+            for _f in _NEW_PRO_FIELDS_NULL:
+                tx.setdefault(_f, None)
+            tx.setdefault("automation_signature", "HUMAN")
+            tx.setdefault("bot_confidence_score", round(random.uniform(0.0, 0.05), 3))
             return
 
         fraud_type = bag.fraud_type
@@ -67,7 +148,8 @@ class FraudEnricher:
             tx["amount"] = round(base * random.uniform(lo_m, hi_m), 2)
 
         # ── New beneficiary ───────────────────────────────────────────────
-        if characteristics.get("new_beneficiary", False):
+        new_ben_prob = characteristics.get("new_beneficiary_prob")
+        if new_ben_prob is not None and random.random() < new_ben_prob:
             tx["new_beneficiary"] = True
             if tx.get("destination_bank"):
                 tx["destination_bank"] = bag.bank_cache.sample()
@@ -84,6 +166,13 @@ class FraudEnricher:
             tx["velocity_transactions_24h"] = random.randint(5, 12)
             tx["accumulated_amount_24h"] = round(
                 tx["amount"] * tx["velocity_transactions_24h"] * 0.7, 2
+            )
+        elif velocity == "LOW":
+            # Fraud com velocity LOW ainda deve estar levemente acima da linha de base
+            # para não ficar abaixo de clientes legítimos ativos (Bug #5)
+            tx["velocity_transactions_24h"] = random.randint(3, 9)
+            tx["accumulated_amount_24h"] = round(
+                tx["amount"] * tx["velocity_transactions_24h"] * 0.5, 2
             )
 
         # ── Time anomaly ──────────────────────────────────────────────────
@@ -113,12 +202,26 @@ class FraudEnricher:
         if characteristics.get("device_anomaly", "NONE") == "HIGH":
             tx["device_id"] = f"DEV_FRAUD_{random.randint(100000, 999999):06d}"
 
-        # ── Channel / PIX preference ──────────────────────────────────────
+        # ── Channel preference (canal real: MOBILE_APP, WEB_BANKING, etc.) ─
         if "channel_preference" in characteristics:
-            preferred = characteristics["channel_preference"]
-            tx["channel"] = random.choice(preferred)
-            if "PIX" in preferred and tx["channel"] == "PIX":
-                tx["type"] = "PIX"
+            tx["channel"] = random.choice(characteristics["channel_preference"])
+
+        # ── Type preference (tipo de pagamento: PIX, TED, CREDIT_CARD, etc.) ─
+        if "type_preference" in characteristics:
+            chosen_type = random.choice(characteristics["type_preference"])
+            tx["type"] = chosen_type
+            if chosen_type in ("CREDIT_CARD", "DEBIT_CARD"):
+                # Garantir campos de cartão quando o tipo é forçado para cartão
+                if not tx.get("card_brand"):
+                    tx["card_brand"] = bag.brand_cache.sample()
+                if not tx.get("card_type"):
+                    tx["card_type"] = chosen_type
+                tx.setdefault("card_number_hash", generate_random_hash(16))
+                # Limpar campos PIX se existirem
+                tx["pix_key_type"] = None
+                tx["pix_key_destination"] = None
+                tx["end_to_end_id"] = None
+            elif chosen_type == "PIX":
                 pix_key_type = random.choice(characteristics.get("pix_key_type", ["CPF", "PHONE", "EMAIL"]))
                 tx["pix_key_type"] = pix_key_type
                 tx["pix_key_destination"] = generate_random_hash(32)
@@ -204,10 +307,95 @@ class FraudEnricher:
             tx["beneficiary_cpf_hash"] = _hl.sha256(
                 f"BENE_{tx.get('customer_id', '')}_{beneficiary_idx}".encode()
             ).hexdigest()
-            tx["new_beneficiary"] = True
+            # Usa a prob do padrão (0.95) — não força 100% hardcoded
+            if tx.get("new_beneficiary") is None:
+                prob = characteristics.get("new_beneficiary_prob", 0.95)
+                tx["new_beneficiary"] = random.random() < prob
         else:
             tx.setdefault("beneficiary_cpf_hash", None)
 
-        # ── Fraud score override ──────────────────────────────────────────
+        # ── Fraud score com ruído realista ────────────────────────────────
+        # Fraudes difíceis de detectar (base baixa) ficam próximas ao score legítimo.
+        # Fraudes óbvias têm score alto mas com variância — evita separação perfeita.
         base_score = pattern.get("fraud_score_base", 0.5)
-        tx["fraud_score"] = int(random.uniform(base_score * 100, 95))
+        base_pts = int(base_score * 100)
+        lo = max(10, base_pts - 25)
+        hi = min(97, base_pts + 20)
+        tx["fraud_score"] = int(random.uniform(lo, hi))
+
+        # ── Pro+: multi-label fraud taxonomy ──────────────────────────────
+        is_pro_plus = is_plan(bag.license, "pro", "team", "enterprise")
+        if is_pro_plus:
+            labels = _FRAUD_LABELS.get(fraud_type, [fraud_type])
+            tx.setdefault("fraud_labels", labels)
+            tx.setdefault("fraud_chain_id", str(_uuid.uuid4())[:18])
+            tx.setdefault("fraud_chain_role", _FRAUD_CHAIN_ROLES.get(fraud_type, "INITIATION"))
+            # Detection latency: how many days after fraud occurs until reported
+            delay_lo, delay_hi = pattern.get(
+                "detection_delay_days",
+                _FRAUD_DETECTION_DELAY.get(fraud_type, (2, 14))
+            )
+            tx.setdefault("fraud_reported_days_after", random.randint(delay_lo, delay_hi))
+            # Credential breach window: how long ago credentials were compromised
+            breach_range = pattern.get("credential_breach_days_before")
+            if breach_range:
+                tx.setdefault("credential_breach_days_before", random.randint(*breach_range))
+            else:
+                tx.setdefault("credential_breach_days_before", None)
+        else:
+            tx.setdefault("fraud_labels", None)
+            tx.setdefault("fraud_chain_id", None)
+            tx.setdefault("fraud_chain_role", None)
+            tx.setdefault("fraud_reported_days_after", None)
+            tx.setdefault("credential_breach_days_before", None)
+
+        # ── Pro+: impossible travel injection ─────────────────────────────
+        if is_pro_plus and fraud_type in _IMPOSSIBLE_TRAVEL_TYPES:
+            session_state = bag.session_state
+            if session_state is not None and timestamp is not None:
+                lat = tx.get("geolocation_lat")
+                lon = tx.get("geolocation_lon")
+                if lat is not None and lon is not None and random.random() < 0.08:
+                    is_impossible, dist_km = session_state.check_impossible_travel(
+                        lat, lon, timestamp
+                    )
+                    if is_impossible:
+                        elapsed_h = (
+                            (session_state.get_last_transaction_minutes_ago(timestamp) or 60)
+                            / 60.0
+                        )
+                        min_travel_h = round(dist_km / 900.0, 2)
+                        group_id = str(_uuid.uuid4())[:18]
+                        tx["is_impossible_travel"] = True
+                        tx.setdefault("min_travel_time_required_hours", min_travel_h)
+                        tx.setdefault("actual_gap_hours", round(elapsed_h, 2))
+                        tx.setdefault("impossible_travel_group_id", group_id)
+                    else:
+                        tx.setdefault("is_impossible_travel", False)
+                        tx.setdefault("min_travel_time_required_hours", None)
+                        tx.setdefault("actual_gap_hours", None)
+                        tx.setdefault("impossible_travel_group_id", None)
+                else:
+                    tx.setdefault("is_impossible_travel", False)
+                    tx.setdefault("min_travel_time_required_hours", None)
+                    tx.setdefault("actual_gap_hours", None)
+                    tx.setdefault("impossible_travel_group_id", None)
+            else:
+                tx.setdefault("is_impossible_travel", False)
+                tx.setdefault("min_travel_time_required_hours", None)
+                tx.setdefault("actual_gap_hours", None)
+                tx.setdefault("impossible_travel_group_id", None)
+        else:
+            tx.setdefault("is_impossible_travel", False)
+            tx.setdefault("min_travel_time_required_hours", None)
+            tx.setdefault("actual_gap_hours", None)
+            tx.setdefault("impossible_travel_group_id", None)
+
+        # ── Pro+: bot / automation signature ──────────────────────────────
+        if is_pro_plus:
+            sig, score = _get_bot_signature(fraud_type, buf)
+            tx.setdefault("automation_signature", sig)
+            tx.setdefault("bot_confidence_score", score)
+        else:
+            tx.setdefault("automation_signature", None)
+            tx.setdefault("bot_confidence_score", None)

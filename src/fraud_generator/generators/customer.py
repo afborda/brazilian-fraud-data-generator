@@ -11,6 +11,7 @@ from ..models.customer import Customer, Address, CustomerIndex
 from ..validators.cpf import generate_valid_cpf, generate_cpf_from_state
 from ..config.banks import BANKS, BANK_CODES, BANK_WEIGHTS
 from ..config.geography import ESTADOS_LIST, ESTADOS_WEIGHTS, ESTADOS_BR
+from ..config.municipios import pick_municipio, cep_for_municipio
 from ..profiles.behavioral import (
     assign_random_profile,
     get_profile,
@@ -79,9 +80,10 @@ class CustomerGenerator:
             maximum_age=idade
         )
         
-        # State selection weighted by population
-        estado = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
-        
+        # State selection weighted by population; municipality within it
+        estado    = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
+        municipio = pick_municipio(estado, random)
+
         # Generate valid CPF for the state
         cpf = generate_cpf_from_state(estado, formatted=True)
         
@@ -124,11 +126,12 @@ class CustomerGenerator:
             'phone': self.fake.phone_number(),
             'birth_date': data_nascimento.isoformat(),
             'address': {
-                'street': self.fake.street_address(),
+                'street':       self.fake.street_address(),
                 'neighborhood': self.fake.bairro(),
-                'city': self.fake.city(),
-                'state': estado,
-                'postal_code': self.fake.postcode(),
+                'city':         municipio.name,
+                'state':        estado,
+                'postal_code':  cep_for_municipio(municipio, random),
+                'codigo_ibge':  municipio.ibge,
             },
             'monthly_income': renda,
             'profession': self.fake.job(),

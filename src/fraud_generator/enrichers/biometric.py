@@ -1,9 +1,10 @@
 """
 Biometric enricher — fills the 10 biometric fields.
 
-OS tier:  all fields are null (the default today).
-Paid tier (PRO / ENTERPRISE / TEAM):  fields are populated with realistic
-         distributions based on fraud_type and behavioral profile.
+OS tier:      all fields are null (the default for open-source build).
+Paid tiers (STARTER / PRO / TEAM / ENTERPRISE):  fields are populated
+             with realistic distributions based on fraud_type and
+             behavioral profile.
 
 The tier gate uses `bag.license` (a License dataclass).  If no license is
 present the enricher behaves as OS tier (null fields) — this is the correct
@@ -19,10 +20,7 @@ Field list (10):
 import random
 from typing import Any, Dict, Optional
 
-from .base import EnricherProtocol, GeneratorBag
-
-# Plans that unlock biometric enrichment
-_PAID_PLANS = frozenset({"pro", "team", "enterprise"})
+from .base import EnricherProtocol, GeneratorBag, is_plan
 
 _BIOMETRIC_NULL = {
     "typing_speed_avg_ms":      None,
@@ -38,24 +36,14 @@ _BIOMETRIC_NULL = {
 }
 
 
-def _is_paid_tier(license_obj: Any) -> bool:
-    """Return True when the license grants biometric data."""
-    if license_obj is None:
-        return False
-    plan_value = getattr(getattr(license_obj, "plan", None), "value", None) or str(
-        getattr(license_obj, "plan", "")
-    ).lower()
-    return plan_value in _PAID_PLANS
-
-
 class BiometricEnricher:
     """
-    Fills biometric fields.  Output is null for OS / FREE / STARTER tier.
-    Paid tiers (PRO+) receive realistic behavioural biometrics.
+    Fills biometric fields.  Output is null for OS tier only.
+    All paid tiers (STARTER+) receive realistic behavioural biometrics.
     """
 
     def enrich(self, tx: Dict[str, Any], bag: GeneratorBag) -> None:
-        if not _is_paid_tier(bag.license):
+        if not is_plan(bag.license, "starter", "pro", "team", "enterprise"):
             tx.update(_BIOMETRIC_NULL)
             return
 
