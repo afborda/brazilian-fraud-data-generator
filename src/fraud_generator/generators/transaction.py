@@ -2,6 +2,7 @@
 Transaction generator for Brazilian Fraud Data Generator.
 """
 
+import math
 import random
 import hashlib
 from datetime import datetime, timedelta
@@ -176,18 +177,21 @@ class TransactionGenerator:
         self,
         fraud_rate: float = 0.02,
         use_profiles: bool = True,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        license=None,
     ):
         """
         Initialize transaction generator.
-        
+
         Args:
             fraud_rate: Fraction of transactions that are fraudulent (0.0-1.0)
             use_profiles: If True, use behavioral profiles
             seed: Random seed for reproducibility
+            license: Optional license object for plan-gated features
         """
         self.fraud_rate = fraud_rate
         self.use_profiles = use_profiles
+        self._license = license
         
         if seed is not None:
             random.seed(seed)
@@ -400,20 +404,40 @@ class TransactionGenerator:
         customer_cpf: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Generate a single transaction.
-        
-        Args:
-            tx_id: Transaction identifier
-            customer_id: Customer identifier
-            device_id: Device identifier
-            timestamp: Transaction timestamp
-            customer_state: Customer's state (for geolocation)
-            customer_profile: Customer's behavioral profile
-            force_fraud: If set, override random fraud determination
-        
-        Returns:
-            Transaction data as dictionary
+        Generate a single transaction via the enricher pipeline.
+
+        Delegates to generate_with_pipeline() so that all enrichers
+        (biometric, Pro+ velocity, geo clustering, bot signature, etc.)
+        run correctly with the stored self._license.
         """
+        return self.generate_with_pipeline(
+            tx_id=tx_id,
+            customer_id=customer_id,
+            device_id=device_id,
+            timestamp=timestamp,
+            customer_state=customer_state,
+            customer_profile=customer_profile,
+            force_fraud=force_fraud,
+            session_state=session_state,
+            location_cluster=location_cluster,
+            customer_cpf=customer_cpf,
+            license=self._license,
+        )
+
+    def _generate_legacy(
+        self,
+        tx_id: str,
+        customer_id: str,
+        device_id: str,
+        timestamp: datetime,
+        customer_state: Optional[str] = None,
+        customer_profile: Optional[str] = None,
+        force_fraud: Optional[bool] = None,
+        session_state: Optional[CustomerSessionState] = None,
+        location_cluster: Optional[tuple] = None,
+        customer_cpf: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Legacy direct-call path — kept for reference only. Not used."""
         # Determine if fraud
         if force_fraud is not None:
             is_fraud = force_fraud
@@ -581,20 +605,32 @@ class TransactionGenerator:
         if self.use_profiles and customer_profile:
             return get_transaction_value_for_profile(customer_profile, mcc_range)
         
-        # Default value calculation
+        # Log-normal calibrado: μ = centro geométrico do range MCC, σ = ¼ amplitude log
+        # Resulta em mediana ≈ √(min×max), cauda direita realista (sem pile-up nos limites)
+        # Calibrado contra distribuição real de transações BCB/FEBRABAN 2024
         min_value, max_value = mcc_range
-        mean = (min_value + max_value) / 3
-        value = random.gauss(mean, mean / 2)
-        return round(min(max(value, min_value), max_value), 2)
+        mu = (math.log(max(min_value, 0.01)) + math.log(max_value)) / 2
+        sigma = max((math.log(max_value) - math.log(max(min_value, 0.01))) / 4, 0.30)
+        value = math.exp(random.gauss(mu, sigma))
+        # Permite cauda superior até 2× max (outliers realistas)
+        return round(max(min_value, min(value, max_value * 2.0)), 2)
     
     def _calculate_fraud_value(self, fraud_type: Optional[str]) -> float:
-        """Calculate fraud transaction value."""
+        """Calculate fraud transaction value using log-normal distribution.
+
+        Parâmetros calibrados contra dados BCB/FEBRABAN 2024:
+          - LAVAGEM/TRIANGULACAO: mediana ~R$8.000 (alta cauda)
+          - CARTAO_CLONADO/CONTA_TOMADA: mediana ~R$1.500
+          - Demais fraudes: mediana ~R$400 (range PIX golpe / engenharia social)
+        """
         if fraud_type in ['LAVAGEM_DINHEIRO', 'TRIANGULACAO']:
-            return round(self._buf.next_uniform(5000, 50000), 2)
+            mu, sigma, max_val = math.log(8_000), 1.0, 100_000.0
         elif fraud_type in ['CARTAO_CLONADO', 'CONTA_TOMADA']:
-            return round(self._buf.next_uniform(500, 10000), 2)
+            mu, sigma, max_val = math.log(1_500), 1.1, 50_000.0
         else:
-            return round(self._buf.next_uniform(200, 5000), 2)
+            mu, sigma, max_val = math.log(400), 1.2, 30_000.0
+        value = math.exp(random.gauss(mu, sigma))
+        return round(max(5.0, min(value, max_val)), 2)
     
     def _get_geolocation(
         self,

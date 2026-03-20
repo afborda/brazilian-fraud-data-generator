@@ -11,6 +11,7 @@ Each profile influences:
 - Channel preferences
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import random
@@ -518,26 +519,28 @@ def get_transaction_value_for_profile(
     profile = PROFILES.get(profile_name)
     
     if not profile:
-        # Use MCC range directly
+        # Log-normal calibrado pelo range MCC (sem pile-up nos limites)
         valor_min, valor_max = mcc_value_range
-        mean = (valor_min + valor_max) / 3
-        return round(min(max(random.gauss(mean, mean/2), valor_min), valor_max), 2)
-    
+        mu = (math.log(max(valor_min, 0.01)) + math.log(valor_max)) / 2
+        sigma = max((math.log(valor_max) - math.log(max(valor_min, 0.01))) / 4, 0.30)
+        value = math.exp(random.gauss(mu, sigma))
+        return round(max(valor_min, min(value, valor_max * 2.0)), 2)
+
     # Blend profile and MCC ranges
     profile_min, profile_max = profile.typical_value_range
     mcc_min, mcc_max = mcc_value_range
-    
-    # Use overlapping range or profile range
+
     final_min = max(profile_min, mcc_min * 0.5)
     final_max = min(profile_max, mcc_max * 1.5)
-    
+
     if final_min >= final_max:
         final_min, final_max = mcc_value_range
-    
-    # Log-normal distribution for more realistic values
-    mean = (final_min + final_max) / 3
-    value = random.gauss(mean, mean / 2)
-    return round(min(max(value, final_min), final_max), 2)
+
+    # Log-normal calibrado pelo range combinado perfil × MCC
+    mu = (math.log(max(final_min, 0.01)) + math.log(final_max)) / 2
+    sigma = max((math.log(final_max) - math.log(max(final_min, 0.01))) / 4, 0.30)
+    value = math.exp(random.gauss(mu, sigma))
+    return round(max(final_min, min(value, final_max * 2.0)), 2)
 
 
 def get_monthly_transactions_for_profile(profile_name: str) -> int:

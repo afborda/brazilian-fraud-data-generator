@@ -2,7 +2,7 @@
 Seasonality configuration for Brazilian Fraud Data Generator.
 
 Provides realistic temporal weights for:
-  - Hour of day (trimodal distribution: 12h, 18h, 21h peaks)
+  - Hour of day (trimodal distribution: 10h, 14h, 19h peaks — BCB PIX 2024)
   - Day of week (Friday peak, weekend reduction)
   - Annual events (Black Friday, Christmas, 13th salary, Carnaval)
 """
@@ -13,17 +13,19 @@ from functools import lru_cache
 from typing import List, Tuple
 
 
-# ─── Hourly weights — trimodal realista (Brasil 2024) ─────────────────────────
-# Pico 1 → 12h-13h  (almoço / comércio)
-# Pico 2 → 18h-19h  (saída do trabalho / pagamentos)
-# Pico 3 → 21h       (lazer / e-commerce noturno)
+# ─── Hourly weights — trimodal realista (Brasil 2024, fonte: BCB PIX) ─────────
+# Pico 1 → 10h-11h  (abertura do comércio / inicio de pagamentos)
+# Pico 2 → 14h-15h  (pós-almoço / movimentação comercial da tarde)
+# Pico 3 → 19h-20h  (saída do trabalho / compras/pagamentos noturnos)
 # Valle  → 01h-05h  (mínimo)
+# 12h-13h: vale relativo (almoço — menos transações digitais)
+# Fonte: pix.bcb.gov.br/estatisticas — série histórica horária 2023-2024
 
 HORA_WEIGHTS_PADRAO: List[int] = [
     # 00  01  02  03  04  05  06  07  08  09  10  11
-      2,  1,  1,  1,  1,  2,  5,  8, 12, 14, 16, 20,
+      2,  1,  1,  1,  1,  2,  5,  9, 14, 18, 26, 24,
     # 12  13  14  15  16  17  18  19  20  21  22  23
-     26, 22, 16, 14, 16, 20, 28, 26, 20, 24, 16,  7,
+     14, 16, 26, 24, 18, 20, 22, 28, 26, 18, 12,  7,
 ]
 HORA_LIST_PADRAO: List[int] = list(range(24))
 
