@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.9.0-0F766E" alt="Version 4.9.0" /></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.9.1-0F766E" alt="Version 4.9.1" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-166534" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-1D4ED8" alt="Python 3.10 or newer" />
   <img src="https://img.shields.io/badge/domains-banking%20%7C%20ride--share-0F172A" alt="Banking and ride-share domains" />
@@ -37,7 +37,7 @@
   <tr>
     <td width="33%"><strong>Brazil-first realism</strong><br />Valid CPF, real banks, PIX BACEN fields, behavioral profiles, seasonality, and Brazilian city or state context.</td>
     <td width="33%"><strong>Ready for pipelines</strong><br />Batch files, streaming events, schema mode, database export, Kafka or webhook delivery, and reproducible seeds.</td>
-    <td width="33%"><strong>Fraud-focused labels</strong><br />10 banking fraud patterns, 7 ride-share fraud types, 17 risk signals, and 4 correlation rules in the v4.2 signal pipeline.</td>
+    <td width="33%"><strong>Fraud-focused labels</strong><br />17 banking fraud patterns, 11 ride-share fraud types, 17 risk signals, and 4 correlation rules in the fraud signal pipeline.</td>
   </tr>
 </table>
 
@@ -52,8 +52,8 @@ A hosted cloud API is available at [synthfin.com.br](https://synthfin.com.br) fo
 | Category | Included |
 |---|---|
 | Generators | Banking transactions, ride-share rides, or both (`--type all`) |
-| Banking fraud | 11 patterns: `ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO` |
-| Ride-share fraud | 7 types: `GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD` |
+| Banking fraud | 17 patterns: `ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO`, `MAO_FANTASMA`, `WHATSAPP_CLONE`, `SIM_SWAP`, `CREDENTIAL_STUFFING`, `SYNTHETIC_IDENTITY`, `SEQUESTRO_RELAMPAGO` |
+| Ride-share fraud | 11 types: `GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`, `REFUND_ABUSE`, `PAYMENT_CHARGEBACK`, `DESTINATION_DISPARITY`, `ACCOUNT_TAKEOVER_RIDE` |
 | Fraud scoring | `fraud_risk_score` 0–100 from 17 signals and 4 correlation rules |
 | Behavioral profiles | 7 transaction profiles + 7 ride profiles; sticky per customer |
 | Reproducibility | Deterministic seeds, custom date ranges, fixed customer pool |
@@ -513,7 +513,7 @@ Every file is JSONL — one JSON object per line. The examples below are real re
 |---|---|
 | Banking | PIX, TED, DOC, boleto, withdrawals, POS and ecommerce flows, merchant context, device context, BACEN PIX fields, and valid CPF-linked customers |
 | Ride-share | Uber, 99, Cabify, and inDrive style trips with drivers, passengers, surge pricing, weather impact, and geospatial distance logic |
-| Fraud labels | 11 banking fraud patterns and 7 ride-share fraud types with configurable fraud rate |
+| Fraud labels | 17 banking fraud patterns and 11 ride-share fraud types with configurable fraud rate |
 | Fraud scoring | 17 fraud signals plus 4 rule correlations, producing `fraud_risk_score` from 0 to 100 |
 | Temporal realism | Trimodal hourly peaks, weekday weighting, Black Friday, Christmas, 13th salary, and Carnaval seasonality |
 | Validation | `validate_realism.py`, bundled schemas, deterministic seeds, and schema checks |
@@ -521,11 +521,11 @@ Every file is JSONL — one JSON object per line. The examples below are real re
 
 ### Banking fraud patterns
 
-`ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`
+`ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO`, `MAO_FANTASMA`, `WHATSAPP_CLONE`, `SIM_SWAP`, `CREDENTIAL_STUFFING`, `SYNTHETIC_IDENTITY`, `SEQUESTRO_RELAMPAGO`
 
 ### Ride-share fraud types
 
-`GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`
+`GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`, `REFUND_ABUSE`, `PAYMENT_CHARGEBACK`, `DESTINATION_DISPARITY`, `ACCOUNT_TAKEOVER_RIDE`
 
 ## Output And Integrations
 

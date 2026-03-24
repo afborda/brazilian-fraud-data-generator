@@ -60,6 +60,13 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 - **test_workflows.py**: Assertions corrigidas — `format_name`: `'json'`→`'JSON Lines'`, `'csv'`→`'CSV'`
 - **test_phase_2_optimizations.py (2 testes)**: `DatabaseExporter` assertions corrigidas — `format_name`: `'database'`→`'Database'`, `extension`: `'.db'`→`''`
 
+### README Atualizado
+
+- **Badge de versão**: 4.9.0 → 4.9.1
+- **Tipos de fraude bancária**: 11 → 17 (adicionados `MAO_FANTASMA`, `WHATSAPP_CLONE`, `SIM_SWAP`, `CREDENTIAL_STUFFING`, `SYNTHETIC_IDENTITY`, `SEQUESTRO_RELAMPAGO`)
+- **Tipos de fraude ride-share**: 7 → 11 (adicionados `REFUND_ABUSE`, `PAYMENT_CHARGEBACK`, `DESTINATION_DISPARITY`, `ACCOUNT_TAKEOVER_RIDE`)
+- **Contagens e listas atualizadas** em todas as seções do README
+
 ## v4.9 — Realismo (2026-03-19)
 
 ### Quality Scorecard — De Grade D (0/8) para Grade B+
