@@ -40,8 +40,8 @@ def main() -> None:
     try:
         if not args.schema:
             check_format_allowed(license, args.format)
-        if hasattr(args, 'size') and args.size:
-            check_size_allowed(license, parse_size(args.size))
+            if hasattr(args, 'size') and args.size:
+                check_size_allowed(license, parse_size(args.size))
     except Exception as e:
         print(f"\n  ✗ {e}", file=sys.stderr)
         sys.exit(1)

@@ -49,6 +49,17 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 - **Adicionados ao .gitignore**: `docs/CAPACITY_PLANNING.md`, `docs/analysis/2026-03-19/`
 - **INDEX.md atualizado**: referência a CAPACITY_PLANNING removida
 
+### Bug Fix — Schema mode bloqueado por size check
+
+- **Problema**: `--schema` falhava com "Output size exceeds free-tier limit (50 MB)" porque `check_size_allowed` avaliava `args.size` default (1GB) mesmo em schema mode
+- **Correção**: `check_size_allowed` movido para dentro do bloco `if not args.schema:` em `generate.py`
+
+### Correção de Testes Desatualizados (8 falhas → 0)
+
+- **test_workflows.py (6 testes)**: Atualizado para nova API do `CustomerGenerator` (`generate_batch()` ao invés de `num_customers` param) e `TransactionGenerator` (chamada per-record via `generate()`)
+- **test_workflows.py**: Assertions corrigidas — `format_name`: `'json'`→`'JSON Lines'`, `'csv'`→`'CSV'`
+- **test_phase_2_optimizations.py (2 testes)**: `DatabaseExporter` assertions corrigidas — `format_name`: `'database'`→`'Database'`, `extension`: `'.db'`→`''`
+
 ## v4.9 — Realismo (2026-03-19)
 
 ### Quality Scorecard — De Grade D (0/8) para Grade B+

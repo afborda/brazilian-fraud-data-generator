@@ -309,7 +309,7 @@ class TestDatabaseExporter(unittest.TestCase):
 
         try:
             exporter = DatabaseExporter(db_url=self.db_url, table_name='transactions')
-            self.assertEqual(exporter.format_name, 'database')
+            self.assertEqual(exporter.format_name, 'Database')
         except ImportError:
             self.skipTest("SQLAlchemy/pandas not available in environment")
 
@@ -322,7 +322,7 @@ class TestDatabaseExporter(unittest.TestCase):
 
         try:
             exporter = DatabaseExporter(db_url=self.db_url, table_name='transactions')
-            self.assertEqual(exporter.extension, '.db')
+            self.assertEqual(exporter.extension, '')
         except ImportError:
             self.skipTest("SQLAlchemy/pandas not available in environment")
 
