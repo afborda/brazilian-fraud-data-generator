@@ -69,57 +69,19 @@ Os planos comerciais acrescentam suporte, garantias de taxa e uma API hospedada 
 
 ### Comparativo de planos
 
-| Funcionalidade | OS (self-hosted) | Trial gratuito 30d | Starter R$49/mês | Pro R$149/mês | Team R$399/mês | Enterprise |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Geradores** | | | | | | |
-| Transações bancárias | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Corridas de ride-share | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `--type all` (bancário + ride-share) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 11 padrões de fraude bancária | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 7 tipos de fraude ride-share | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Taxa de fraude configurável | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 7 perfis comportamentais | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Seeds determinísticas | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Intervalos de datas customizados | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Formatos de saída** | | | | | | |
-| JSONL | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| JSON array | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| CSV | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| TSV | ✓ | ✓ | – | – | ✓ | ✓ |
-| Parquet | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Arrow IPC | ✓ | ✓ | – | ✓ | ✓ | ✓ |
-| Database (SQLAlchemy) | ✓ | ✓ | – | – | ✓ | ✓ |
-| Compressão inline JSONL | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Codecs de compressão Parquet | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Streaming** | | | | | | |
-| stdout | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Webhook (HTTP POST / PUT / PATCH) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Apache Kafka | ✓ | – | – | ✓ | ✓ | ✓ |
-| **Storage e infraestrutura** | | | | | | |
-| Upload MinIO / S3 | ✓ | – | – | ✓ | ✓ | ✓ |
-| Cache de índices Redis | ✓ | ✓ | – | ✓ | ✓ | ✓ |
-| Workers paralelos | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Imagem Docker | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Schema e qualidade** | | | | | | |
-| Schema mode (`--schema`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Correção de schema com IA | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `validate_realism.py` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `check_schema.py` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Suite pytest de integração | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **API** | | | | | | |
-| API self-hosted v1 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| API hosted v2 | – | – | – | Planejada | Planejada | Planejada |
-| **Limites** | | | | | | |
-| Eventos por mês | Ilimitado | 1M | 5M | 100M | Ilimitado | Ilimitado |
-| Tamanho máximo por job | Hardware | 2 GB | 5 GB | 20 GB | Ilimitado | Ilimitado |
-| Jobs simultâneos | Hardware | 2 | 3 | 10 | Ilimitado | Ilimitado |
-| Eventos máx por requisição API | Hardware | 50K | 100K | 1M | Ilimitado | Ilimitado |
-| **Suporte** | | | | | | |
-| Issues no GitHub | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Suporte por e-mail | – | – | ✓ | ✓ | ✓ | ✓ |
-| Suporte por WhatsApp | – | – | – | ✓ | ✓ | ✓ |
-| Fila prioritária | – | – | – | – | ✓ | ✓ |
-| Dedicado / SLA | – | – | – | – | – | ✓ |
+Veja os planos disponíveis em [synthfin.com.br](https://synthfin.com.br).
+
+| Funcionalidade | Open Source (self-hosted) | Planos comerciais |
+|---|:---:|:---:|
+| Todos os geradores e formatos | ✓ | ✓ |
+| 11 padrões de fraude bancária | ✓ | ✓ |
+| 7 tipos de fraude ride-share | ✓ | ✓ |
+| Streaming (stdout, Kafka, webhook) | ✓ | ✓ |
+| Workers paralelos, Docker | ✓ | ✓ |
+| Escala ilimitada | ✓ | ✓ |
+| Suporte prioritário | – | ✓ |
+| API hospedada | – | ✓ |
+| SLA dedicado | – | Enterprise |
 
 ## Comece rápido
 

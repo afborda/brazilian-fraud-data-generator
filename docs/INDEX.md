@@ -62,7 +62,6 @@ Fraud taxonomy, validation analysis, and implementation roadmap.
 | [GUIA_TECNICO_COMPONENTES.md](GUIA_TECNICO_COMPONENTES.md) | Component usage guide with code examples |
 | [ANALISE_COMPLETA_PROJETO.md](ANALISE_COMPLETA_PROJETO.md) | Comprehensive project analysis |
 | [MEMORY_OPTIMIZATION.md](MEMORY_OPTIMIZATION.md) | Memory optimization strategies for 50GB+ datasets |
-| [CAPACITY_PLANNING.md](CAPACITY_PLANNING.md) | VPS sizing and throughput estimation |
 | [MULTIPROCESSING_BENCHMARK.md](MULTIPROCESSING_BENCHMARK.md) | Streaming multiprocessing GIL bypass results |
 | [DOCKER_HUB_PUBLISHING.md](DOCKER_HUB_PUBLISHING.md) | Docker Hub publishing guide with CI/CD workflow |
 | [REPOSITORY_ORGANIZATION.md](REPOSITORY_ORGANIZATION.md) | Repository structure and git workflow guide |

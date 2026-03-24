@@ -41,6 +41,14 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 - **Landing page, schemas, benchmarks, docs, testes**: todos atualizados
 - **CHANGELOG histórico preservado**: entradas antigas mantêm o nome original como registro
 
+### Remoção de Docs Confidenciais
+
+- **Removidos do tracking**: `docs/analysis/2026-03-19/` (estratégia SaaS, pricing, análise competitiva)
+- **Removido do tracking**: `docs/CAPACITY_PLANNING.md` (pricing VPS, specs enterprise)
+- **Editado**: `docs/README.pt-BR.md` — tabela de pricing detalhada substituída por link para synthfin.com.br
+- **Adicionados ao .gitignore**: `docs/CAPACITY_PLANNING.md`, `docs/analysis/2026-03-19/`
+- **INDEX.md atualizado**: referência a CAPACITY_PLANNING removida
+
 ## v4.9 — Realismo (2026-03-19)
 
 ### Quality Scorecard — De Grade D (0/8) para Grade B+
