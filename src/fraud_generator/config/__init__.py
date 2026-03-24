@@ -1,5 +1,5 @@
 """
-Configuration package for Brazilian Fraud Data Generator.
+Configuration package for synthfin-data.
 Contains all static configuration data.
 """
 

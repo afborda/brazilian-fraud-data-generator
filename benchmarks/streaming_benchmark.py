@@ -456,7 +456,7 @@ def print_traffic_level_commentary(tx_results, ride_results):
 
 def main():
     print(SEPARATOR)
-    print("  STREAMING PERFORMANCE BENCHMARK — Brazilian Fraud Data Generator v4.1.0")
+    print("  STREAMING PERFORMANCE BENCHMARK — synthfin-data v4.1.0")
     print(f"  Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  |  Seed: {SEED}  |  Fraud rate: {FRAUD_RATE*100:.0f}%")
     print(SEPARATOR)
 

@@ -1,5 +1,5 @@
 """
-Models package for Brazilian Fraud Data Generator.
+Models package for synthfin-data.
 Contains data classes for Customer, Device, Transaction, and Ride entities.
 """
 

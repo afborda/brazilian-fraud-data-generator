@@ -1,5 +1,5 @@
 """
-MinIO Exporter for Brazilian Fraud Data Generator.
+MinIO Exporter for synthfin-data.
 
 Uploads data directly to MinIO/S3-compatible storage.
 Supports JSONL, CSV, and Parquet formats.

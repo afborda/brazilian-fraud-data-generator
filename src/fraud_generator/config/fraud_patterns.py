@@ -1,5 +1,5 @@
 """
-Fraud Pattern Definitions for Brazilian Fraud Data Generator.
+Fraud Pattern Definitions for synthfin-data.
 
 Each fraud type has specific characteristics that make it detectável by ML models.
 Based on real-world fraud patterns observed in Brazilian financial institutions.

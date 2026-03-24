@@ -68,7 +68,7 @@ class MinIORunner(BaseRunner):
         )
 
         print("=" * 60)
-        print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR v4.1.0 — MinIO")
+        print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR v4.9.0 — MinIO")
         print("=" * 60)
         print(f"☁️  Output: {args.output}")
         if args.minio_endpoint:

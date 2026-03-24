@@ -1,4 +1,4 @@
-# Brazilian Fraud Data Generator - Streaming Dependencies
+# synthfin-data - Streaming Dependencies
 # ========================================================
 # Install with: pip install -r requirements-streaming.txt
 

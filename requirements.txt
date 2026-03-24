@@ -1,4 +1,4 @@
-# Brazilian Fraud Data Generator v4.0
+# synthfin-data v4.9
 Faker>=22.0.0
 pandas>=2.0.0
 pyarrow>=14.0.0

@@ -1,6 +1,6 @@
 # Test Suite
 
-Comprehensive test coverage for Brazilian Fraud Data Generator.
+Comprehensive test coverage for synthfin-data.
 
 ## Structure
 

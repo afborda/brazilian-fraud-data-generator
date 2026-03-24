@@ -11,7 +11,7 @@ from typing import List
 def build_parser(available_formats: List[str]) -> argparse.ArgumentParser:
     """Return a fully configured ArgumentParser for the generator CLI."""
     parser = argparse.ArgumentParser(
-        description="🇧🇷 Brazilian Fraud Data Generator v4.1.0",
+        description="🇧🇷 synthfin-data v4.9.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

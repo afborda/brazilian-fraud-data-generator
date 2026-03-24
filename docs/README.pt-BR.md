@@ -182,12 +182,12 @@ python stream.py --target stdout --rate 20 --max-events 10000
 
 ```bash
 docker run --rm -v $(pwd)/output:/output \
-  afborda/brazilian-fraud-data-generator:latest \
+  afborda/synthfin-data:latest \
   generate.py --size 1GB --output /output
 
 # Streaming via Docker
 docker run --rm \
-  afborda/brazilian-fraud-data-generator:latest \
+  afborda/synthfin-data:latest \
   stream.py --target stdout --rate 10
 ```
 

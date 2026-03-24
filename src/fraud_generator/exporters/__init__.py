@@ -1,5 +1,5 @@
 """
-Exporters package for Brazilian Fraud Data Generator.
+Exporters package for synthfin-data.
 
 Provides multiple export formats using the Strategy pattern:
 - JSON Lines (.jsonl) - Default, streaming-friendly

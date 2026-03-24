@@ -1,5 +1,5 @@
 """
-Behavioral profiles for Rideshare in Brazilian Fraud Data Generator.
+Behavioral profiles for Rideshare in synthfin-data.
 
 Profiles define realistic ride patterns for different passenger archetypes.
 Each profile influences:

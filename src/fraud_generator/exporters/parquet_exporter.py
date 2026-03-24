@@ -1,5 +1,5 @@
 """
-Parquet exporter for Brazilian Fraud Data Generator.
+Parquet exporter for synthfin-data.
 
 Requires pyarrow: pip install pyarrow
 """

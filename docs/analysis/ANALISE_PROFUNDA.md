@@ -1,4 +1,4 @@
-# Análise Profunda - Brazilian Fraud Data Generator v4-beta
+# Análise Profunda - synthfin-data v4-beta
 
 ## 📋 Sumário Executivo
 

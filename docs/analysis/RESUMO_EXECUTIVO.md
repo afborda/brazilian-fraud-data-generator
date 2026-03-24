@@ -1,4 +1,4 @@
-# Resumo Executivo - Brazilian Fraud Data Generator
+# Resumo Executivo - synthfin-data
 
 ## 🎯 O Que o Projeto Faz
 

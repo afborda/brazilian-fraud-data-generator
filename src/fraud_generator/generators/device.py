@@ -1,5 +1,5 @@
 """
-Device generator for Brazilian Fraud Data Generator.
+Device generator for synthfin-data.
 """
 
 import random

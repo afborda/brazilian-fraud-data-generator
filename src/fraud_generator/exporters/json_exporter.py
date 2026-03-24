@@ -1,5 +1,5 @@
 """
-JSON Lines exporter for Brazilian Fraud Data Generator.
+JSON Lines exporter for synthfin-data.
 """
 
 import json

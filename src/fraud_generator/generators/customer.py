@@ -1,5 +1,5 @@
 """
-Customer generator for Brazilian Fraud Data Generator.
+Customer generator for synthfin-data.
 """
 
 import random

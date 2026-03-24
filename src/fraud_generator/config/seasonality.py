@@ -1,5 +1,5 @@
 """
-Seasonality configuration for Brazilian Fraud Data Generator.
+Seasonality configuration for synthfin-data.
 
 Provides realistic temporal weights for:
   - Hour of day (trimodal distribution: 10h, 14h, 19h peaks — BCB PIX 2024)

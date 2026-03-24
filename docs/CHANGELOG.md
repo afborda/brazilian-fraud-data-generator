@@ -1,4 +1,4 @@
-# 📜 Changelog - Brazilian Fraud Data Generator
+# 📜 Changelog - synthfin-data
 
 ## Histórico de Evolução do Projeto
 
@@ -25,8 +25,21 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.8 | **Produção** | TPRD5 CI/CD Pipelines 1-3 + brazildata-infra VPS setup | 2026-03-14 |
 | v4.8.1 | **Higiene** | Sprint 1 bugs críticos: Redis auth, retenção 48h, heartbeat URL synthfin | 2026-03-19 |
 | v4.9 | **Realismo** | Quality scorecard: fraud_score overlap, new_beneficiary, device fields, amount calibration | 2026-03-19 |
+| v4.9.1 | **Identidade** | Rename project to synthfin-data; update all references, Docker image, versions | 2026-03-20 |
 
 ---
+
+## v4.9.1 — Identidade (2026-03-20)
+
+### Renomeação do Projeto
+
+- **Nome**: "Brazilian Fraud Data Generator" → **synthfin-data** em todo o repositório (~60 arquivos)
+- **Docker Hub**: imagem `afborda/brazilian-fraud-data-generator` → `afborda/synthfin-data`
+- **Versões**: referências internas atualizadas para v4.9.0 (CLI, banners, __init__)
+- **GitHub URLs**: atualizadas para `github.com/afborda/synthfin-core`
+- **pyproject.toml**: package name → `synthfin-data`
+- **Landing page, schemas, benchmarks, docs, testes**: todos atualizados
+- **CHANGELOG histórico preservado**: entradas antigas mantêm o nome original como registro
 
 ## v4.9 — Realismo (2026-03-19)
 

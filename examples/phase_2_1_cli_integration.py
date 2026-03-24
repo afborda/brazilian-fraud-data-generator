@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FASE 2.1 CLI Integration Example - Native Compression in Brazilian Fraud Data Generator
+FASE 2.1 CLI Integration Example - Native Compression in synthfin-data
 =======================================================================================
 
 Demonstrates how to use the new Phase 2.1 native compression feature from the CLI.
@@ -229,7 +229,7 @@ def main():
     """Run all examples."""
     print("\n" + "=" * 80)
     print("🇧🇷 PHASE 2.1 - NATIVE COMPRESSION CLI INTEGRATION")
-    print("Brazilian Fraud Data Generator v3.2.0")
+    print("synthfin-data v3.2.0")
     print("=" * 80)
     
     # Show compression comparison

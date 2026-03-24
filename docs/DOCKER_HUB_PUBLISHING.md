@@ -1,6 +1,6 @@
 # 🐳 Guia de Publicação no Docker Hub
 
-Este documento contém instruções completas para publicar o **Brazilian Fraud Data Generator** no Docker Hub com versionamento semântico.
+Este documento contém instruções completas para publicar o **synthfin-data** no Docker Hub com versionamento semântico.
 
 ## 📋 Pré-requisitos
 
@@ -52,12 +52,12 @@ Usamos **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH`
 Quando você cria a tag `v4.0.0`, o workflow gera:
 
 ```
-afborda/brazilian-fraud-data-generator:latest
-afborda/brazilian-fraud-data-generator:v4.0.0
-afborda/brazilian-fraud-data-generator:4.0.0
-afborda/brazilian-fraud-data-generator:4.0
-afborda/brazilian-fraud-data-generator:4
-afborda/brazilian-fraud-data-generator:sha-abc1234
+afborda/synthfin-data:latest
+afborda/synthfin-data:v4.0.0
+afborda/synthfin-data:4.0.0
+afborda/synthfin-data:4.0
+afborda/synthfin-data:4
+afborda/synthfin-data:sha-abc1234
 ```
 
 ---
@@ -102,14 +102,14 @@ Se precisar fazer build manualmente:
 
 ```bash
 # Build apenas para sua arquitetura
-docker build -t afborda/brazilian-fraud-data-generator:v4.0.0 \
+docker build -t afborda/synthfin-data:v4.0.0 \
   --build-arg VERSION=4.0.0 \
   --build-arg BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
   --build-arg VCS_REF=$(git rev-parse --short HEAD) \
   .
 
 # Push
-docker push afborda/brazilian-fraud-data-generator:v4.0.0
+docker push afborda/synthfin-data:v4.0.0
 ```
 
 ### Build Multi-Platform
@@ -121,8 +121,8 @@ docker buildx create --name multiplatform --use
 # Build e push para múltiplas arquiteturas
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --tag afborda/brazilian-fraud-data-generator:v4.0.0 \
-  --tag afborda/brazilian-fraud-data-generator:latest \
+  --tag afborda/synthfin-data:v4.0.0 \
+  --tag afborda/synthfin-data:latest \
   --build-arg VERSION=4.0.0 \
   --build-arg BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
   --build-arg VCS_REF=$(git rev-parse --short HEAD) \
@@ -138,13 +138,13 @@ Após a publicação, os usuários podem usar:
 
 ```bash
 # Sempre a última versão estável
-docker pull afborda/brazilian-fraud-data-generator:latest
+docker pull afborda/synthfin-data:latest
 
 # Versão específica
-docker pull afborda/brazilian-fraud-data-generator:v4.0.0
+docker pull afborda/synthfin-data:v4.0.0
 
 # Major version (auto-update minor/patch)
-docker pull afborda/brazilian-fraud-data-generator:4
+docker pull afborda/synthfin-data:4
 ```
 
 ---
@@ -166,7 +166,7 @@ Antes de criar uma nova release:
 
 ### No Docker Hub
 
-1. Acesse https://hub.docker.com/r/afborda/brazilian-fraud-data-generator
+1. Acesse https://hub.docker.com/r/afborda/synthfin-data
 2. Verifique a aba **Tags** para ver todas as versões
 3. Confira se o README foi sincronizado
 
@@ -174,17 +174,17 @@ Antes de criar uma nova release:
 
 ```bash
 # Pull da imagem
-docker pull afborda/brazilian-fraud-data-generator:latest
+docker pull afborda/synthfin-data:latest
 
 # Verificar labels
-docker inspect afborda/brazilian-fraud-data-generator:latest --format '{{json .Config.Labels}}' | jq
+docker inspect afborda/synthfin-data:latest --format '{{json .Config.Labels}}' | jq
 
 # Testar execução
-docker run --rm afborda/brazilian-fraud-data-generator:latest generate.py --help
+docker run --rm afborda/synthfin-data:latest generate.py --help
 
 # Gerar dados de teste
 docker run --rm -v $(pwd)/output:/output \
-  afborda/brazilian-fraud-data-generator:latest \
+  afborda/synthfin-data:latest \
   generate.py --num-transactions 1000 --num-customers 100
 ```
 

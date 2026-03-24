@@ -1,4 +1,4 @@
-# 📚 Índice de Análise - Brazilian Fraud Data Generator
+# 📚 Índice de Análise - synthfin-data
 
 ## 📖 Documentação Gerada
 

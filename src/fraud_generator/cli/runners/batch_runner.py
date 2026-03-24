@@ -373,7 +373,7 @@ class BatchRunner(BaseRunner):
     def _print_header(args, target_bytes, num_customers, total_tx, total_rides,
                        num_drivers, num_files, workers, start_date, end_date, use_profiles):
         print("=" * 60)
-        print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR v4.1.0")
+        print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR v4.9.0")
         print("=" * 60)
         print(f"📦 Target size: {format_size(target_bytes)}")
         if args.format in ("db", "database"):

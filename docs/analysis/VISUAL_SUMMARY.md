@@ -1,4 +1,4 @@
-# Visual Summary - Brazilian Fraud Data Generator
+# Visual Summary - synthfin-data
 
 ## 🎯 VISÃO GERAL DO PROJETO
 

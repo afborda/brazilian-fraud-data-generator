@@ -1,5 +1,5 @@
 """
-Test suite for Brazilian Fraud Data Generator.
+Test suite for synthfin-data.
 
 Tests organized by category:
 - unit/: Unit tests for individual modules

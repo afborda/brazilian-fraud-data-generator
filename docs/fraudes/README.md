@@ -1,6 +1,6 @@
 # 📚 Documentação de Fraudes - Índice Completo
 
-Bem-vindo à documentação profunda de fraudes financeiras do projeto **Brazilian Fraud Data Generator**.
+Bem-vindo à documentação profunda de fraudes financeiras do projeto **synthfin-data**.
 
 Esta pasta contém análise completa de:
 - ✅ Fraudes descobertas na pesquisa (64+)
@@ -301,7 +301,7 @@ python3 compare_models.py --synthetic ./data_syn --real ./data_real
 ## 📄 Versão & Licença
 
 - **Versão**: 1.0 (Março 2026)
-- **Escopo**: Brazilian Fraud Data Generator
+- **Escopo**: synthfin-data
 - **Status**: Análise completa, pronto para implementação
 
 ---

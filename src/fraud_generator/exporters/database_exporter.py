@@ -1,5 +1,5 @@
 """
-Database exporter for Brazilian Fraud Data Generator.
+Database exporter for synthfin-data.
 
 Supports SQLAlchemy-compatible databases (PostgreSQL, SQLite, DuckDB, etc.).
 """

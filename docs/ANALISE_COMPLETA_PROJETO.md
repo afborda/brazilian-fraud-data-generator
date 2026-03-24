@@ -1,7 +1,7 @@
-# 🇧🇷 ANÁLISE PROFUNDA COMPLETA - Brazilian Fraud Data Generator
+# 🇧🇷 ANÁLISE PROFUNDA COMPLETA - synthfin-data
 
 **Data:** 3 de Março de 2026  
-**Versão do Projeto:** 4.0.0 (v4-beta)  
+**Versão do Projeto:** 4.9.0 (v4-beta)  
 **Status:** Production-Ready com otimizações Phase 2  
 **Arquivo Python:** 30+ arquivos  
 **Arquivos Markdown:** 53 documentos
@@ -10,7 +10,7 @@
 
 ## 📋 SUMÁRIO EXECUTIVO
 
-O **Brazilian Fraud Data Generator** é um gerador de dados sintéticos de alta performance, especializado em criar datasets realistas de fraude financeira brasileira. É uma ferramenta de **produção** otimizada para pesquisa, testes de ML, validação de sistemas e benchmarking em larga escala (MB a TB).
+O **synthfin-data** é um gerador de dados sintéticos de alta performance, especializado em criar datasets realistas de fraude financeira brasileira. É uma ferramenta de **produção** otimizada para pesquisa, testes de ML, validação de sistemas e benchmarking em larga escala (MB a TB).
 
 ### 🎯 Propósito Principal
 Gerar dados **100% brasileiros** com padrões comportamentais realistas para:
@@ -1024,7 +1024,7 @@ main (stable) ⇠ v4-beta (dev) ⇠ feature/* (work)
 ### Para Desenvolvedores
 ```
 1. Clone o repositório:
-   git clone https://github.com/afborda/brazilian-fraud-data-generator.git
+   git clone https://github.com/afborda/synthfin-data.git
 
 2. Instale dependencies:
    pip install -r requirements.txt
@@ -1041,7 +1041,7 @@ main (stable) ⇠ v4-beta (dev) ⇠ feature/* (work)
 
 ### Para Pesquisadores
 ```
-- Cite como: "Brazilian Fraud Data Generator v4.0 (Fonseca, 2026)"
+- Cite como: "synthfin-data v4.9.0 (Fonseca, 2026)"
 - Acesso ao dataset original em /baseline_after/ (100k records)
 - Benchmarks em /docs/benchmarks/
 - Artigo técnico em elaboração

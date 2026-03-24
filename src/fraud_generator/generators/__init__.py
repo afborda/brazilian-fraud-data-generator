@@ -1,5 +1,5 @@
 """
-Generators package for Brazilian Fraud Data Generator.
+Generators package for synthfin-data.
 """
 
 from .customer import CustomerGenerator

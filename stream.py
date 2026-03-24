@@ -584,7 +584,7 @@ def _run_parallel(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="🇧🇷 Brazilian Fraud Data Generator - Streaming Mode v3.2.0",
+        description="🇧🇷 synthfin-data - Streaming Mode v4.9.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -805,7 +805,7 @@ Available targets: """ + ", ".join(list_targets())
     
     # Print header
     print("=" * 60)
-    print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR - STREAMING v3.2.0")
+    print("🇧🇷 BRAZILIAN FRAUD DATA GENERATOR - STREAMING v4.9.0")
     print("=" * 60)
     print(f"📋 Type: {args.type.upper()}")
     print(f"🎯 Target: {args.target.upper()}")

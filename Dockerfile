@@ -1,5 +1,5 @@
 # ==============================================================================
-# Brazilian Fraud Data Generator
+# synthfin-data
 # ==============================================================================
 # Multi-platform Docker image for generating synthetic Brazilian financial data
 # Supports: transactions, customers, rides, devices with fraud patterns
@@ -7,17 +7,17 @@
 FROM python:3.11-slim AS base
 
 # OCI Image Labels (standardized)
-LABEL org.opencontainers.image.title="Brazilian Fraud Data Generator"
+LABEL org.opencontainers.image.title="synthfin-data"
 LABEL org.opencontainers.image.description="Generate synthetic Brazilian financial transaction and rideshare data with configurable fraud patterns"
 LABEL org.opencontainers.image.authors="Abner Fonseca <afborda@gmail.com>"
-LABEL org.opencontainers.image.url="https://github.com/afborda/brazilian-fraud-data-generator"
-LABEL org.opencontainers.image.source="https://github.com/afborda/brazilian-fraud-data-generator"
-LABEL org.opencontainers.image.documentation="https://github.com/afborda/brazilian-fraud-data-generator#readme"
+LABEL org.opencontainers.image.url="https://github.com/afborda/synthfin-data"
+LABEL org.opencontainers.image.source="https://github.com/afborda/synthfin-data"
+LABEL org.opencontainers.image.documentation="https://github.com/afborda/synthfin-data#readme"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="Abner Fonseca"
 
 # Dynamic labels (set during build via --build-arg)
-ARG VERSION=4.1.0
+ARG VERSION=4.9.1
 ARG BUILD_DATE
 ARG VCS_REF
 # FRAUDGEN_VERIFY_KEY is baked into the image at build time.

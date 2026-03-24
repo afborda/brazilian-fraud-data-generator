@@ -1,4 +1,4 @@
-# AI Agent Instructions for Brazilian Fraud Data Generator
+# AI Agent Instructions for synthfin-data
 
 ## Project Overview
 
@@ -93,7 +93,7 @@ python3 stream.py --target stdout --rate 5
 ```bash
 # No local Python needed
 docker run --rm -v $(pwd)/output:/output \
-  afborda/brazilian-fraud-data-generator:latest \
+  afborda/synthfin-data:latest \
   generate.py --size 1GB --output /output
 ```
 

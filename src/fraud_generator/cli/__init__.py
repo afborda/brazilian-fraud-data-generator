@@ -1,5 +1,5 @@
 """
-CLI package for the Brazilian Fraud Data Generator.
+CLI package for the synthfin-data.
 
 Responsibility breakdown:
   constants.py      — shared numeric constants

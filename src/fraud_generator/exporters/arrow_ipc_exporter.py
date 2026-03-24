@@ -1,5 +1,5 @@
 """
-Arrow IPC exporter for Brazilian Fraud Data Generator.
+Arrow IPC exporter for synthfin-data.
 """
 
 from typing import List, Dict, Any, Iterator, Optional

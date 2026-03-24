@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🇧🇷 Brazilian Fraud Data Generator v4.1.0
+🇧🇷 synthfin-data v4.1.0
 ==========================================
 Thin entrypoint — argument parsing + runner dispatch.
 

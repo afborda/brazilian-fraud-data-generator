@@ -1,5 +1,5 @@
 """
-Behavioral profiles for Brazilian Fraud Data Generator.
+Behavioral profiles for synthfin-data.
 
 Profiles define realistic spending patterns for different customer archetypes.
 Each profile influences:

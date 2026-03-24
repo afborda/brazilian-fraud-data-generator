@@ -1,5 +1,5 @@
 """
-Transaction generator for Brazilian Fraud Data Generator.
+Transaction generator for synthfin-data.
 """
 
 import math

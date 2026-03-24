@@ -9,11 +9,11 @@
 #   - Push to main/master branch (latest tag)
 #
 # Images published:
-#   - afborda/brazilian-fraud-data-generator:latest
-#   - afborda/brazilian-fraud-data-generator:v4.0.0
-#   - afborda/brazilian-fraud-data-generator:4.0.0
-#   - afborda/brazilian-fraud-data-generator:4.0
-#   - afborda/brazilian-fraud-data-generator:4
+#   - afborda/synthfin-data:latest
+#   - afborda/synthfin-data:v4.0.0
+#   - afborda/synthfin-data:4.0.0
+#   - afborda/synthfin-data:4.0
+#   - afborda/synthfin-data:4
 # ==============================================================================
 
 name: Build and Publish Docker Image
@@ -39,7 +39,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: afborda/brazilian-fraud-data-generator
+  IMAGE_NAME: afborda/synthfin-data
 
 jobs:
   # ==========================================================================
@@ -137,7 +137,7 @@ jobs:
             # Git SHA (short)
             type=sha,prefix=sha-
           labels: |
-            org.opencontainers.image.title=Brazilian Fraud Data Generator
+            org.opencontainers.image.title=synthfin-data
             org.opencontainers.image.description=Generate synthetic Brazilian financial transaction and rideshare data with configurable fraud patterns
             org.opencontainers.image.vendor=Abner Fonseca
 

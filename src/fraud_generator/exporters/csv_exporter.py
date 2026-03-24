@@ -1,5 +1,5 @@
 """
-CSV exporter for Brazilian Fraud Data Generator.
+CSV exporter for synthfin-data.
 """
 
 import csv

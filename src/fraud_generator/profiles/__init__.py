@@ -1,5 +1,5 @@
 """
-Profiles package for Brazilian Fraud Data Generator.
+Profiles package for synthfin-data.
 Contains behavioral profiles for realistic transaction patterns.
 """
 

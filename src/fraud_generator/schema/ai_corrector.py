@@ -66,7 +66,7 @@ class CorrectionResult:
 _SYSTEM_PROMPT = textwrap.dedent("""
 You are an expert at Brazilian financial data generation schemas.
 Your job is to fix and complete a user-provided JSON schema so it
-is valid for the Brazilian Fraud Data Generator tool.
+is valid for the synthfin-data tool.
 
 SCHEMA RULES:
 1. Root must have "schema_version": "1.0", "profile", and "output".

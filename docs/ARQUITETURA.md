@@ -1,4 +1,4 @@
-# Arquitetura — Brazilian Fraud Data Generator v4.1.0
+# Arquitetura — synthfin-data v4.9.0
 
 > Documento técnico completo com diagramas de todas as camadas arquiteturais do projeto.
 

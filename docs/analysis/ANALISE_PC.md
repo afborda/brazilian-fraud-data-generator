@@ -208,7 +208,7 @@ ANÁLISE:
 └──────────────────────────────────────────────────────────┘
 
 NOTA: As dependências podem ser instaladas com:
-$ cd /home/afborda/projetos/pessoal/brazilian-fraud-data-generator
+$ cd /home/afborda/projetos/pessoal/synthfin-data
 $ pip install -r requirements.txt
 
 Tempo estimado: ~2-3 minutos (conexão internet padrão)
@@ -377,7 +377,7 @@ localhostForwarding=true
       $ wsl
       
       Voltar ao diretório do projeto:
-      $ cd /home/afborda/projetos/pessoal/brazilian-fraud-data-generator
+      $ cd /home/afborda/projetos/pessoal/synthfin-data
       
       Verificar se funcionou (MUITO IMPORTANTE):
       $ free -h

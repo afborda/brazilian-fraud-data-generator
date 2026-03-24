@@ -50,7 +50,7 @@
     },
 
     "internal": {
-      "generated_by":      "static:brazilian-fraud-data-generator",
+      "generated_by":      "static:synthfin-data",
       "schema_name":       "static:custom_empresa_xpto",
       "environment":       "static:test",
       "batch_id":          "faker:uuid4",

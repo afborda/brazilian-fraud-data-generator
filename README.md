@@ -1,13 +1,13 @@
-# Brazilian Fraud Data Generator
+# synthfin-data
 
 <p align="center">
-  <img src="docs/assets/Hero%20do%20README.png" alt="Premium overview of the Brazilian Fraud Data Generator for banking, PIX, ride-share, fraud signals and exports." width="100%" />
+  <img src="docs/assets/Hero%20do%20README.png" alt="synthfin-data — synthetic fraud data for Brazilian banking, PIX, ride-share, fraud signals and exports." width="100%" />
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.8.0-0F766E" alt="Version 4.8.0" /></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.9.0-0F766E" alt="Version 4.9.0" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-166534" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/python-3.8%2B-1D4ED8" alt="Python 3.8 or newer" />
+  <img src="https://img.shields.io/badge/python-3.10%2B-1D4ED8" alt="Python 3.10 or newer" />
   <img src="https://img.shields.io/badge/domains-banking%20%7C%20ride--share-0F172A" alt="Banking and ride-share domains" />
   <img src="https://img.shields.io/badge/streaming-kafka%20%7C%20webhook%20%7C%20stdout-7C3AED" alt="Kafka, webhook and stdout streaming" />
 </p>
@@ -26,12 +26,12 @@
   ·
   <a href="docs/CHANGELOG.md">Changelog</a>
   ·
-  <a href="https://hub.docker.com/r/afborda/brazilian-fraud-data-generator">Docker Hub</a>
+  <a href="https://hub.docker.com/r/afborda/synthfin-data">Docker Hub</a>
 </p>
 
 ## Why This Project
 
-This repository is built for teams that need a realistic Brazilian synthetic fraud dataset instead of a toy transaction generator. It covers PIX-heavy banking behavior, Brazilian geography, ride-share fraud scenarios, deterministic seeds, schema-driven output, and a self-hosted license API for controlled distribution.
+**synthfin-data** is built for teams that need a realistic Brazilian synthetic fraud dataset instead of a toy transaction generator. It covers PIX-heavy banking behavior, Brazilian geography, ride-share fraud scenarios, deterministic seeds, schema-driven output, and a hosted API at [synthfin.com.br](https://synthfin.com.br).
 
 <table>
   <tr>
@@ -77,7 +77,7 @@ pip install -r requirements.txt
 ### Batch generation
 
 ```bash
-# 1 GB of banking transactions at 2% fraud rate (default)
+# 1 GB of banking transactions at 0.8% fraud rate (default)
 python generate.py --size 1GB --output ./data
 
 # Ride-share data
@@ -173,12 +173,12 @@ python stream.py --target stdout --rate 20 --max-events 10000
 
 ```bash
 docker run --rm -v $(pwd)/output:/output \
-  afborda/brazilian-fraud-data-generator:latest \
+  afborda/synthfin-data:latest \
   generate.py --size 1GB --output /output
 
 # Stream events via Docker
 docker run --rm \
-  afborda/brazilian-fraud-data-generator:latest \
+  afborda/synthfin-data:latest \
   stream.py --target stdout --rate 10
 ```
 
@@ -210,7 +210,7 @@ python generate.py --schema my_schema.json --count 50000 --output ./data
 | `--output` | `./output` | Output directory or `minio://bucket/prefix` |
 | `--format` | `jsonl` | `jsonl`, `json`, `csv`, `tsv`, `parquet`, `parquet_partitioned`, `arrow`, `ipc`, `db` |
 | `--jsonl-compress` | `none` | JSONL inline compression: `none`, `gzip`, `zstd`, `snappy` |
-| `--fraud-rate` | `0.02` | Fraction of records flagged as fraud (0.0–1.0) |
+| `--fraud-rate` | `0.008` | Fraction of records flagged as fraud (0.0–1.0) |
 | `--workers` | CPU count | Parallel worker processes |
 | `--seed` | none | Random seed for fully reproducible datasets |
 | `--parallel-mode` | `auto` | Execution mode: `auto`, `thread`, `process` |
@@ -245,7 +245,7 @@ python generate.py --schema my_schema.json --count 50000 --output ./data
 | `--kafka-topic` | `transactions` | Kafka topic name |
 | `--webhook-url` | none | HTTP endpoint URL for webhook target |
 | `--webhook-method` | `POST` | HTTP method: `POST`, `PUT`, `PATCH` |
-| `--fraud-rate` | `0.02` | Fraction of events flagged as fraud (0.0–1.0) |
+| `--fraud-rate` | `0.008` | Fraction of events flagged as fraud (0.0–1.0) |
 | `--customers` | `1000` | Customer pool size |
 | `--seed` | none | Random seed |
 | `--workers` | `1` | Parallel generator processes |
@@ -513,10 +513,11 @@ Every file is JSONL — one JSON object per line. The examples below are real re
 |---|---|
 | Banking | PIX, TED, DOC, boleto, withdrawals, POS and ecommerce flows, merchant context, device context, BACEN PIX fields, and valid CPF-linked customers |
 | Ride-share | Uber, 99, Cabify, and inDrive style trips with drivers, passengers, surge pricing, weather impact, and geospatial distance logic |
-| Fraud labels | 10 banking fraud patterns and 7 ride-share fraud types with configurable fraud rate |
+| Fraud labels | 11 banking fraud patterns and 7 ride-share fraud types with configurable fraud rate |
 | Fraud scoring | 17 fraud signals plus 4 rule correlations, producing `fraud_risk_score` from 0 to 100 |
 | Temporal realism | Trimodal hourly peaks, weekday weighting, Black Friday, Christmas, 13th salary, and Carnaval seasonality |
 | Validation | `validate_realism.py`, bundled schemas, deterministic seeds, and schema checks |
+| Quality | v4.9 scorecard: fraud/legit score ~60% overlap, amount ratio 8.5x (Sparkov: 7.84x), 0 always-null columns |
 
 ### Banking fraud patterns
 
@@ -612,17 +613,17 @@ Measured on an 18-core x86_64 Linux machine, Python 3.12, using the in-process b
 
 ### Batch Generation
 
-| Type | Count | Workers | Time (s) | Events/s | MB/s | Bytes/evt |
-|---|---:|---:|---:|---:|---:|---:|
-| transactions |     10,000 |       1 |     0.58 |   17,197 | 37.2 |      2,271 |
-| transactions |     10,000 |       4 |     0.24 |   41,876 | 90.7 |      2,271 |
-| transactions |     10,000 |       8 |     0.18 |   56,153 | 121.6 |     2,271 |
-| transactions |     50,000 |       4 |     1.20 |   41,821 | 90.5 |      2,269 |
-| transactions |     50,000 |       8 |     0.88 |   56,937 | 123.2 |     2,269 |
-| transactions |    100,000 |       8 |     1.73 |   57,889 | 124.8 |     2,260 |
-| rides        |     10,000 |       1 |     0.34 |   29,778 | 34.0 |      1,198 |
-| rides        |     50,000 |       4 |     0.74 |   67,495 | 77.2 |      1,199 |
-| all types    |    100,000 |       4 |     1.82 |   54,884 | 118.8 |     2,269 |
+| Type | Count | Workers | Time (s) | Events/s | MB/s | Bytes/evt | Mem (MB) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| transactions |     10,000 |       1 |     0.58 |   17,197 |  37.2 |      2,271 |    229 |
+| transactions |     10,000 |       4 |     0.24 |   41,876 |  90.7 |      2,271 |    239 |
+| transactions |     10,000 |       8 |     0.18 |   56,153 | 121.6 |      2,271 |    239 |
+| transactions |     50,000 |       4 |     1.20 |   41,821 |  90.5 |      2,269 |    372 |
+| transactions |     50,000 |       8 |     0.88 |   56,937 | 123.2 |      2,269 |    372 |
+| transactions |    100,000 |       8 |     1.73 |   57,889 | 124.8 |      2,260 |    505 |
+| rides        |     10,000 |       1 |     0.34 |   29,778 |  34.0 |      1,198 |    505 |
+| rides        |     50,000 |       4 |     0.74 |   67,495 |  77.2 |      1,199 |    505 |
+| all types    |    100,000 |       4 |     1.82 |   54,884 | 118.8 |      2,269 |    531 |
 
 **Peak: ~67k events/s for rides (4w), ~58k events/s for transactions (8w)**
 

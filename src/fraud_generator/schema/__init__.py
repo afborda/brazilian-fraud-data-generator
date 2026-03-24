@@ -1,5 +1,5 @@
 """
-Declarative JSON Schema System for Brazilian Fraud Data Generator.
+Declarative JSON Schema System for synthfin-data.
 
 Allows users to define custom output structures via JSON,
 with optional AI-powered schema correction.

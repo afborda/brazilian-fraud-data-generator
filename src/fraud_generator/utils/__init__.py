@@ -1,5 +1,5 @@
 """
-Utilities package for Brazilian Fraud Data Generator.
+Utilities package for synthfin-data.
 """
 
 from .streaming import (

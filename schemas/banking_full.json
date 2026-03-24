@@ -84,7 +84,7 @@
       "tempo_desde_ultima_txn_min":  "transaction.time_since_last_txn_min"
     },
     "_meta": {
-      "fonte":   "static:brazilian-fraud-data-generator",
+      "fonte":   "static:synthfin-data",
       "versao":  "static:4.2.0"
     }
   }

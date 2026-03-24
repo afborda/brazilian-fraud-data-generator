@@ -1,5 +1,5 @@
 """
-CPF Validator and Generator for Brazilian Fraud Data Generator.
+CPF Validator and Generator for synthfin-data.
 
 Implements the official CPF validation algorithm from Receita Federal do Brasil.
 CPF format: XXX.XXX.XXX-DD (11 digits total, last 2 are check digits)

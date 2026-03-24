@@ -1,4 +1,4 @@
-# 🇧🇷 Brazilian Fraud Data Generator
+# 🇧🇷 synthfin-data
 
 <div align="center">
 
@@ -7,8 +7,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
-[![Docker Hub](https://img.shields.io/docker/v/afborda/brazilian-fraud-data-generator?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/afborda/brazilian-fraud-data-generator)
-[![Docker Pulls](https://img.shields.io/docker/pulls/afborda/brazilian-fraud-data-generator?logo=docker)](https://hub.docker.com/r/afborda/brazilian-fraud-data-generator)
+[![Docker Hub](https://img.shields.io/docker/v/afborda/synthfin-data?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/afborda/synthfin-data)
+[![Docker Pulls](https://img.shields.io/docker/pulls/afborda/synthfin-data?logo=docker)](https://hub.docker.com/r/afborda/synthfin-data)
 ![Kafka](https://img.shields.io/badge/Kafka-Streaming-231F20?logo=apachekafka&logoColor=white)
 ![MinIO](https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue)
@@ -35,8 +35,8 @@ Perfect for: **Data pipelines**, **Spark jobs**, **Kafka streaming**, **ML model
 ### A) Batch (files on disk)
 1. Install deps (once):
   ```bash
-  git clone https://github.com/afborda/brazilian-fraud-data-generator.git
-  cd brazilian-fraud-data-generator
+  git clone https://github.com/afborda/synthfin-data.git
+  cd synthfin-data
   pip install -r requirements.txt
   ```
 2. Generate 100MB of banking data locally:
@@ -62,7 +62,7 @@ Perfect for: **Data pipelines**, **Spark jobs**, **Kafka streaming**, **ML model
 
 ### C) Docker (no local Python needed)
 ```bash
-docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+docker run --rm -v $(pwd)/output:/output afborda/synthfin-data:latest \
    generate.py --size 1GB --output /output
 ```
 
@@ -209,22 +209,22 @@ pip install -r requirements-streaming.txt
 
 ```bash
 # Pull the latest version
-docker pull afborda/brazilian-fraud-data-generator:latest
+docker pull afborda/synthfin-data:latest
 
 # Generate 1GB of transactions
-docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+docker run --rm -v $(pwd)/output:/output afborda/synthfin-data:latest \
     generate.py --size 1GB --output /output
 
 # Generate in Parquet format
-docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+docker run --rm -v $(pwd)/output:/output afborda/synthfin-data:latest \
     generate.py --size 500MB --output /output --format parquet
 
 # Generate ride-share data
-docker run --rm -v $(pwd)/output:/output afborda/brazilian-fraud-data-generator:latest \
+docker run --rm -v $(pwd)/output:/output afborda/synthfin-data:latest \
     generate.py --size 1GB --type rides --output /output
 
 # Streaming to Kafka
-docker run --rm --network host afborda/brazilian-fraud-data-generator:latest \
+docker run --rm --network host afborda/synthfin-data:latest \
     stream.py --target kafka --kafka-server localhost:9092 --rate 100
 ```
 
@@ -527,7 +527,7 @@ df = spark.read.json("s3a://fraud-data/raw/transactions_*.jsonl")
 ## 📁 Project Structure
 
 ```
-brazilian-fraud-data-generator/
+synthfin-data/
 ├── generate.py              # 📁 Batch generation script
 ├── stream.py                # 📡 Streaming script
 ├── Dockerfile               # 🐳 Docker image
@@ -587,7 +587,7 @@ MIT License - See [LICENSE](LICENSE)
 
 <div align="center">
 
-⭐ **Star this repo if it helped you-rf /home/ubuntu/Estudos/brazilian-fraud-data-generator/test_output* ⭐
+⭐ **Star this repo if it helped you-rf /home/ubuntu/Estudos/synthfin-data/test_output* ⭐
 
 Made with ❤️ for the Brazilian Data Engineering community
 
