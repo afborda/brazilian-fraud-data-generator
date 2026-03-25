@@ -3,14 +3,16 @@ Seasonality configuration for synthfin-data.
 
 Provides realistic temporal weights for:
   - Hour of day (trimodal distribution: 10h, 14h, 19h peaks — BCB PIX 2024)
+  - Hour of day per fraud category (commercial, delivery, ATO)
   - Day of week (Friday peak, weekend reduction)
+  - Monthly fraud multiplier (STL decomposition — NB06 calibration)
   - Annual events (Black Friday, Christmas, 13th salary, Carnaval)
 """
 
 import random
 from datetime import date, timedelta
 from functools import lru_cache
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 
 # ─── Hourly weights — trimodal realista (Brasil 2024, fonte: BCB PIX) ─────────
@@ -32,16 +34,74 @@ HORA_LIST_PADRAO: List[int] = list(range(24))
 # Versão mais quieta (madrugada) para fraudes de ATO/CONTA_TOMADA
 HORA_WEIGHTS_FRAUD_ATO: List[int] = [
     # 00  01  02  03  04  05  06  07  08  09  10  11
-     10, 20, 25, 20, 15,  8,  5,  3,  2,  2,  2,  2,
+      8, 25, 30, 25, 12,  5,  3,  2,  2,  2,  2,  2,
     # 12  13  14  15  16  17  18  19  20  21  22  23
-      2,  2,  2,  2,  3,  4,  5,  6,  8, 10, 12, 12,
+      2,  2,  2,  2,  2,  3,  5,  6,  8, 12, 15, 10,
 ]
+
+# Perfil horário comercial — falsa central, golpe investimento
+HORA_WEIGHTS_COMERCIAL: List[int] = [
+    # 00  01  02  03  04  05  06  07  08  09  10  11
+      1,  1,  1,  1,  1,  2,  5, 10, 18, 22, 25, 20,
+    # 12  13  14  15  16  17  18  19  20  21  22  23
+     15, 18, 22, 20, 18, 12,  5,  3,  2,  1,  1,  1,
+]
+
+# Perfil horário delivery — almoço e jantar
+HORA_WEIGHTS_DELIVERY: List[int] = [
+    # 00  01  02  03  04  05  06  07  08  09  10  11
+      3,  2,  1,  1,  1,  1,  2,  3,  5,  8, 12, 18,
+    # 12  13  14  15  16  17  18  19  20  21  22  23
+     22, 15, 10,  8,  8, 12, 20, 25, 22, 15, 10,  5,
+]
+
+# Mapeamento tipo de fraude → perfil horário
+FRAUD_TYPE_HOUR_PROFILE: Dict[str, List[int]] = {
+    'CONTA_TOMADA': HORA_WEIGHTS_FRAUD_ATO,
+    'CREDENTIAL_STUFFING': HORA_WEIGHTS_FRAUD_ATO,
+    'MAO_FANTASMA': HORA_WEIGHTS_FRAUD_ATO,
+    'SIM_SWAP': HORA_WEIGHTS_FRAUD_ATO,
+    'FALSA_CENTRAL_TELEFONICA': HORA_WEIGHTS_COMERCIAL,
+    'GOLPE_INVESTIMENTO': HORA_WEIGHTS_COMERCIAL,
+    'EMPRESTIMO_FRAUDULENTO': HORA_WEIGHTS_COMERCIAL,
+    'FRAUDE_DELIVERY_APP': HORA_WEIGHTS_DELIVERY,
+    # Todos os outros usam HORA_WEIGHTS_PADRAO via get default
+}
+
+
+def get_hour_weights_for_fraud(fraud_type: str) -> List[int]:
+    """Retorna o perfil horário adequado para o tipo de fraude."""
+    return FRAUD_TYPE_HOUR_PROFILE.get(fraud_type, HORA_WEIGHTS_PADRAO)
 
 
 # ─── Pesos por dia da semana ──────────────────────────────────────────────────
 # 0=Seg 1=Ter 2=Qua 3=Qui 4=Sex 5=Sab 6=Dom
-DOW_WEIGHTS: List[int] = [10, 10, 10, 10, 13, 8, 6]
+DOW_WEIGHTS: List[int] = [10, 11, 11, 11, 14, 8, 6]
 DOW_LIST: List[int] = list(range(7))
+
+
+# ─── Sazonalidade mensal (calibrada via STL — NB06) ──────────────────────────
+# Pico: Out-Nov (pré-Black Friday, 13º salário)
+# Vale: Fev-Mar (Carnaval, menor atividade digital)
+MONTHLY_FRAUD_MULTIPLIER: Dict[int, float] = {
+    1: 0.85,   # Pós-festas
+    2: 0.80,   # Carnaval — menor atividade digital
+    3: 0.90,   # Vale sazonal
+    4: 0.95,
+    5: 1.00,   # Dia das Mães
+    6: 1.05,   # Dia dos Namorados
+    7: 0.95,
+    8: 1.00,   # Dia dos Pais
+    9: 1.05,
+    10: 1.15,  # Pré-Black Friday
+    11: 1.30,  # Black Friday + 13º 1ª parcela
+    12: 1.20,  # Natal + 13º 2ª parcela
+}
+
+
+def get_monthly_multiplier(month: int) -> float:
+    """Retorna multiplicador sazonal mensal (1.0 = média)."""
+    return MONTHLY_FRAUD_MULTIPLIER.get(month, 1.0)
 
 
 # ─── Eventos sazonais ─────────────────────────────────────────────────────────
@@ -200,8 +260,8 @@ def pick_weighted_date(start: date, end: date) -> date:
 
 
 def _date_weight(d: date) -> float:
-    """Peso combinado: DOW × sazonalidade."""
-    return DOW_WEIGHTS[d.weekday()] * get_day_multiplier(d)
+    """Peso combinado: DOW × sazonalidade diária × sazonalidade mensal."""
+    return DOW_WEIGHTS[d.weekday()] * get_day_multiplier(d) * get_monthly_multiplier(d.month)
 
 
 def pick_hour(weights: List[int] = HORA_WEIGHTS_PADRAO) -> int:

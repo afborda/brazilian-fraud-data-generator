@@ -519,9 +519,16 @@ Every file is JSONL — one JSON object per line. The examples below are real re
 | Validation | `validate_realism.py`, bundled schemas, deterministic seeds, and schema checks |
 | Quality | v4.9 scorecard: fraud/legit score ~60% overlap, amount ratio 8.5x (Sparkov: 7.84x), 0 always-null columns |
 
-### Banking fraud patterns
+### Banking fraud patterns (25 total)
 
-`ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO`, `MAO_FANTASMA`, `WHATSAPP_CLONE`, `SIM_SWAP`, `CREDENTIAL_STUFFING`, `SYNTHETIC_IDENTITY`, `SEQUESTRO_RELAMPAGO`
+**BCB/Febraban-calibrated (9 patterns with RAG-validated prevalences):**  
+`ENGENHARIA_SOCIAL`, `PIX_GOLPE`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `MULA_FINANCEIRA`, `WHATSAPP_CLONE`, `MAO_FANTASMA`, `BOLETO_FALSO`, `SEQUESTRO_RELAMPAGO`
+
+**Additional patterns (original defaults):**  
+`FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `SIM_SWAP`, `CREDENTIAL_STUFFING`, `SYNTHETIC_IDENTITY`
+
+**New patterns (v4.1.0 — calibrated with MJSP/BCB data):**  
+`DEEP_FAKE`, `FALSA_CENTRAL_TELEFONICA`, `PIX_AGENDADO_FRAUDE`, `EMPRESTIMO_FRAUDULENTO`, `FRAUDE_DELIVERY`, `LAVAGEM_ESTRUTURADA`, `TRIANGULACAO_FINANCEIRA`, `QR_CODE_FRAUDULENTO`
 
 ### Ride-share fraud types
 
@@ -552,9 +559,58 @@ The goal is not just to generate random events. The library tries to preserve si
 | Payments | Emits Brazilian transaction types, PIX fields, bank context and BACEN-aligned identifiers |
 | Time | Uses trimodal hourly peaks, weekday weighting and calendar effects like Black Friday, Christmas, 13th salary and Carnaval |
 | Behavior | Applies behavioral profiles so customers do not transact like uniform random bots |
-| Geography | Uses Brazilian city or state context and address generation |
-| Fraud modeling | Injects explicit banking and ride-share fraud patterns instead of unlabeled anomalies |
+| Geography | IBGE 2022 centroids for 100 major cities; population-weighted state selection; CEP from verified real addresses via BrasilAPI when `ceps_reais.csv` is present, falling back to valid synthetic CEP ranges per municipality |
+| Fraud modeling | Injects explicit banking and ride-share fraud patterns with RAG-calibrated BCB/Febraban/MJSP prevalences (see below) instead of hardcoded guesses |
 | Risk scoring | Computes `fraud_risk_score` from 17 signals plus 4 correlation rules |
+
+## RAG-Calibrated Fraud Prevalences
+
+Starting from v4.9.0+, fraud type prevalences and amount multipliers are loaded at runtime from `data/rules/fraud_pattern_overrides.json`, which is produced by the FraudFlow RAG pipeline (52K+ chunks, 66 sources, BCB/Febraban/MJSP evidence).
+
+| Fraud type | Original | Calibrated | Real-world source |
+|---|:---:|:---:|---|
+| `PIX_GOLPE` | 25.0% | **4.75%** | BCB PIX MED (49 months) |
+| `ENGENHARIA_SOCIAL` | 20.0% | **13.5%** | Febraban Tech 2024/2025 |
+| `MULA_FINANCEIRA` | 6.0% | **14.7%** | BCB: 100K–107K accounts flagged/month |
+| `MAO_FANTASMA` | 4.0% | **11.5%** | Febraban: remote-access trojans |
+| `CONTA_TOMADA` | 15.0% | **2.0%** | B3 statistical datasets |
+| `CARTAO_CLONADO` | 14.0% | **1.5%** | BCB + EMV chip data |
+| `BOLETO_FALSO` | 8.0% | **2.7%** | MJSP tipologias |
+| `WHATSAPP_CLONE` | 5.0% | **2.3%** | SaferNet/MJSP |
+| `SEQUESTRO_RELAMPAGO` | — | mult 2.97× | BCB Res. 142/2021 night limit |
+
+The overrides are applied in `calibration_loader.py` — the file is loaded once at import time and normalizes the weights so they always sum to 1.0. If the file is absent the generator falls back to the original values with no error.
+
+To regenerate overrides from the latest RAG evidence, run the FraudFlow pipeline (`POST /regras/gerar` on the data API) and copy the output to `data/rules/fraud_pattern_overrides.json`.
+
+## Real CEP Pipeline
+
+Customer records include a `postal_code` field. By default this is a synthetic but valid-format CEP derived from the correct numeric range for the customer's municipality (e.g., São Paulo always gets a CEP starting with `01xxx`–`09xxx`).
+
+To upgrade to verified real addresses:
+
+```bash
+# Via the FraudFlow data API — generates ~1,000 seeds from all municipalities in
+# municipios.py and validates each against BrasilAPI v2 + ViaCEP fallback
+curl -X POST http://localhost:8000/coleta/ceps \
+  -H 'Content-Type: application/json' \
+  -d '{"usar_seeds_municipios": true}'
+
+# Or with custom CEPs
+curl -X POST http://localhost:8000/coleta/ceps \
+  -H 'Content-Type: application/json' \
+  -d '{"ceps_extras": ["01310100", "20040020", "30112020"]}'
+```
+
+Once `data/ceps/ceps_reais.csv` exists the generator's `RealCepPool` silently prefers real CEPs over synthetic ones for every city that has coverage. No restart required — the CSV path is checked at first use.
+
+The file path can be overridden with the `CEPS_REAIS_PATH` environment variable.
+
+**APIs used (both free, no key required):**
+- BrasilAPI CEP v2 — `https://brasilapi.com.br/api/cep/v2/{cep}` — returns street, neighbourhood, city, state, and GPS coordinates
+- ViaCEP — `https://viacep.com.br/ws/{cep}/json/` — fallback when BrasilAPI has no coordinates for a given CEP
+
+
 
 ## Why The Generated Data Has Value
 

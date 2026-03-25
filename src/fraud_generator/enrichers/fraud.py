@@ -49,6 +49,15 @@ _FRAUD_LABELS: dict = {
     "CREDENTIAL_STUFFING":   ["CREDENTIAL_STUFFING", "BOT", "ATO"],
     "SYNTHETIC_IDENTITY":    ["SYNTHETIC_IDENTITY", "IDENTITY_FRAUD"],
     "SEQUESTRO_RELAMPAGO":   ["SEQUESTRO_RELAMPAGO", "ENGENHARIA_SOCIAL"],
+    # ── Novos tipos (pipeline RAG + notebooks) ────────────────────────
+    "FALSA_CENTRAL_TELEFONICA": ["FALSA_CENTRAL", "ENGENHARIA_SOCIAL", "IMPERSONATION"],
+    "PIX_AGENDADO_FRAUDE":   ["PIX_GOLPE", "ATO"],
+    "FRAUDE_DELIVERY_APP":   ["CARTAO_CLONADO", "CARD_TESTING"],
+    "EMPRESTIMO_FRAUDULENTO": ["IDENTITY_FRAUD", "SYNTHETIC_IDENTITY"],
+    "DEEP_FAKE_BIOMETRIA":   ["IDENTITY_FRAUD", "DEEP_FAKE", "ATO"],
+    "GOLPE_INVESTIMENTO":    ["ENGENHARIA_SOCIAL", "PIRAMIDE"],
+    "FRAUDE_QR_CODE":        ["PIX_GOLPE", "ENGENHARIA_SOCIAL"],
+    "PHISHING_BANCARIO":     ["PHISHING", "ATO", "CREDENTIAL_STUFFING"],
 }
 
 # ── Chain roles: position in the fraud chain ──────────────────────────────────
@@ -73,6 +82,15 @@ _FRAUD_DETECTION_DELAY: dict = {
     "SIM_SWAP":            (1, 5),
     "CREDENTIAL_STUFFING": (0, 2),
     "MAO_FANTASMA":        (1, 3),
+    # ── Novos tipos ───────────────────────────────────────────────────
+    "FALSA_CENTRAL_TELEFONICA": (1, 7),
+    "PIX_AGENDADO_FRAUDE":     (1, 3),
+    "FRAUDE_DELIVERY_APP":     (1, 5),
+    "EMPRESTIMO_FRAUDULENTO":  (7, 30),
+    "DEEP_FAKE_BIOMETRIA":     (3, 14),
+    "GOLPE_INVESTIMENTO":      (14, 60),
+    "FRAUDE_QR_CODE":          (1, 3),
+    "PHISHING_BANCARIO":       (1, 5),
 }
 
 # ── Bot signature profiles ────────────────────────────────────────────────────

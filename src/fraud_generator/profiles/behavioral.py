@@ -392,6 +392,45 @@ PROFILES: Dict[str, BehavioralProfile] = {
         weekend_multiplier=1.4,
         fraud_susceptibility=1.8,
     ),
+
+    "micro_empreendedor": BehavioralProfile(
+        name="micro_empreendedor",
+        description=(
+            "Microempreendedor Individual (MEI): 25-55 years, high PIX volume, "
+            "mixes personal and business accounts, delivery/food/services, "
+            "vulnerable to boleto and PIX fraud"
+        ),
+        age_range=(25, 55),
+        income_multiplier=(0.8, 3.0),
+        transaction_types={
+            'PIX': 65,
+            'BOLETO': 15,
+            'CREDIT_CARD': 10,
+            'DEBIT_CARD': 5,
+            'TED': 5,
+        },
+        preferred_mccs={
+            '5812': 20,       # Restaurants/Food
+            '5411': 15,       # Supermarkets (supplies)
+            '5541': 10,       # Gas
+            '4121': 10,       # Transport/delivery
+            '4814': 10,       # Telecom
+            '5131': 10,       # Wholesale
+            '5999': 15,       # Misc retail
+            '8299': 10,       # Services
+        },
+        channel_preferences={
+            'MOBILE_APP': 80,
+            'WEB_BANKING': 15,
+            'ATM': 3,
+            'BRANCH': 2,
+        },
+        monthly_tx_frequency=(60, 200),  # high volume, many small PIX
+        typical_value_range=(10, 2000),
+        preferred_hours=[8, 9, 10, 11, 12, 14, 15, 16, 17, 18],  # commercial hours
+        weekend_multiplier=0.8,
+        fraud_susceptibility=1.6,  # mixes accounts, high PIX volume, boleto target
+    ),
 }
 
 
@@ -399,16 +438,18 @@ PROFILES: Dict[str, BehavioralProfile] = {
 # Fraud victim archetypes receive low weights — they exist for targeted fraud injection,
 # not for the general population baseline.
 PROFILE_DISTRIBUTION = {
-    ProfileType.YOUNG_DIGITAL.value: 25,
-    ProfileType.TRADITIONAL_SENIOR.value: 15,
-    ProfileType.BUSINESS_OWNER.value: 10,
-    ProfileType.HIGH_SPENDER.value: 8,
-    ProfileType.SUBSCRIPTION_HEAVY.value: 20,
-    ProfileType.FAMILY_PROVIDER.value: 22,
+    ProfileType.YOUNG_DIGITAL.value: 22,
+    ProfileType.TRADITIONAL_SENIOR.value: 13,
+    ProfileType.BUSINESS_OWNER.value: 8,
+    ProfileType.HIGH_SPENDER.value: 6,
+    ProfileType.SUBSCRIPTION_HEAVY.value: 18,
+    ProfileType.FAMILY_PROVIDER.value: 20,
     # Fraud victim archetypes (low base weight; boosted by fraud injection logic)
     "ato_victim": 0,
     "falsa_central_victim": 0,
     "malware_ats_victim": 0,
+    # MEI — 15 milhões de CNPJs ativos (SEBRAE 2024)
+    "micro_empreendedor": 13,
 }
 
 PROFILE_LIST = list(PROFILE_DISTRIBUTION.keys())

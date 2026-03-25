@@ -10,15 +10,16 @@ Sources:
 
 # ── Renda Mensal (BRL) ────────────────────────────────────────────────────────
 # Baseado em quintis de renda PNAD 2023
+# SM 2024 = R$1.412,00
 INCOME_BRACKETS = [
     # (min, max, weight, label)
-    (    0,    800, 25, "E"),       # Classe E — até 1 SM
-    (  800,  2_400, 30, "D"),       # Classe D — 1-3 SM
-    (2_400,  5_000, 22, "C2"),      # Classe C2 — 3-6 SM
-    (5_000,  8_000, 12, "C1"),      # Classe C1 — 6-10 SM
-    (8_000, 20_000,  8, "B2"),      # Classe B2 — 10-25 SM
-    (20_000, 50_000, 2, "B1"),      # Classe B1 — 25-60 SM
-    (50_000, 200_000, 1, "A"),      # Classe A — acima 60 SM
+    (    0,  1_412, 25, "E"),       # Classe E — até 1 SM
+    (1_412,  4_236, 30, "D"),       # Classe D — 1-3 SM
+    (4_236,  8_472, 22, "C2"),      # Classe C2 — 3-6 SM
+    (8_472, 14_120, 12, "C1"),      # Classe C1 — 6-10 SM
+    (14_120, 35_300,  8, "B2"),     # Classe B2 — 10-25 SM
+    (35_300, 84_720,  2, "B1"),     # Classe B1 — 25-60 SM
+    (84_720, 300_000,  1, "A"),     # Classe A — acima 60 SM
 ]
 
 INCOME_WEIGHTS = [b[2] for b in INCOME_BRACKETS]

@@ -618,13 +618,32 @@ class TransactionGenerator:
     def _calculate_fraud_value(self, fraud_type: Optional[str]) -> float:
         """Calculate fraud transaction value using log-normal distribution.
 
-        Parâmetros calibrados para ratio fraude/legítimo ~5-8x,
-        compatível com distribuições Sparkov e PaySim reais.
+        Parâmetros calibrados por tipo de fraude usando dados BCB/FEBRABAN/RAG.
+        Tipos novos (delivery, card testing) usam distribuição de micro-valor.
         """
-        if fraud_type in ['LAVAGEM_DINHEIRO', 'TRIANGULACAO']:
-            mu, sigma, max_val = math.log(2_000), 1.1, 30_000.0
-        elif fraud_type in ['CARTAO_CLONADO', 'CONTA_TOMADA']:
-            mu, sigma, max_val = math.log(600), 1.1, 15_000.0
+        _FRAUD_LOGNORMAL = {
+            # (mu, sigma, max_val)
+            'LAVAGEM_DINHEIRO':      (math.log(2_000), 1.1, 30_000.0),
+            'TRIANGULACAO':          (math.log(2_000), 1.1, 30_000.0),
+            'CARTAO_CLONADO':        (math.log(600),   1.1, 15_000.0),
+            'CONTA_TOMADA':          (math.log(600),   1.1, 15_000.0),
+            'SEQUESTRO_RELAMPAGO':   (math.log(3_000), 0.8, 50_000.0),
+            'EMPRESTIMO_FRAUDULENTO':(math.log(5_000), 0.7, 100_000.0),
+            'DEEP_FAKE_BIOMETRIA':   (math.log(2_000), 0.9, 30_000.0),
+            'FALSA_CENTRAL_TELEFONICA':(math.log(1_500), 0.8, 20_000.0),
+            'PIX_GOLPE':            (math.log(1_200), 0.8, 15_000.0),
+            'ENGENHARIA_SOCIAL':    (math.log(800),   0.9, 10_000.0),
+            'GOLPE_INVESTIMENTO':   (math.log(1_000), 0.9, 20_000.0),
+            'PHISHING_BANCARIO':    (math.log(1_000), 0.9, 15_000.0),
+            # Micro-valor types
+            'FRAUDE_DELIVERY_APP':  (math.log(35),    0.6,  500.0),
+            'COMPRA_TESTE':         (math.log(10),    0.8,  100.0),
+            'CARD_TESTING':         (math.log(10),    0.8,  100.0),
+            'FRAUDE_QR_CODE':       (math.log(200),   0.9,  5_000.0),
+        }
+        params = _FRAUD_LOGNORMAL.get(fraud_type)
+        if params:
+            mu, sigma, max_val = params
         else:
             mu, sigma, max_val = math.log(250), 1.2, 10_000.0
         value = math.exp(random.gauss(mu, sigma))

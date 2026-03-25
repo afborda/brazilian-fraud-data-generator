@@ -11,8 +11,14 @@ Data sources:
 
 from __future__ import annotations
 
+import csv
+import logging
+import os
 import random
-from typing import NamedTuple
+from pathlib import Path
+from typing import Dict, List, NamedTuple, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class Municipio(NamedTuple):
@@ -183,7 +189,83 @@ def pick_municipio(uf: str, rng: random.Random) -> Municipio:
 
 
 def cep_for_municipio(m: Municipio, rng: random.Random) -> str:
-    """Generate a realistic CEP string for the given municipality."""
-    prefix = rng.randint(m.cep_min, m.cep_max)
-    suffix = rng.randint(0, 999)
-    return f"{prefix:05d}-{suffix:03d}"
+    """Return a verified real CEP for *m* when available, else a synthetic one.
+
+    On the first call the pool is lazily loaded from
+      $CEPS_REAIS_PATH  (env var, optional)
+      <workspace>/data/ceps/ceps_reais.csv  (default)
+
+    If the CSV is absent or has no entries for the municipality the function
+    falls back to generating a plausible-but-unverified CEP from the numeric
+    range stored in the Municipio tuple — exactly the previous behaviour.
+    """
+    return _real_cep_pool.pick(m, rng)
+
+
+# ── Real CEP pool ─────────────────────────────────────────────────────────────
+
+_DEFAULT_CEPS_CSV = (
+    Path(__file__).resolve().parents[4] / "data" / "ceps" / "ceps_reais.csv"
+)
+
+
+class _RealCepPool:
+    """Lazy-loading pool of verified CEPs grouped by IBGE city name + UF.
+
+    Thread-safety is not required — the generator runs in a single thread.
+    """
+
+    def __init__(self) -> None:
+        self._loaded = False
+        # city_key → list[str]  where city_key = (municipio_nome.lower(), uf)
+        self._by_city: Dict[tuple, List[str]] = {}
+        # uf → list[str]  fallback when city not found
+        self._by_uf: Dict[str, List[str]] = {}
+
+    def _load(self) -> None:
+        if self._loaded:
+            return
+        self._loaded = True
+
+        csv_path = Path(os.environ.get("CEPS_REAIS_PATH", str(_DEFAULT_CEPS_CSV)))
+        if not csv_path.is_file():
+            logger.debug("ceps_reais.csv not found at %s — using synthetic CEPs.", csv_path)
+            return
+
+        try:
+            with csv_path.open(encoding="utf-8") as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    cep = row.get("cep", "").replace("-", "").strip()
+                    if not cep or len(cep) != 8:
+                        continue
+                    city = (row.get("municipio", "").lower().strip(), row.get("uf", "").upper().strip())
+                    uf   = row.get("uf", "").upper().strip()
+                    formatted = f"{cep[:5]}-{cep[5:]}"
+                    self._by_city.setdefault(city, []).append(formatted)
+                    if uf:
+                        self._by_uf.setdefault(uf, []).append(formatted)
+            total = sum(len(v) for v in self._by_city.values())
+            logger.info("RealCepPool: loaded %d CEPs from %s", total, csv_path)
+        except Exception as exc:
+            logger.warning("RealCepPool: failed to load %s — %s", csv_path, exc)
+
+    def pick(self, m: Municipio, rng: random.Random) -> str:
+        self._load()
+        # 1. Exact city match
+        city_key = (m.name.lower(), m.uf)
+        pool = self._by_city.get(city_key)
+        if pool:
+            return rng.choice(pool)
+        # 2. State-level fallback
+        pool = self._by_uf.get(m.uf)
+        if pool:
+            return rng.choice(pool)
+        # 3. Synthetic (unchanged legacy behaviour)
+        prefix = rng.randint(m.cep_min, m.cep_max)
+        suffix = rng.randint(0, 999)
+        return f"{prefix:05d}-{suffix:03d}"
+
+
+_real_cep_pool = _RealCepPool()
+

@@ -101,7 +101,7 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
             'device_anomaly': 'HIGH',             # Device ID suspeito
             'channel_preference': ['MOBILE_APP'],
             'type_preference': ['PIX', 'CREDIT_CARD'],
-            'amount_multiplier': (1.2, 3.0),
+            'amount_multiplier': (2.0, 6.0),
         },
         'prevalence': 0.12,
         'fraud_score_base': 0.60,
@@ -240,7 +240,7 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
             'device_anomaly': 'NONE',             # Mesmo device
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
             'type_preference': ['BOLETO'],
-            'amount_multiplier': (0.8, 1.5),      # Próximo ao valor esperado
+            'amount_multiplier': (2.0, 5.0),      # Credential stuffing: ATO parcial
         },
         'prevalence': 0.08,
         'fraud_score_base': 0.40,
@@ -397,16 +397,224 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
             'location_anomaly': 'LOW',            # Vítima está "em algum lugar" — pode ser distante
             'device_anomaly': 'NONE',             # Dispositivo legítimo
             'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
-            'type_preference': ['PIX', 'TED'],
-            'amount_multiplier': (2.0, 8.0),
+            'type_preference': ['PIX'],           # Sequestro moderno é 100% PIX
+            'amount_multiplier': (3.0, 12.0),     # Drena conta inteira
             'transaction_burst': (2, 6),          # Múltiplas transferências
             'pix_key_type': ['CPF', 'PHONE', 'RANDOM'],
+            'active_call_during_tx': True,        # Vítima em ligação durante operação
+            'gps_movement_anomaly': True,         # Vítima em movimento (veículo)
         },
-        'prevalence': 0.02,
+        'prevalence': 0.03,
         'fraud_score_base': 0.60,                 # Operado pela vítima = difícil detectar
         'detection_delay_days': (1, 3),
     },
+
+    # ------------------------------------------------------------------ #
+    #  Novos Padrões — adicionados via análise RAG + notebooks pipeline   #
+    # ------------------------------------------------------------------ #
+
+    'FALSA_CENTRAL_TELEFONICA': {
+        'name': 'Falsa Central Telefônica',
+        'description': (
+            'Fraudador liga se passando pelo banco, solicita dados ou induz '
+            'transferência PIX para "conta segura". Envolve chamada ativa + '
+            'spoofing do número do banco. Top-3 golpes Brasil 2024 (FEBRABAN).'
+        ),
+        'characteristics': {
+            'value_anomaly': 'HIGH',
+            'new_beneficiary_prob': 0.85,
+            'velocity': 'LOW',                    # 1-2 transações apenas
+            'time_anomaly': 'LOW',                # Horário comercial (8h-18h)
+            'location_anomaly': 'NONE',
+            'device_anomaly': 'NONE',             # Vítima usa próprio device
+            'channel_preference': ['MOBILE_APP'],
+            'type_preference': ['PIX'],
+            'amount_multiplier': (2.0, 8.0),
+            'active_call_during_tx': True,
+            'preferred_hours': list(range(8, 18)),
+        },
+        'prevalence': 0.10,
+        'fraud_score_base': 0.78,
+    },
+
+    'PIX_AGENDADO_FRAUDE': {
+        'name': 'Fraude PIX Agendado',
+        'description': (
+            'Fraudador agenda PIX para data futura usando conta comprometida. '
+            'Delay frustra regras de velocity. Emergente desde Nov/2023.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'MEDIUM',
+            'new_beneficiary_prob': 0.75,
+            'velocity': 'LOW',                    # Velocity baixa individual
+            'time_anomaly': 'LOW',
+            'location_anomaly': 'MEDIUM',
+            'device_anomaly': 'MEDIUM',
+            'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
+            'type_preference': ['PIX'],
+            'amount_multiplier': (0.5, 3.0),
+            'scheduled_transaction': True,
+            'schedule_delay_days': (1, 7),
+            'multiple_scheduled': (2, 5),
+        },
+        'prevalence': 0.03,
+        'fraud_score_base': 0.65,
+    },
+
+    'FRAUDE_DELIVERY_APP': {
+        'name': 'Fraude em App de Delivery',
+        'description': (
+            'Cartão roubado/clonado usado em apps de delivery (iFood, Rappi). '
+            'Padrão: múltiplas compras pequenas, endereço inconsistente.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'LOW',
+            'new_beneficiary_prob': 0.20,
+            'velocity': 'HIGH',
+            'time_anomaly': 'MEDIUM',
+            'location_anomaly': 'MEDIUM',
+            'device_anomaly': 'HIGH',
+            'channel_preference': ['MOBILE_APP'],
+            'type_preference': ['CREDIT_CARD', 'DEBIT_CARD'],
+            'amount_multiplier': (0.1, 0.5),
+            'transaction_burst': (5, 15),
+            'burst_window_minutes': (60, 120),
+            'mcc_preference': ['5812', '5814', '5811'],
+        },
+        'prevalence': 0.04,
+        'fraud_score_base': 0.60,
+    },
+
+    'EMPRESTIMO_FRAUDULENTO': {
+        'name': 'Empréstimo Fraudulento',
+        'description': (
+            'Conta sintética ou tomada usada para contratar empréstimo/crédito. '
+            'Fraudador toma crédito máximo e desaparece. Top-5 MJSP.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'HIGH',
+            'new_beneficiary_prob': 0.60,
+            'velocity': 'LOW',
+            'time_anomaly': 'LOW',
+            'location_anomaly': 'MEDIUM',
+            'device_anomaly': 'MEDIUM',
+            'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
+            'type_preference': ['PIX', 'TED'],
+            'amount_multiplier': (5.0, 20.0),
+            'account_age_days_max': 90,
+            'rapid_credit_access': True,
+            'withdrawal_post_credit': True,
+        },
+        'prevalence': 0.03,
+        'fraud_score_base': 0.82,
+    },
+
+    'DEEP_FAKE_BIOMETRIA': {
+        'name': 'Deep Fake Biométrico',
+        'description': (
+            'Deepfake facial para passar verificação biométrica em abertura de '
+            'conta ou redefinição de senha. Emergente desde 2023 com IA generativa.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'HIGH',
+            'new_beneficiary_prob': 0.70,
+            'velocity': 'MEDIUM',
+            'time_anomaly': 'MEDIUM',
+            'location_anomaly': 'HIGH',
+            'device_anomaly': 'HIGH',
+            'channel_preference': ['MOBILE_APP'],
+            'type_preference': ['PIX', 'TED'],
+            'amount_multiplier': (2.0, 10.0),
+            'biometric_bypass': True,
+            'face_match_score': (0.75, 0.90),
+            'account_age_days_max': 30,
+        },
+        'prevalence': 0.02,
+        'fraud_score_base': 0.85,
+    },
+
+    'GOLPE_INVESTIMENTO': {
+        'name': 'Golpe de Investimento / Pirâmide',
+        'description': (
+            'Esquema Ponzi/pirâmide: vítima faz depósitos recorrentes crescentes '
+            'prometidos de alto retorno. COAF reporta crescimento de STRs.'
+        ),
+        'characteristics': {
+            'value_anomaly': 'MEDIUM',
+            'new_beneficiary_prob': 0.30,         # Sempre para mesma conta
+            'velocity': 'LOW',
+            'time_anomaly': 'LOW',
+            'location_anomaly': 'NONE',
+            'device_anomaly': 'NONE',
+            'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
+            'type_preference': ['PIX', 'TED'],
+            'amount_multiplier': (3.0, 8.0),
+            'escalation_rate': 1.5,               # Cada depósito ~50% maior
+            'periodicity_days': (7, 30),
+            'same_beneficiary_recurrent': True,
+        },
+        'prevalence': 0.03,
+        'fraud_score_base': 0.72,
+    },
+
+    'FRAUDE_QR_CODE': {
+        'name': 'Fraude via QR Code',
+        'description': (
+            'QR Code de pagamento substituído em lojas/anúncios online. '
+            'Vítima paga PIX para conta do fraudador. Segundo canal mais '
+            'reportado para fraude PIX (BCB PIX MED).'
+        ),
+        'characteristics': {
+            'value_anomaly': 'MEDIUM',
+            'new_beneficiary_prob': 0.90,
+            'velocity': 'LOW',
+            'time_anomaly': 'LOW',
+            'location_anomaly': 'LOW',
+            'device_anomaly': 'NONE',
+            'channel_preference': ['MOBILE_APP'],
+            'type_preference': ['PIX'],
+            'amount_multiplier': (1.5, 4.0),
+            'payment_method': 'QR_CODE',
+            'merchant_mismatch': True,
+        },
+        'prevalence': 0.04,
+        'fraud_score_base': 0.68,
+    },
+
+    'PHISHING_BANCARIO': {
+        'name': 'Phishing Bancário',
+        'description': (
+            'Vítima clica em link falso (SMS, e-mail, WhatsApp) e insere '
+            'credenciais. Vetor #1 de comprometimento (FEBRABAN 2024). '
+            'Diferente de CREDENTIAL_STUFFING (automatizado).'
+        ),
+        'characteristics': {
+            'value_anomaly': 'HIGH',
+            'new_beneficiary_prob': 0.65,
+            'velocity': 'HIGH',
+            'time_anomaly': 'MEDIUM',
+            'location_anomaly': 'HIGH',
+            'device_anomaly': 'HIGH',
+            'channel_preference': ['MOBILE_APP', 'WEB_BANKING'],
+            'type_preference': ['PIX', 'TED'],
+            'amount_multiplier': (1.5, 6.0),
+            'transaction_burst': (3, 8),
+            'post_login_delay_minutes': (5, 30),
+        },
+        'prevalence': 0.05,
+        'fraud_score_base': 0.80,
+    },
 }
+
+# Apply RAG-calibrated overrides before weights are derived from prevalences
+try:
+    from .calibration_loader import apply_calibration_overrides as _apply_cal
+    _apply_cal(FRAUD_PATTERNS)
+except Exception as _cal_exc:  # noqa: BLE001
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "Calibration overrides not applied: %s", _cal_exc
+    )
 
 # List of fraud types for random selection
 FRAUD_TYPES_LIST = list(FRAUD_PATTERNS.keys())
