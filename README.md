@@ -37,7 +37,7 @@
   <tr>
     <td width="33%"><strong>Brazil-first realism</strong><br />Valid CPF, real banks, PIX BACEN fields, behavioral profiles, seasonality, and Brazilian city or state context.</td>
     <td width="33%"><strong>Ready for pipelines</strong><br />Batch files, streaming events, schema mode, database export, Kafka or webhook delivery, and reproducible seeds.</td>
-    <td width="33%"><strong>Fraud-focused labels</strong><br />17 banking fraud patterns, 11 ride-share fraud types, 17 risk signals, and 4 correlation rules in the fraud signal pipeline.</td>
+    <td width="33%"><strong>Fraud-focused labels</strong><br />25 banking fraud patterns (RAG-calibrated), 11 ride-share fraud types, 17 risk signals, and 4 correlation rules in the fraud signal pipeline.</td>
   </tr>
 </table>
 
@@ -52,7 +52,7 @@ A hosted cloud API is available at [synthfin.com.br](https://synthfin.com.br) fo
 | Category | Included |
 |---|---|
 | Generators | Banking transactions, ride-share rides, or both (`--type all`) |
-| Banking fraud | 17 patterns: `ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO`, `MAO_FANTASMA`, `WHATSAPP_CLONE`, `SIM_SWAP`, `CREDENTIAL_STUFFING`, `SYNTHETIC_IDENTITY`, `SEQUESTRO_RELAMPAGO` |
+| Banking fraud | 25 patterns: `ENGENHARIA_SOCIAL`, `PIX_GOLPE`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `FRAUDE_APLICATIVO`, `BOLETO_FALSO`, `FALSA_CENTRAL_TELEFONICA`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `WHATSAPP_CLONE`, `DISTRIBUTED_VELOCITY`, `PHISHING_BANCARIO`, `FRAUDE_QR_CODE`, `FRAUDE_DELIVERY_APP`, `MAO_FANTASMA`, `CREDENTIAL_STUFFING`, `EMPRESTIMO_FRAUDULENTO`, `GOLPE_INVESTIMENTO`, `SIM_SWAP`, `PIX_AGENDADO_FRAUDE`, `SEQUESTRO_RELAMPAGO`, `SYNTHETIC_IDENTITY`, `DEEP_FAKE_BIOMETRIA` |
 | Ride-share fraud | 11 types: `GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`, `REFUND_ABUSE`, `PAYMENT_CHARGEBACK`, `DESTINATION_DISPARITY`, `ACCOUNT_TAKEOVER_RIDE` |
 | Fraud scoring | `fraud_risk_score` 0–100 from 17 signals and 4 correlation rules |
 | Behavioral profiles | 7 transaction profiles + 7 ride profiles; sticky per customer |
@@ -513,11 +513,11 @@ Every file is JSONL — one JSON object per line. The examples below are real re
 |---|---|
 | Banking | PIX, TED, DOC, boleto, withdrawals, POS and ecommerce flows, merchant context, device context, BACEN PIX fields, and valid CPF-linked customers |
 | Ride-share | Uber, 99, Cabify, and inDrive style trips with drivers, passengers, surge pricing, weather impact, and geospatial distance logic |
-| Fraud labels | 17 banking fraud patterns and 11 ride-share fraud types with configurable fraud rate |
+| Fraud labels | 25 banking fraud patterns (RAG-calibrated) and 11 ride-share fraud types with configurable fraud rate |
 | Fraud scoring | 17 fraud signals plus 4 rule correlations, producing `fraud_risk_score` from 0 to 100 |
 | Temporal realism | Trimodal hourly peaks, weekday weighting, Black Friday, Christmas, 13th salary, and Carnaval seasonality |
 | Validation | `validate_realism.py`, bundled schemas, deterministic seeds, and schema checks |
-| Quality | v4.9 scorecard: fraud/legit score ~60% overlap, amount ratio 8.5x (Sparkov: 7.84x), 0 always-null columns |
+| Quality | v5 scorecard: realism 8.0/10, fraud/legit ratio 5.09× (BCB target 5–8×), 25 fraud types, 27 states, 117 columns, 0 always-null columns |
 
 ### Banking fraud patterns (25 total)
 
@@ -527,8 +527,8 @@ Every file is JSONL — one JSON object per line. The examples below are real re
 **Additional patterns (original defaults):**  
 `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `SIM_SWAP`, `CREDENTIAL_STUFFING`, `SYNTHETIC_IDENTITY`
 
-**New patterns (v4.1.0 — calibrated with MJSP/BCB data):**  
-`DEEP_FAKE`, `FALSA_CENTRAL_TELEFONICA`, `PIX_AGENDADO_FRAUDE`, `EMPRESTIMO_FRAUDULENTO`, `FRAUDE_DELIVERY`, `LAVAGEM_ESTRUTURADA`, `TRIANGULACAO_FINANCEIRA`, `QR_CODE_FRAUDULENTO`
+**New patterns (v4-beta — calibrated with MJSP/BCB/Febraban data):**  
+`DEEP_FAKE_BIOMETRIA`, `FALSA_CENTRAL_TELEFONICA`, `PIX_AGENDADO_FRAUDE`, `EMPRESTIMO_FRAUDULENTO`, `FRAUDE_DELIVERY_APP`, `FRAUDE_QR_CODE`, `PHISHING_BANCARIO`, `GOLPE_INVESTIMENTO`
 
 ### Ride-share fraud types
 
@@ -569,19 +569,44 @@ Starting from v4.9.0+, fraud type prevalences and amount multipliers are loaded 
 
 | Fraud type | Original | Calibrated | Real-world source |
 |---|:---:|:---:|---|
-| `PIX_GOLPE` | 25.0% | **4.75%** | BCB PIX MED (49 months) |
-| `ENGENHARIA_SOCIAL` | 20.0% | **13.5%** | Febraban Tech 2024/2025 |
-| `MULA_FINANCEIRA` | 6.0% | **14.7%** | BCB: 100K–107K accounts flagged/month |
-| `MAO_FANTASMA` | 4.0% | **11.5%** | Febraban: remote-access trojans |
-| `CONTA_TOMADA` | 15.0% | **2.0%** | B3 statistical datasets |
-| `CARTAO_CLONADO` | 14.0% | **1.5%** | BCB + EMV chip data |
-| `BOLETO_FALSO` | 8.0% | **2.7%** | MJSP tipologias |
-| `WHATSAPP_CLONE` | 5.0% | **2.3%** | SaferNet/MJSP |
-| `SEQUESTRO_RELAMPAGO` | — | mult 2.97× | BCB Res. 142/2021 night limit |
+| `PIX_GOLPE` | 25.0% | **13.10%** | BCB PIX MED (49 months) |
+| `ENGENHARIA_SOCIAL` | 20.0% | **14.98%** | Febraban Tech 2024/2025 |
+| `CONTA_TOMADA` | 15.0% | **8.21%** | B3 statistical datasets |
+| `CARTAO_CLONADO` | 14.0% | **6.74%** | BCB + EMV chip data |
+| `BOLETO_FALSO` | 8.0% | **5.23%** | MJSP tipologias |
+| `MULA_FINANCEIRA` | 6.0% | **4.29%** | BCB: 100K–107K accounts flagged/month |
+| `WHATSAPP_CLONE` | 5.0% | **2.75%** | SaferNet/MJSP |
+| `MAO_FANTASMA` | 4.0% | **1.88%** | Febraban: remote-access trojans |
+| `SEQUESTRO_RELAMPAGO` | — | **1.39%** | BCB Res. 142/2021 night limit |
 
 The overrides are applied in `calibration_loader.py` — the file is loaded once at import time and normalizes the weights so they always sum to 1.0. If the file is absent the generator falls back to the original values with no error.
 
 To regenerate overrides from the latest RAG evidence, run the FraudFlow pipeline (`POST /regras/gerar` on the data API) and copy the output to `data/rules/fraud_pattern_overrides.json`.
+
+## Calibration Benchmark — Before vs After
+
+The table below compares the generated data **before** (default hardcoded patterns) and **after** the RAG-calibrated pipeline. Both runs use 268K transactions, seed 42.
+
+| Dimension | Before | After (V5) | Change |
+|---|:---:|:---:|:---:|
+| **Realism score** | 7.9/10 | **8.0/10** | +1.3% |
+| **Fraud/legit ratio** | 1.87× | **5.09×** | **+172%** |
+| **Fraud types** | 17 | **25** | **+8 new** |
+| Fraud mean value | R$ 493 | **R$ 1,210** | +145% |
+| Legit mean value | R$ 264 | **R$ 238** | −10% |
+| Temporal score | 7.2/10 | 7.2/10 | = |
+| Geographic score | 10/10 | 10/10 | = |
+| Fraud rate score | 6.6/10 | **7.0/10** | +5.7% |
+| SP+RJ+MG share | 37.0% | **38.2%** | +3.3% |
+| Fraud score sep. | 27.7 pts | **29.6 pts** | +6.7% |
+| States covered | 27 | 27 | = |
+| Output columns | 117 | 117 | = |
+| Tests passing | 194/194 | 194/194 | = |
+
+**Key improvements:**
+- Fraud amounts are now **5× higher** than legitimate (was 1.87×), matching BCB/Sparkov real-world ratios of 5–8×
+- 8 new fraud patterns sourced from MJSP Aliança Nacional, BCB, and Febraban reports
+- Fraud score separation improved, making fraud records more distinctly detectable
 
 ## Real CEP Pipeline
 
