@@ -267,3 +267,46 @@ def _date_weight(d: date) -> float:
 def pick_hour(weights: List[int] = HORA_WEIGHTS_PADRAO) -> int:
     """Sorteia hora do dia usando os pesos fornecidos."""
     return random.choices(HORA_LIST_PADRAO, weights=weights, k=1)[0]
+
+
+# ─── V6-M11: Seasonal fraud type weight boosts ───────────────────────────────
+# Certain fraud types are more prevalent in specific months/seasons.
+# Returns a multiplier (1.0 = no change) applied to per-type weights.
+_SEASONAL_FRAUD_BOOSTS: Dict[int, Dict[str, float]] = {
+    # November: Black Friday → phishing, card cloning, fake e-commerce spike
+    11: {
+        'PHISHING_BANCARIO': 1.8,
+        'CARTAO_CLONADO': 1.6,
+        'FRAUDE_APLICATIVO': 1.5,
+        'COMPRA_TESTE': 1.4,
+        'CARD_TESTING': 1.5,
+    },
+    # December: 13º salário + Christmas → investment scams, social engineering
+    12: {
+        'GOLPE_INVESTIMENTO': 1.7,
+        'ENGENHARIA_SOCIAL': 1.3,
+        'PIX_GOLPE': 1.3,
+        'EMPRESTIMO_FRAUDULENTO': 1.4,
+        'WHATSAPP_CLONE': 1.3,
+    },
+    # January: post-holiday → mulas moving money, account takeovers
+    1: {
+        'MULA_FINANCEIRA': 1.5,
+        'CONTA_TOMADA': 1.3,
+    },
+    # February/March: Carnaval → physical crimes, device theft
+    2: {
+        'SEQUESTRO_RELAMPAGO': 1.8,
+        'SIM_SWAP': 1.4,
+        'CONTA_TOMADA': 1.3,
+    },
+    3: {
+        'SEQUESTRO_RELAMPAGO': 1.5,
+        'SIM_SWAP': 1.3,
+    },
+}
+
+
+def get_seasonal_fraud_boost(month: int, fraud_type: str) -> float:
+    """Returns seasonal weight multiplier for a fraud type in a given month."""
+    return _SEASONAL_FRAUD_BOOSTS.get(month, {}).get(fraud_type, 1.0)

@@ -76,8 +76,8 @@ Available formats: """ + ", ".join(available_formats),
     parser.add_argument(
         "--fraud-rate", "-r",
         type=float,
-        default=0.008,
-        help="Fraud rate 0.0–1.0. Default: 0.008 (0.8%%)",
+        default=0.015,
+        help="Fraud rate 0.0–1.0. Default: 0.015 (1.5%%)",
     )
 
     # ---------------------------------------------------------------- workers

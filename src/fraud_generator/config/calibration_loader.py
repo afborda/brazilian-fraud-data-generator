@@ -121,6 +121,12 @@ def apply_calibration_overrides(fraud_patterns: Dict[str, Any]) -> Dict[str, Any
                 fields["new_beneficiary_prob"]
             )
 
+        # ── V6-M8: Pareto EVT parameters for amount distribution ──
+        if "pareto_shape" in fields and fields["pareto_shape"] is not None:
+            pattern["characteristics"]["pareto_shape"] = float(fields["pareto_shape"])
+        if "pareto_scale" in fields and fields["pareto_scale"] is not None:
+            pattern["characteristics"]["pareto_scale"] = float(fields["pareto_scale"])
+
         applied += 1
 
     logger.info(

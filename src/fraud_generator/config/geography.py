@@ -5,36 +5,38 @@ Contains states, coordinates, and population weights.
 
 # Brazilian states with coordinates (centro aproximado) and population weight
 # fraud_concentration: índice relativo de concentração de fraudes por estado.
-# Baseado em dados BCB Ranking Reclamações 2024 e relatório Aliança Nacional.
-# 1.0 = média nacional. >1.0 = acima da média. <1.0 = abaixo.
+# Calibrado com dados do Anuário Brasileiro de Segurança Pública 2025
+# (taxa de estelionato digital por 100k hab) e estudo FGV PIX 2025.
+# Média nacional ~1.019/100k. Índice = taxa_uf / média_nacional.
+# Fonte: SP=1744/100k (+71%), DF=1600 (+57%), PR=1300 (+28%).
 ESTADOS_BR = {
-    'SP': {'name': 'São Paulo', 'lat': -23.55, 'lon': -46.64, 'weight': 22, 'fraud_concentration': 1.35},
-    'RJ': {'name': 'Rio de Janeiro', 'lat': -22.91, 'lon': -43.17, 'weight': 8, 'fraud_concentration': 1.40},
-    'MG': {'name': 'Minas Gerais', 'lat': -19.92, 'lon': -43.94, 'weight': 10, 'fraud_concentration': 1.05},
-    'BA': {'name': 'Bahia', 'lat': -12.97, 'lon': -38.51, 'weight': 7, 'fraud_concentration': 0.90},
-    'RS': {'name': 'Rio Grande do Sul', 'lat': -30.03, 'lon': -51.23, 'weight': 6, 'fraud_concentration': 0.95},
-    'PR': {'name': 'Paraná', 'lat': -25.43, 'lon': -49.27, 'weight': 6, 'fraud_concentration': 1.00},
-    'PE': {'name': 'Pernambuco', 'lat': -8.05, 'lon': -34.88, 'weight': 5, 'fraud_concentration': 1.10},
-    'CE': {'name': 'Ceará', 'lat': -3.72, 'lon': -38.54, 'weight': 4, 'fraud_concentration': 1.05},
-    'PA': {'name': 'Pará', 'lat': -1.46, 'lon': -48.50, 'weight': 4, 'fraud_concentration': 0.85},
-    'SC': {'name': 'Santa Catarina', 'lat': -27.60, 'lon': -48.55, 'weight': 4, 'fraud_concentration': 0.90},
-    'GO': {'name': 'Goiás', 'lat': -16.68, 'lon': -49.25, 'weight': 4, 'fraud_concentration': 1.00},
-    'MA': {'name': 'Maranhão', 'lat': -2.53, 'lon': -44.27, 'weight': 3, 'fraud_concentration': 0.80},
-    'PB': {'name': 'Paraíba', 'lat': -7.12, 'lon': -34.86, 'weight': 2, 'fraud_concentration': 0.85},
-    'ES': {'name': 'Espírito Santo', 'lat': -20.32, 'lon': -40.34, 'weight': 2, 'fraud_concentration': 0.95},
-    'AM': {'name': 'Amazonas', 'lat': -3.10, 'lon': -60.02, 'weight': 2, 'fraud_concentration': 0.80},
-    'RN': {'name': 'Rio Grande do Norte', 'lat': -5.79, 'lon': -35.21, 'weight': 2, 'fraud_concentration': 0.85},
-    'PI': {'name': 'Piauí', 'lat': -5.09, 'lon': -42.80, 'weight': 2, 'fraud_concentration': 0.75},
-    'AL': {'name': 'Alagoas', 'lat': -9.67, 'lon': -35.74, 'weight': 2, 'fraud_concentration': 0.80},
-    'MT': {'name': 'Mato Grosso', 'lat': -15.60, 'lon': -56.10, 'weight': 2, 'fraud_concentration': 0.90},
-    'MS': {'name': 'Mato Grosso do Sul', 'lat': -20.44, 'lon': -54.65, 'weight': 1, 'fraud_concentration': 0.85},
-    'DF': {'name': 'Distrito Federal', 'lat': -15.78, 'lon': -47.93, 'weight': 2, 'fraud_concentration': 1.25},
-    'SE': {'name': 'Sergipe', 'lat': -10.91, 'lon': -37.07, 'weight': 1, 'fraud_concentration': 0.80},
-    'RO': {'name': 'Rondônia', 'lat': -8.76, 'lon': -63.90, 'weight': 1, 'fraud_concentration': 0.75},
-    'TO': {'name': 'Tocantins', 'lat': -10.18, 'lon': -48.33, 'weight': 1, 'fraud_concentration': 0.70},
-    'AC': {'name': 'Acre', 'lat': -9.97, 'lon': -67.81, 'weight': 0.5, 'fraud_concentration': 0.70},
-    'AP': {'name': 'Amapá', 'lat': 0.03, 'lon': -51.05, 'weight': 0.5, 'fraud_concentration': 0.75},
-    'RR': {'name': 'Roraima', 'lat': 2.82, 'lon': -60.67, 'weight': 0.5, 'fraud_concentration': 0.70},
+    'SP': {'name': 'São Paulo', 'lat': -23.55, 'lon': -46.64, 'weight': 22, 'fraud_concentration': 1.71},
+    'RJ': {'name': 'Rio de Janeiro', 'lat': -22.91, 'lon': -43.17, 'weight': 8, 'fraud_concentration': 0.93},
+    'MG': {'name': 'Minas Gerais', 'lat': -19.92, 'lon': -43.94, 'weight': 10, 'fraud_concentration': 0.88},
+    'BA': {'name': 'Bahia', 'lat': -12.97, 'lon': -38.51, 'weight': 7, 'fraud_concentration': 0.74},
+    'RS': {'name': 'Rio Grande do Sul', 'lat': -30.03, 'lon': -51.23, 'weight': 6, 'fraud_concentration': 0.93},
+    'PR': {'name': 'Paraná', 'lat': -25.43, 'lon': -49.27, 'weight': 6, 'fraud_concentration': 1.28},
+    'PE': {'name': 'Pernambuco', 'lat': -8.05, 'lon': -34.88, 'weight': 5, 'fraud_concentration': 0.83},
+    'CE': {'name': 'Ceará', 'lat': -3.72, 'lon': -38.54, 'weight': 4, 'fraud_concentration': 0.79},
+    'PA': {'name': 'Pará', 'lat': -1.46, 'lon': -48.50, 'weight': 4, 'fraud_concentration': 0.59},
+    'SC': {'name': 'Santa Catarina', 'lat': -27.60, 'lon': -48.55, 'weight': 4, 'fraud_concentration': 1.18},
+    'GO': {'name': 'Goiás', 'lat': -16.68, 'lon': -49.25, 'weight': 4, 'fraud_concentration': 1.13},
+    'MA': {'name': 'Maranhão', 'lat': -2.53, 'lon': -44.27, 'weight': 3, 'fraud_concentration': 0.49},
+    'PB': {'name': 'Paraíba', 'lat': -7.12, 'lon': -34.86, 'weight': 2, 'fraud_concentration': 0.70},
+    'ES': {'name': 'Espírito Santo', 'lat': -20.32, 'lon': -40.34, 'weight': 2, 'fraud_concentration': 0.98},
+    'AM': {'name': 'Amazonas', 'lat': -3.10, 'lon': -60.02, 'weight': 2, 'fraud_concentration': 0.55},
+    'RN': {'name': 'Rio Grande do Norte', 'lat': -5.79, 'lon': -35.21, 'weight': 2, 'fraud_concentration': 0.75},
+    'PI': {'name': 'Piauí', 'lat': -5.09, 'lon': -42.80, 'weight': 2, 'fraud_concentration': 0.44},
+    'AL': {'name': 'Alagoas', 'lat': -9.67, 'lon': -35.74, 'weight': 2, 'fraud_concentration': 0.60},
+    'MT': {'name': 'Mato Grosso', 'lat': -15.60, 'lon': -56.10, 'weight': 2, 'fraud_concentration': 1.03},
+    'MS': {'name': 'Mato Grosso do Sul', 'lat': -20.44, 'lon': -54.65, 'weight': 1, 'fraud_concentration': 1.08},
+    'DF': {'name': 'Distrito Federal', 'lat': -15.78, 'lon': -47.93, 'weight': 2, 'fraud_concentration': 1.57},
+    'SE': {'name': 'Sergipe', 'lat': -10.91, 'lon': -37.07, 'weight': 1, 'fraud_concentration': 0.65},
+    'RO': {'name': 'Rondônia', 'lat': -8.76, 'lon': -63.90, 'weight': 1, 'fraud_concentration': 0.70},
+    'TO': {'name': 'Tocantins', 'lat': -10.18, 'lon': -48.33, 'weight': 1, 'fraud_concentration': 0.55},
+    'AC': {'name': 'Acre', 'lat': -9.97, 'lon': -67.81, 'weight': 0.5, 'fraud_concentration': 0.50},
+    'AP': {'name': 'Amapá', 'lat': 0.03, 'lon': -51.05, 'weight': 0.5, 'fraud_concentration': 0.55},
+    'RR': {'name': 'Roraima', 'lat': 2.82, 'lon': -60.67, 'weight': 0.5, 'fraud_concentration': 0.80},
 }
 
 ESTADOS_LIST = list(ESTADOS_BR.keys())

@@ -21,6 +21,8 @@ from ..config.transactions import (
 from ..config.seasonality import (
     pick_weighted_date,
     pick_hour,
+    get_monthly_multiplier,
+    get_seasonal_fraud_boost,
     HORA_WEIGHTS_PADRAO,
     HORA_WEIGHTS_FRAUD_ATO,
 )
@@ -293,9 +295,34 @@ class TransactionGenerator:
         if force_fraud is not None:
             is_fraud = force_fraud
         else:
-            is_fraud = random.random() < self.fraud_rate
+            # V6-M9: Modulate fraud rate by state (BCB inadimplência data)
+            _STATE_FRAUD_MULT = {
+                'MA': 1.35, 'PI': 1.30, 'AL': 1.28, 'PA': 1.25, 'AP': 1.22,
+                'AM': 1.20, 'CE': 1.18, 'PE': 1.15, 'BA': 1.12, 'PB': 1.10,
+                'RN': 1.10, 'SE': 1.08, 'TO': 1.05, 'AC': 1.05, 'RO': 1.02,
+                'RR': 1.02, 'GO': 1.00, 'MT': 0.98, 'MS': 0.98, 'MG': 0.95,
+                'ES': 0.95, 'RJ': 1.10, 'SP': 0.92, 'PR': 0.88, 'SC': 0.85,
+                'RS': 0.90, 'DF': 0.95,
+            }
+            if customer_state and self.fraud_rate < 1.0:
+                effective_rate = min(1.0, self.fraud_rate * _STATE_FRAUD_MULT.get(customer_state, 1.0))
+            else:
+                effective_rate = self.fraud_rate
+            # V6-M11: Monthly seasonality modulation
+            if hasattr(timestamp, 'month') and self.fraud_rate < 1.0:
+                effective_rate = min(1.0, effective_rate * get_monthly_multiplier(timestamp.month))
+            is_fraud = random.random() < effective_rate
 
-        fraud_type: Optional[str] = self._fraud_type_cache.sample() if is_fraud else None
+        # V6-M11: Seasonal fraud type selection — boost weights by month
+        if is_fraud and hasattr(timestamp, 'month'):
+            _month = timestamp.month
+            boosted_weights = [
+                w * get_seasonal_fraud_boost(_month, ft)
+                for ft, w in zip(FRAUD_TYPES_LIST, FRAUD_TYPES_WEIGHTS)
+            ]
+            fraud_type = random.choices(FRAUD_TYPES_LIST, weights=boosted_weights, k=1)[0]
+        else:
+            fraud_type = self._fraud_type_cache.sample() if is_fraud else None
 
         # ── Select transaction type ───────────────────────────────────────
         if self.use_profiles and customer_profile:
@@ -841,8 +868,17 @@ class TransactionGenerator:
             else:
                 profile_avg = current_amount
             
-            # Apply multiplier
-            new_amount = profile_avg * random.uniform(min_mult, max_mult)
+            # V6-M8: Use Pareto distribution when calibrated, uniform as fallback
+            pareto_shape = characteristics.get('pareto_shape')
+            pareto_scale = characteristics.get('pareto_scale')
+            if pareto_shape and pareto_scale:
+                # Generalized Pareto: scale * (1 + shape * U)^(1/shape) with clamp
+                mult = (random.paretovariate(pareto_shape) * pareto_scale)
+                mult = max(min_mult, min(mult, max_mult * 3))  # clamp within reasonable range
+            else:
+                mult = random.uniform(min_mult, max_mult)
+            
+            new_amount = profile_avg * mult
             tx['amount'] = round(new_amount, 2)
         
         # NEW BENEFICIARY: Always for certain fraud types

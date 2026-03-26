@@ -87,7 +87,8 @@ class SessionEnricher:
         timestamp = bag.timestamp
         customer_profile = bag.customer_profile
         is_fraud = bag.is_fraud
-        is_pro_plus = is_plan(bag.license, "pro", "team", "enterprise")
+        # V6-M1: velocity windows always enabled (was gated by is_plan Pro+)
+        is_pro_plus = True
 
         if is_fraud:
             default_transactions_24h = buf.next_int(5, 50)

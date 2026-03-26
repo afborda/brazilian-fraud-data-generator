@@ -24,6 +24,34 @@ from ..config.pix import (
 from ..utils.helpers import generate_random_hash
 from ..profiles.behavioral import get_transaction_value_for_profile
 
+# ── V6-M13: Demographic age multiplier (Artigo Fraudes Transacionais 2026) ──
+# Ticket médio fraude: 18-24 R$964, 30-49 R$2.540, 60+ R$4.820
+# Normalized to baseline 1.0 at 30-49 range
+_PROFILE_AGE_GROUP: dict = {
+    "young_digital":        "18-29",
+    "subscription_heavy":   "22-45",
+    "malware_ats_victim":   "18-45",
+    "family_provider":      "30-55",
+    "business_owner":       "30-55",
+    "high_spender":         "30-60",
+    "micro_empreendedor":   "25-55",
+    "ato_victim":           "35-65",
+    "traditional_senior":   "55-80",
+    "falsa_central_victim": "55-85",
+}
+
+_AGE_GROUP_MULTIPLIER: dict = {
+    "18-29": 0.38,   # R$964 / R$2.540
+    "22-45": 0.70,   # blended
+    "18-45": 0.65,   # blended
+    "30-55": 1.0,    # baseline
+    "30-60": 1.1,    # slightly above
+    "25-55": 0.90,   # slightly below
+    "35-65": 1.3,    # older skew
+    "55-80": 1.90,   # R$4.820 / R$2.540
+    "55-85": 1.90,   # seniors
+}
+
 # ── Fraud types that may produce impossible travel events (Pro+) ──────────────
 _IMPOSSIBLE_TRAVEL_TYPES = frozenset({
     "CONTA_TOMADA", "SIM_SWAP", "MAO_FANTASMA", "CREDENTIAL_STUFFING",
@@ -141,6 +169,15 @@ class FraudEnricher:
                 tx.setdefault(_f, None)
             tx.setdefault("automation_signature", "HUMAN")
             tx.setdefault("bot_confidence_score", round(random.uniform(0.0, 0.05), 3))
+            # V6-M14: PJ/PF destination defaults for legit transactions
+            if random.random() < 0.15:  # 15% PJ in legit (vs 65% fraud)
+                tx.setdefault("destination_account_type", "PJ")
+                tx.setdefault("destination_company_age_days", random.randint(90, 3650))
+                tx.setdefault("destination_account_age_days", random.randint(30, 1825))
+            else:
+                tx.setdefault("destination_account_type", "PF")
+                tx.setdefault("destination_company_age_days", None)
+                tx.setdefault("destination_account_age_days", random.randint(30, 3650))
             return
 
         fraud_type = bag.fraud_type
@@ -163,7 +200,10 @@ class FraudEnricher:
                 if (use_profiles and customer_profile)
                 else tx.get("amount", 100.0)
             )
-            tx["amount"] = round(base * random.uniform(lo_m, hi_m), 2)
+            # V6-M13: modulate by victim age group (demographic factor)
+            age_group = _PROFILE_AGE_GROUP.get(customer_profile)
+            age_mult = _AGE_GROUP_MULTIPLIER.get(age_group, 1.0) if age_group else 1.0
+            tx["amount"] = round(base * random.uniform(lo_m, hi_m) * age_mult, 2)
 
         # ── New beneficiary ───────────────────────────────────────────────
         new_ben_prob = characteristics.get("new_beneficiary_prob")
@@ -417,3 +457,14 @@ class FraudEnricher:
         else:
             tx.setdefault("automation_signature", None)
             tx.setdefault("bot_confidence_score", None)
+
+        # ── V6-M14: PJ/PF destination (Artigo Fraudes Transacionais 2026)
+        # 65% dos golpes finalizam em contas PJ (vs 15% em legítimas)
+        if random.random() < 0.65:
+            tx["destination_account_type"] = "PJ"
+            tx["destination_company_age_days"] = random.randint(1, 90)    # empresa recém-criada
+            tx["destination_account_age_days"] = random.randint(1, 30)    # conta nova
+        else:
+            tx["destination_account_type"] = "PF"
+            tx["destination_company_age_days"] = None
+            tx["destination_account_age_days"] = random.randint(30, 1825)
