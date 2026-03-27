@@ -65,15 +65,32 @@ HORA_WEIGHTS_FRAUD_RAT: List[int] = [
 ]
 
 # Mapeamento tipo de fraude → perfil horário
+# Fonte temporal social engineering: BioCatch Digital Banking Fraud Trends Brazil 2024
+# ">80% of social engineering fraud in Brazil occurs during normal business hours"
+# URL: https://www.biocatch.com/white-paper-digital-banking-fraud-trends-brazil-2024-en
 FRAUD_TYPE_HOUR_PROFILE: Dict[str, List[int]] = {
-    'CONTA_TOMADA': HORA_WEIGHTS_FRAUD_ATO,
-    'CREDENTIAL_STUFFING': HORA_WEIGHTS_FRAUD_ATO,
-    'SIM_SWAP': HORA_WEIGHTS_FRAUD_ATO,
-    'MAO_FANTASMA': HORA_WEIGHTS_FRAUD_RAT,   # RAT: pico 02h-05h enquanto vítima dorme
+    # ATO / noturno — atacante age à noite quando vítima não percebe
+    'CONTA_TOMADA':          HORA_WEIGHTS_FRAUD_ATO,
+    'CREDENTIAL_STUFFING':   HORA_WEIGHTS_FRAUD_ATO,
+    'SIM_SWAP':              HORA_WEIGHTS_FRAUD_ATO,
+    'PHISHING_BANCARIO':     HORA_WEIGHTS_FRAUD_ATO,
+    'DEEP_FAKE_BIOMETRIA':   HORA_WEIGHTS_FRAUD_ATO,
+    'PIX_AGENDADO_FRAUDE':   HORA_WEIGHTS_FRAUD_ATO,
+    # RAT — madrugada enquanto vítima dorme
+    'MAO_FANTASMA':          HORA_WEIGHTS_FRAUD_RAT,
+    # Engenharia social / horário comercial — golpista liga/mensagem durante o dia
+    # Fonte: BioCatch 2024 — >80% dos golpes de eng. social ocorrem em horário comercial
+    'ENGENHARIA_SOCIAL':     HORA_WEIGHTS_COMERCIAL,
+    'PIX_GOLPE':             HORA_WEIGHTS_COMERCIAL,
+    'WHATSAPP_CLONE':        HORA_WEIGHTS_COMERCIAL,
     'FALSA_CENTRAL_TELEFONICA': HORA_WEIGHTS_COMERCIAL,
-    'GOLPE_INVESTIMENTO': HORA_WEIGHTS_COMERCIAL,
-    'EMPRESTIMO_FRAUDULENTO': HORA_WEIGHTS_COMERCIAL,
-    'FRAUDE_DELIVERY_APP': HORA_WEIGHTS_DELIVERY,
+    'GOLPE_INVESTIMENTO':    HORA_WEIGHTS_COMERCIAL,
+    'EMPRESTIMO_FRAUDULENTO':HORA_WEIGHTS_COMERCIAL,
+    'SEQUESTRO_RELAMPAGO':   HORA_WEIGHTS_COMERCIAL,  # ocorre em via pública durante o dia
+    'BOLETO_FALSO':          HORA_WEIGHTS_COMERCIAL,  # vítima paga boleto em horário útil
+    'FRAUDE_QR_CODE':        HORA_WEIGHTS_COMERCIAL,  # scan de QR code em estabelecimento
+    # Delivery — pico almoço e jantar
+    'FRAUDE_DELIVERY_APP':   HORA_WEIGHTS_DELIVERY,
     # Todos os outros usam HORA_WEIGHTS_PADRAO via get default
 }
 
