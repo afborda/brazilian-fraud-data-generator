@@ -91,14 +91,13 @@ BOT_ATS = DeviceSignalProfile(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Profile: Coerced / Falsa Central
-# Fingerprint: device in hand (accel ok), pressure high (tense grip),
-#              active call, long confirm latency (being instructed)
-# Maps to fraud rule: FALSA_CENTRAL
+# Profile: Coerced Phone — victim instructed live on a call (Falsa Central,
+#          SEQUESTRO_RELAMPAGO). Active call is the defining signal.
+# Source: Febraban CIAB 2024 — ~70% of falsa-central victims on active call.
 # ─────────────────────────────────────────────────────────────────────────────
 COERCED_USER = DeviceSignalProfile(
     name="coerced_user",
-    description="Victim under phone coercion — natural device signals but high pressure/slow confirmation",
+    description="Victim under live phone coercion — high pressure, slow confirmation, active call",
     pressure_range=(0.75, 0.92),
     typing_interval_ms_range=(150, 600),
     accel_magnitude_range=(0.5, 3.0),
@@ -107,8 +106,49 @@ COERCED_USER = DeviceSignalProfile(
     emulator_prob=0.0,
     rooted_prob=0.01,
     vpn_prob=0.02,
-    active_call_prob=0.90,
+    active_call_prob=0.70,   # falsa_central / sequestro — 70% on active call
     nav_anomaly_prob=0.10,
+    multi_account_prob=0.05,
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Profile: Coerced Social — victim socially engineered via WhatsApp/phone but
+#          NOT necessarily on a live call during the transaction.
+# Source: Febraban 2024 — only 26% of engenharia_social uses phone during tx.
+# ─────────────────────────────────────────────────────────────────────────────
+COERCED_SOCIAL = DeviceSignalProfile(
+    name="coerced_social",
+    description="Victim socially engineered (WhatsApp/messaging) — pressured but rarely on active call",
+    pressure_range=(0.65, 0.85),
+    typing_interval_ms_range=(120, 500),
+    accel_magnitude_range=(0.4, 2.5),
+    session_duration_s_range=(90, 600),
+    confirm_latency_s_range=(10, 90),
+    emulator_prob=0.0,
+    rooted_prob=0.01,
+    vpn_prob=0.02,
+    active_call_prob=0.26,   # Febraban 2024: 26% of engenharia_social uses call
+    nav_anomaly_prob=0.12,
+    multi_account_prob=0.05,
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Profile: Coerced Digital — victim clicks a fake link / scans fake QR code.
+#          Minimal social interaction; digital-only deception.
+# ─────────────────────────────────────────────────────────────────────────────
+COERCED_DIGITAL = DeviceSignalProfile(
+    name="coerced_digital",
+    description="Victim deceived digitally (phishing link, fake QR, fake boleto) — no active call",
+    pressure_range=(0.40, 0.70),
+    typing_interval_ms_range=(80, 350),
+    accel_magnitude_range=(0.3, 2.0),
+    session_duration_s_range=(60, 300),
+    confirm_latency_s_range=(5, 45),
+    emulator_prob=0.0,
+    rooted_prob=0.01,
+    vpn_prob=0.03,
+    active_call_prob=0.05,   # almost never on active call
+    nav_anomaly_prob=0.15,
     multi_account_prob=0.05,
 )
 
@@ -162,22 +202,49 @@ ALL_PROFILES: dict = {
     "normal_human":      NORMAL_HUMAN,
     "bot_ats":           BOT_ATS,
     "coerced_user":      COERCED_USER,
+    "coerced_social":    COERCED_SOCIAL,
+    "coerced_digital":   COERCED_DIGITAL,
     "account_takeover":  ACCOUNT_TAKEOVER,
     "money_mule":        MONEY_MULE,
 }
 
 # Maps transaction fraud_type → most likely device profile
+# Calibrado com dados BCB/RAG fraudflow 2024-2026 + Febraban CIAB 2024
 FRAUD_TYPE_TO_DEVICE_PROFILE: dict = {
-    "MALWARE_ATS":          "bot_ats",
-    "CARD_TESTING":         "bot_ats",
-    "MICRO_BURST_VELOCITY": "bot_ats",
-    "DISTRIBUTED_VELOCITY": "bot_ats",
-    "ENGENHARIA_SOCIAL":    "coerced_user",
-    "PIX_GOLPE":            "coerced_user",
-    "CONTA_TOMADA":         "account_takeover",
-    "CARTAO_CLONADO":       "account_takeover",
-    "LAVAGEM_DINHEIRO":     "money_mule",
-    "TRIANGULACAO":         "money_mule",
+    # Bot / ATS — scripted, automated, no real user
+    "MALWARE_ATS":           "bot_ats",
+    "CARD_TESTING":          "bot_ats",
+    "MICRO_BURST_VELOCITY":  "bot_ats",
+    "DISTRIBUTED_VELOCITY":  "bot_ats",
+    "CREDENTIAL_STUFFING":   "bot_ats",   # automated credential replay
+    "COMPRA_TESTE":          "bot_ats",   # scripted card probe
+    # Coerced Phone — victim on active call with scammer (high active_call_prob=0.70)
+    "FALSA_CENTRAL_TELEFONICA": "coerced_user",  # defining case: victim on phone with fake bank
+    "SEQUESTRO_RELAMPAGO":   "coerced_user",     # physically coerced, attacker present/on call
+    # Coerced Social — victim via WhatsApp/messaging (active_call=0.26, Febraban 2024)
+    "ENGENHARIA_SOCIAL":     "coerced_social",
+    "PIX_GOLPE":             "coerced_social",
+    "WHATSAPP_CLONE":        "coerced_social",
+    "GOLPE_INVESTIMENTO":    "coerced_social",   # online investment scam
+    "EMPRESTIMO_FRAUDULENTO":"coerced_social",   # victim applies for fake loan via app/web
+    # Coerced Digital — victim clicks fake link or scans fake QR (active_call≈0.05)
+    "BOLETO_FALSO":          "coerced_digital",  # victim pays fake boleto (no call needed)
+    "FRAUDE_QR_CODE":        "coerced_digital",  # victim scans fake QR code
+    "FRAUDE_DELIVERY_APP":   "coerced_digital",  # victim orders from fake delivery app
+    # Account Takeover — attacker operating with stolen credentials
+    "CONTA_TOMADA":          "account_takeover",
+    "CARTAO_CLONADO":        "account_takeover",
+    "FRAUDE_APLICATIVO":     "account_takeover",  # compromised app session
+    "MAO_FANTASMA":          "account_takeover",  # remote access tool (RAT)
+    "SIM_SWAP":              "account_takeover",  # after chip swap
+    "PHISHING_BANCARIO":     "account_takeover",  # post-phishing session
+    "DEEP_FAKE_BIOMETRIA":   "account_takeover",  # AI bypasses biometric
+    "SYNTHETIC_IDENTITY":    "account_takeover",  # fake ID credentials
+    "PIX_AGENDADO_FRAUDE":   "account_takeover",  # scheduled from stolen session
+    # Money Mule — real person, coached or complicit
+    "MULA_FINANCEIRA":       "money_mule",
+    "LAVAGEM_DINHEIRO":      "money_mule",
+    "TRIANGULACAO":          "money_mule",
 }
 
 

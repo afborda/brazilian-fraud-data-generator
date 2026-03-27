@@ -621,31 +621,48 @@ class TransactionGenerator:
         Parâmetros calibrados por tipo de fraude usando dados BCB/FEBRABAN/RAG.
         Tipos novos (delivery, card testing) usam distribuição de micro-valor.
         """
+        # Calibrado com dados reais BCB MED + RAG fraudflow 2024-2026
+        # BCB: ticket médio fraude PIX aceita = R$2.591 (jan/2026), razão fraude/legítimo = 14x-18x
+        # RAG: engenharia_social R$3k-R$8k | conta_tomada R$2k-R$15k | golpe_investimento R$5k-R$50k
         _FRAUD_LOGNORMAL = {
             # (mu, sigma, max_val)
-            'LAVAGEM_DINHEIRO':      (math.log(2_000), 1.1, 30_000.0),
-            'TRIANGULACAO':          (math.log(2_000), 1.1, 30_000.0),
-            'CARTAO_CLONADO':        (math.log(600),   1.1, 15_000.0),
-            'CONTA_TOMADA':          (math.log(600),   1.1, 15_000.0),
-            'SEQUESTRO_RELAMPAGO':   (math.log(3_000), 0.8, 50_000.0),
-            'EMPRESTIMO_FRAUDULENTO':(math.log(5_000), 0.7, 100_000.0),
-            'DEEP_FAKE_BIOMETRIA':   (math.log(2_000), 0.9, 30_000.0),
-            'FALSA_CENTRAL_TELEFONICA':(math.log(1_500), 0.8, 20_000.0),
-            'PIX_GOLPE':            (math.log(1_200), 0.8, 15_000.0),
-            'ENGENHARIA_SOCIAL':    (math.log(800),   0.9, 10_000.0),
-            'GOLPE_INVESTIMENTO':   (math.log(1_000), 0.9, 20_000.0),
-            'PHISHING_BANCARIO':    (math.log(1_000), 0.9, 15_000.0),
-            # Micro-valor types
-            'FRAUDE_DELIVERY_APP':  (math.log(35),    0.6,  500.0),
-            'COMPRA_TESTE':         (math.log(10),    0.8,  100.0),
-            'CARD_TESTING':         (math.log(10),    0.8,  100.0),
-            'FRAUDE_QR_CODE':       (math.log(200),   0.9,  5_000.0),
+            # Engenharia social — RAG: R$3k-R$8k; BCB MED jan/2026 ticket médio = R$2.591
+            # Febraban 2024: engenharia_social = maior ticket entre fraudes PIX → ln(5500)
+            'ENGENHARIA_SOCIAL':     (math.log(5_500), 0.75, 20_000.0),
+            # PIX golpe — BCB ticket médio R$1.778-R$2.979 (MED série 2022-2026); alvo p50≈R$2.1k
+            'PIX_GOLPE':             (math.log(2_100), 0.80, 12_000.0),
+            # Conta tomada (ATO) — BCB: drena conta; RAG: R$2k-R$15k
+            'CONTA_TOMADA':          (math.log(2_000), 1.00, 25_000.0),
+            # Cartão clonado (CNP) — BCB: 75% das fraudes de cartão R$200-R$600; mediana R$346
+            'CARTAO_CLONADO':        (math.log(346),   0.90,  8_000.0),
+            # Mão fantasma (RAT) — RAG: drena conta via acesso remoto R$1k-R$5k
+            'MAO_FANTASMA':          (math.log(2_236), 0.90, 25_000.0),
+            # Boleto falso — RAG: R$500-R$3k; vítima paga boleto adulterado
+            'BOLETO_FALSO':          (math.log(1_225), 0.80, 10_000.0),
+            # Falsa central telefônica — RAG: R$1.5k-R$20k; alto ticket (coerção)
+            'FALSA_CENTRAL_TELEFONICA': (math.log(3_000), 0.80, 20_000.0),
+            # Golpe investimento — RAG: R$5k-R$50k (maior ticket de todos)
+            'GOLPE_INVESTIMENTO':    (math.log(5_000), 0.75, 100_000.0),
+            # Phishing bancário — RAG: R$1k-R$5k
+            'PHISHING_BANCARIO':     (math.log(1_500), 0.90, 15_000.0),
+            # Outros tipos com calibração anterior válida
+            'LAVAGEM_DINHEIRO':      (math.log(2_000), 1.10, 30_000.0),
+            'TRIANGULACAO':          (math.log(2_000), 1.10, 30_000.0),
+            'SEQUESTRO_RELAMPAGO':   (math.log(3_000), 0.80, 50_000.0),
+            'EMPRESTIMO_FRAUDULENTO':(math.log(5_000), 0.70, 100_000.0),
+            'DEEP_FAKE_BIOMETRIA':   (math.log(2_000), 0.90, 30_000.0),
+            # Micro-valor types (card testing e delivery)
+            'FRAUDE_DELIVERY_APP':   (math.log(35),    0.60,   500.0),
+            'COMPRA_TESTE':          (math.log(10),    0.80,   100.0),
+            'CARD_TESTING':          (math.log(10),    0.80,   100.0),
+            'FRAUDE_QR_CODE':        (math.log(200),   0.90,  5_000.0),
         }
         params = _FRAUD_LOGNORMAL.get(fraud_type)
         if params:
             mu, sigma, max_val = params
         else:
-            mu, sigma, max_val = math.log(250), 1.2, 10_000.0
+            # Default: mediana R$500 (antes R$250), cauda até R$10k
+            mu, sigma, max_val = math.log(500), 1.10, 10_000.0
         value = math.exp(random.gauss(mu, sigma))
         return round(max(5.0, min(value, max_val)), 2)
     
