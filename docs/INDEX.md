@@ -12,7 +12,24 @@
 
 ---
 
-## 📚 Documentation Directories
+## � Documentação Completa do Ecossistema (FraudFlow + SynthFin)
+
+Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à API, RAG, notebooks e stack tecnológico.
+
+| # | Documento | Conteúdo |
+|---|-----------|----------|
+| 01 | [Visão Geral](01_VISAO_GERAL.md) | Ecossistema, componentes, métricas V5, workflow |
+| 02 | [Guia de Geração](02_GUIA_GERACAO.md) | Como e por que gerar dados, 3 modos, pipeline 4 fases |
+| 03 | [Arquitetura Técnica](03_ARQUITETURA_TECNICA.md) | 5 camadas, estrutura de diretórios, fluxo de calibração |
+| 04 | [API & RAG — Referência](04_API_RAG_REFERENCIA.md) | Todos os endpoints, RAG internals, LLM fallback, CORS |
+| 05 | [Notebooks & Calibração](05_NOTEBOOKS_CALIBRACAO.md) | 8 notebooks detalhados, 14 scripts de suporte |
+| 06 | [Stack Tecnológico](06_STACK_TECNOLOGICO.md) | Dependências, infra Docker/Traefik, Qdrant, LLMs, testes |
+| 07 | [Catálogo de Fraudes](07_CATALOGO_FRAUDES.md) | 25 tipos bancários + 11 ride-share, prevalências, RAG scores |
+| 08 | [Formatos de Output](08_FORMATOS_OUTPUT.md) | 8 formatos de exportação, compressão, schemas declarativos |
+
+---
+
+## �📚 Documentation Directories
 
 ### 📂 Documentos de Estudos Técnicos (`/documentodeestudos`)
 Artefatos de referência: schema canônico, payloads de exemplo, pipelines CI/CD, benchmark TSTR.
@@ -89,7 +106,8 @@ Fraud taxonomy, validation analysis, and implementation roadmap.
 
 ## 📊 Project Statistics
 
-- **Total Documentation Files**: ~30
+- **Total Documentation Files**: ~38
+- **Ecosystem Docs (01–08)**: 8
 - **Analysis Documents**: 8
 - **Fraud Research Documents**: 6
 - **Technical Guides**: 7
@@ -98,7 +116,7 @@ Fraud taxonomy, validation analysis, and implementation roadmap.
 
 ## Version
 
-**Current Version**: 4.8.0
-**Last Updated**: March 18, 2026
+**Current Version**: 4.9.1
+**Last Updated**: June 2025
 
 See [CHANGELOG](CHANGELOG.md) for version history.
