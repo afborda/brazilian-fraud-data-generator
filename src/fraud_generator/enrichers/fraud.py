@@ -122,21 +122,54 @@ _FRAUD_DETECTION_DELAY: dict = {
 }
 
 # ── Bot signature profiles ────────────────────────────────────────────────────
-_BOT_FRAUD_TYPES = frozenset({
-    "MICRO_BURST_VELOCITY", "DISTRIBUTED_VELOCITY", "CARD_TESTING",
-    "COMPRA_TESTE", "CREDENTIAL_STUFFING", "MAO_FANTASMA",
+# Full-automation bots: toolkit or scripted injection
+_BOT_FRAUD_TYPES_HIGH = frozenset({
+    "MICRO_BURST_VELOCITY", "DISTRIBUTED_VELOCITY", "CREDENTIAL_STUFFING",
+})
+_BOT_FRAUD_TYPES_MED = frozenset({
+    "CARD_TESTING", "COMPRA_TESTE",
+})
+# RAT/remote-access: scripted but victim device, partially human-looking
+_RAT_FRAUD_TYPES = frozenset({
+    "MAO_FANTASMA",
+})
+# Social-engineering: human victim operates own device → very low bot score
+_SOCIAL_FRAUD_TYPES = frozenset({
+    "ENGENHARIA_SOCIAL", "PIX_GOLPE", "FALSA_CENTRAL_TELEFONICA",
+    "WHATSAPP_CLONE", "GOLPE_INVESTIMENTO", "EMPRESTIMO_FRAUDULENTO",
+    "BOLETO_FALSO", "FRAUDE_QR_CODE", "FRAUDE_DELIVERY_APP",
+    "SEQUESTRO_RELAMPAGO",
+})
+# ATO: attacker operates stolen session — moderate bot-like navigation speed
+_ATO_FRAUD_TYPES = frozenset({
+    "CONTA_TOMADA", "CARTAO_CLONADO", "FRAUDE_APLICATIVO", "SIM_SWAP",
+    "PHISHING_BANCARIO", "DEEP_FAKE_BIOMETRIA", "SYNTHETIC_IDENTITY",
+    "PIX_AGENDADO_FRAUDE",
 })
 
 
 def _get_bot_signature(fraud_type: str, buf) -> tuple:
-    """Return (automation_signature: str, bot_confidence_score: float)."""
-    if fraud_type in _BOT_FRAUD_TYPES:
-        if fraud_type in ("CREDENTIAL_STUFFING", "MICRO_BURST_VELOCITY"):
-            return "BOT_TOOLKIT", round(random.uniform(0.85, 0.99), 3)
-        if fraud_type == "MAO_FANTASMA":
-            return "SCRIPTED", round(random.uniform(0.70, 0.90), 3)
+    """Return (automation_signature: str, bot_confidence_score: float).
+
+    Score calibration (RAG fraudflow + Febraban 2024):
+      - Full-bot toolkit:   0.85-0.99
+      - Card testing bots:  0.60-0.85
+      - RAT (mão fantasma): 0.55-0.75  (partial automation on victim device)
+      - ATO attacker:       0.15-0.40  (human but fast/anomalous)
+      - Social engineering: 0.01-0.08  (real victim, human behaviour)
+    """
+    if fraud_type in _BOT_FRAUD_TYPES_HIGH:
+        return "BOT_TOOLKIT", round(random.uniform(0.85, 0.99), 3)
+    if fraud_type in _BOT_FRAUD_TYPES_MED:
         return "SCRIPTED", round(random.uniform(0.60, 0.85), 3)
-    return "HUMAN", round(random.uniform(0.0, 0.20), 3)
+    if fraud_type in _RAT_FRAUD_TYPES:
+        return "SCRIPTED", round(random.uniform(0.55, 0.75), 3)
+    if fraud_type in _ATO_FRAUD_TYPES:
+        return "HUMAN", round(random.uniform(0.15, 0.40), 3)
+    if fraud_type in _SOCIAL_FRAUD_TYPES:
+        return "HUMAN", round(random.uniform(0.01, 0.08), 3)
+    # Default: mildly anomalous human-like
+    return "HUMAN", round(random.uniform(0.05, 0.25), 3)
 
 
 # ── Fields that must be null on non-fraud records ────────────────────────────
@@ -449,14 +482,16 @@ class FraudEnricher:
             tx.setdefault("actual_gap_hours", None)
             tx.setdefault("impossible_travel_group_id", None)
 
-        # ── Pro+: bot / automation signature ──────────────────────────────
+        # ── Bot / automation signature ─────────────────────────────────────
+        # bot_confidence_score is ALWAYS populated for fraud transactions so
+        # ML models can use it as a discriminative feature.
+        # automation_signature is restricted to pro+ plans (schema field).
+        sig, score = _get_bot_signature(fraud_type, buf)
         if is_pro_plus:
-            sig, score = _get_bot_signature(fraud_type, buf)
             tx.setdefault("automation_signature", sig)
-            tx.setdefault("bot_confidence_score", score)
         else:
             tx.setdefault("automation_signature", None)
-            tx.setdefault("bot_confidence_score", None)
+        tx.setdefault("bot_confidence_score", score)
 
         # ── V6-M14: PJ/PF destination (Artigo Fraudes Transacionais 2026)
         # 65% dos golpes finalizam em contas PJ (vs 15% em legítimas)

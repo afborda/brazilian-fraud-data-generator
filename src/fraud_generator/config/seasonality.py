@@ -55,16 +55,42 @@ HORA_WEIGHTS_DELIVERY: List[int] = [
      22, 15, 10,  8,  8, 12, 20, 25, 22, 15, 10,  5,
 ]
 
+# Perfil horário RAT/Mão Fantasma — pico madrugada 02h-05h quando vítima dorme
+# RAG fraudflow: 68% dos casos de RAT/mão-fantasma ocorrem entre 01h-05h
+HORA_WEIGHTS_FRAUD_RAT: List[int] = [
+    # 00  01  02  03  04  05  06  07  08  09  10  11
+      6, 20, 35, 35, 25, 10,  4,  2,  2,  2,  2,  2,
+    # 12  13  14  15  16  17  18  19  20  21  22  23
+      2,  2,  2,  2,  2,  2,  3,  4,  6,  8, 10,  8,
+]
+
 # Mapeamento tipo de fraude → perfil horário
+# Fonte temporal social engineering: BioCatch Digital Banking Fraud Trends Brazil 2024
+# ">80% of social engineering fraud in Brazil occurs during normal business hours"
+# URL: https://www.biocatch.com/white-paper-digital-banking-fraud-trends-brazil-2024-en
 FRAUD_TYPE_HOUR_PROFILE: Dict[str, List[int]] = {
-    'CONTA_TOMADA': HORA_WEIGHTS_FRAUD_ATO,
-    'CREDENTIAL_STUFFING': HORA_WEIGHTS_FRAUD_ATO,
-    'MAO_FANTASMA': HORA_WEIGHTS_FRAUD_ATO,
-    'SIM_SWAP': HORA_WEIGHTS_FRAUD_ATO,
+    # ATO / noturno — atacante age à noite quando vítima não percebe
+    'CONTA_TOMADA':          HORA_WEIGHTS_FRAUD_ATO,
+    'CREDENTIAL_STUFFING':   HORA_WEIGHTS_FRAUD_ATO,
+    'SIM_SWAP':              HORA_WEIGHTS_FRAUD_ATO,
+    'PHISHING_BANCARIO':     HORA_WEIGHTS_FRAUD_ATO,
+    'DEEP_FAKE_BIOMETRIA':   HORA_WEIGHTS_FRAUD_ATO,
+    'PIX_AGENDADO_FRAUDE':   HORA_WEIGHTS_FRAUD_ATO,
+    # RAT — madrugada enquanto vítima dorme
+    'MAO_FANTASMA':          HORA_WEIGHTS_FRAUD_RAT,
+    # Engenharia social / horário comercial — golpista liga/mensagem durante o dia
+    # Fonte: BioCatch 2024 — >80% dos golpes de eng. social ocorrem em horário comercial
+    'ENGENHARIA_SOCIAL':     HORA_WEIGHTS_COMERCIAL,
+    'PIX_GOLPE':             HORA_WEIGHTS_COMERCIAL,
+    'WHATSAPP_CLONE':        HORA_WEIGHTS_COMERCIAL,
     'FALSA_CENTRAL_TELEFONICA': HORA_WEIGHTS_COMERCIAL,
-    'GOLPE_INVESTIMENTO': HORA_WEIGHTS_COMERCIAL,
-    'EMPRESTIMO_FRAUDULENTO': HORA_WEIGHTS_COMERCIAL,
-    'FRAUDE_DELIVERY_APP': HORA_WEIGHTS_DELIVERY,
+    'GOLPE_INVESTIMENTO':    HORA_WEIGHTS_COMERCIAL,
+    'EMPRESTIMO_FRAUDULENTO':HORA_WEIGHTS_COMERCIAL,
+    'SEQUESTRO_RELAMPAGO':   HORA_WEIGHTS_COMERCIAL,  # ocorre em via pública durante o dia
+    'BOLETO_FALSO':          HORA_WEIGHTS_COMERCIAL,  # vítima paga boleto em horário útil
+    'FRAUDE_QR_CODE':        HORA_WEIGHTS_COMERCIAL,  # scan de QR code em estabelecimento
+    # Delivery — pico almoço e jantar
+    'FRAUDE_DELIVERY_APP':   HORA_WEIGHTS_DELIVERY,
     # Todos os outros usam HORA_WEIGHTS_PADRAO via get default
 }
 
@@ -76,7 +102,10 @@ def get_hour_weights_for_fraud(fraud_type: str) -> List[int]:
 
 # ─── Pesos por dia da semana ──────────────────────────────────────────────────
 # 0=Seg 1=Ter 2=Qua 3=Qui 4=Sex 5=Sab 6=Dom
-DOW_WEIGHTS: List[int] = [10, 11, 11, 11, 14, 8, 6]
+# Calibrado com dados reais BCB PIX 2024 (Febraban CIAB + EstatísticasPIX):
+#   Ter > Qua > Qui > Seg > Sex (dias úteis = ~82% do volume total)
+#   Sab ≈ 9.5%, Dom ≈ 7.5%  |  Antes: [10,11,11,11,14,8,6] — Sexta errada
+DOW_WEIGHTS: List[int] = [33, 34, 34, 34, 31, 19, 15]
 DOW_LIST: List[int] = list(range(7))
 
 

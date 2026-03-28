@@ -19,18 +19,20 @@ from typing import Any, Dict
 from .base import EnricherProtocol, GeneratorBag, is_plan
 
 # Profile velocity baselines (mean txns/24h, std)
+# Calibrado: BCB 2024 = 219.9M PIX/day ÷ 130M users ≈ 1.7 tx/day average.
+# High-spender and business profiles have more, but overall average must ~= 1.7.
 _PROFILE_VELOCITY_BASELINE: dict = {
-    "high_spender":         (15, 5.0),
-    "business_owner":       (20, 7.0),
-    "subscription_heavy":   (8,  3.0),
-    "young_digital":        (10, 4.0),
-    "traditional_senior":   (5,  2.0),
-    "family_provider":      (7,  2.5),
-    "ato_victim":           (8,  3.5),
-    "falsa_central_victim": (6,  2.5),
-    "malware_ats_victim":   (9,  3.5),
+    "high_spender":         (5,  2.0),
+    "business_owner":       (8,  3.0),
+    "subscription_heavy":   (3,  1.5),
+    "young_digital":        (4,  2.0),
+    "traditional_senior":   (2,  1.0),
+    "family_provider":      (3,  1.5),
+    "ato_victim":           (3,  1.5),
+    "falsa_central_victim": (2,  1.0),
+    "malware_ats_victim":   (3,  1.5),
 }
-_PROFILE_VELOCITY_DEFAULT = (8, 3.0)
+_PROFILE_VELOCITY_DEFAULT = (2, 1.0)
 
 # Extended velocity window fields (Pro+) — set to None for lower plans
 _VELOCITY_WINDOW_FIELDS = (
@@ -94,8 +96,10 @@ class SessionEnricher:
             default_transactions_24h = buf.next_int(5, 50)
             default_accumulated_amount = round(buf.next_uniform(2000, 50000), 2)
         else:
-            default_transactions_24h = buf.next_int(1, 15)
-            default_accumulated_amount = round(buf.next_uniform(50, 5000), 2)
+            # BCB 2024: 219.9M PIX/day ÷ 130M active users ≈ 1.7 tx/day average
+            # Use 1-3 range (mean=2.0) as fallback when session state unavailable
+            default_transactions_24h = buf.next_int(1, 3)
+            default_accumulated_amount = round(buf.next_uniform(50, 2000), 2)
 
         if session_state:
             if tx.get("velocity_transactions_24h") is None:

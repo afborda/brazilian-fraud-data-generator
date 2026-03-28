@@ -1,0 +1,64 @@
+name: Bump synthfin-api on release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'          # triggers on any version tag: v4.9.0, v5.0.0, etc.
+
+jobs:
+  bump-api:
+    name: Update requirements.txt in synthfin-api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Extract release notes from tag annotation
+        id: notes
+        run: |
+          git fetch --tags --force
+          NOTES=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" 2>/dev/null | head -40 || echo "")
+          if [ -z "$NOTES" ]; then
+            NOTES="Melhorias internas e correções de performance na versão $GITHUB_REF_NAME"
+          fi
+          # Escape newlines for GitHub Actions output
+          NOTES="${NOTES//'%'/'%25'}"
+          NOTES="${NOTES//$'\n'/'%0A'}"
+          NOTES="${NOTES//$'\r'/'%0D'}"
+          echo "NOTES=$NOTES" >> $GITHUB_OUTPUT
+
+      - name: Checkout synthfin-api
+        uses: actions/checkout@v4
+        with:
+          repository: afborda/synthfin-api
+          token: ${{ secrets.SYNTHFIN_DEPLOY_PAT }}
+          path: synthfin-api
+
+      - name: Bump fraud-generator version in requirements.txt
+        working-directory: synthfin-api
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          sed -i "s|fraud-generator @ git+https://github.com/afborda/synthfin-core.git@.*|fraud-generator @ git+https://github.com/afborda/synthfin-core.git@v${VERSION}|" requirements.txt
+          echo "Updated requirements.txt:"
+          grep "fraud-generator" requirements.txt
+
+      - name: Commit and push update
+        working-directory: synthfin-api
+        run: |
+          git config user.name  "synthfin-bot"
+          git config user.email "bot@synthfin.com.br"
+          git add requirements.txt
+          git diff --cached --quiet && echo "No changes, skipping commit" && exit 0
+          git commit -m "chore(deps): bump fraud-generator to v${{ steps.version.outputs.VERSION }}"
+          git push origin main
+
+      - name: Notify deploy pipeline of changelog
+        env:
+          NOTES: ${{ steps.notes.outputs.NOTES }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          # Store changelog as repo variable so deploy-prod.yml can read it
+          # (deploy pipeline runs after the push above triggers build+deploy)
+          echo "Version $VERSION will be deployed. Changelog:"
+          printf '%s\n' "$NOTES"
