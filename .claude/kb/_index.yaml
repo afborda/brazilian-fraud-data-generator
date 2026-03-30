@@ -1,0 +1,65 @@
+# synthfin-data Knowledge Base Manifest
+# Updated: 2026-03-30
+
+version: "1.0"
+project: synthfin-data
+
+domains:
+  brazilian-banking:
+    description: Brazilian financial system context for fraud data generation
+    path: brazilian-banking/
+    files:
+      - path: index.md
+        type: index
+        max_lines: 100
+      - path: quick-reference.md
+        type: quick-reference
+        max_lines: 100
+      - path: concepts/pix-protocol.md
+        type: concept
+        max_lines: 150
+      - path: concepts/bank-codes-ispb.md
+        type: concept
+        max_lines: 150
+      - path: concepts/cpf-validation.md
+        type: concept
+        max_lines: 150
+      - path: patterns/fraud-injection.md
+        type: pattern
+        max_lines: 200
+      - path: patterns/bcb-calibration.md
+        type: pattern
+        max_lines: 200
+      - path: specs/fraud-types.yaml
+        type: spec
+        max_lines: null
+
+  synthetic-data:
+    description: Data generation patterns and statistical best practices
+    path: synthetic-data/
+    files:
+      - path: index.md
+        type: index
+        max_lines: 100
+      - path: concepts/distributions.md
+        type: concept
+        max_lines: 150
+      - path: concepts/behavioral-profiles.md
+        type: concept
+        max_lines: 150
+      - path: patterns/entity-chain.md
+        type: pattern
+        max_lines: 200
+      - path: patterns/weighted-random.md
+        type: pattern
+        max_lines: 200
+
+# Planned domains (Fase 2-3):
+# fraud-detection:
+#   description: ML fraud detection, enrichment signals, sequential patterns
+# performance:
+#   description: Caching, parallelism, memory optimization patterns
+# pix-specs:
+#   description: PIX protocol deep specifications
+# ride-share:
+#   description: Ride fraud patterns, Haversine, surge pricing

@@ -1,0 +1,128 @@
+# Fraud Types Specification
+# Machine-readable fraud type definitions for synthfin-data
+# Source: config/fraud_patterns.py + enricher pipeline
+
+banking_fraud_types:
+  pix:
+    - key: pix_cloning
+      name: PIX QR Code Cloning
+      signals: [new_beneficiary, amount_zscore, pix_modalidade_risk]
+      severity: high
+    - key: pix_social_engineering
+      name: PIX Social Engineering
+      signals: [velocity_24h, amount_zscore, transaction_hour_risk]
+      severity: high
+    - key: pix_account_takeover
+      name: PIX Account Takeover
+      signals: [device_fingerprint_change, ip_risk_score, geo_velocity_kmh]
+      severity: critical
+    - key: sim_swap_pix
+      name: SIM Swap for PIX
+      signals: [device_fingerprint_change, device_age_days, ip_risk_score]
+      severity: critical
+    - key: pix_mitm
+      name: PIX Man-in-the-Middle
+      signals: [session_duration_seconds, ip_risk_score, amount_zscore]
+      severity: critical
+
+  card:
+    - key: card_takeover
+      name: Card Account Takeover
+      signals: [device_fingerprint_change, geo_velocity_kmh, velocity_24h]
+      severity: high
+    - key: card_skimming
+      name: Card Skimming
+      signals: [mcc_risk, geo_velocity_kmh, device_age_days]
+      severity: medium
+    - key: card_cnp_fraud
+      name: Card Not Present Fraud
+      signals: [channel_risk, ip_risk_score, new_beneficiary]
+      severity: high
+    - key: card_counterfeit
+      name: Counterfeit Card
+      signals: [device_fingerprint_change, mcc_risk, geo_velocity_kmh]
+      severity: medium
+
+  account:
+    - key: credential_stuffing
+      name: Credential Stuffing
+      signals: [bot_confidence, ip_risk_score, velocity_24h]
+      severity: high
+    - key: money_mule
+      name: Money Mule
+      signals: [velocity_24h, amount_zscore, new_beneficiary, account_age_days]
+      severity: high
+
+  behavioral:
+    - key: velocity_abuse
+      name: Velocity Abuse
+      signals: [velocity_24h, bot_confidence, session_duration_seconds]
+      severity: medium
+    - key: amount_escalation
+      name: Amount Escalation
+      signals: [amount_zscore, historical_fraud_count]
+      severity: medium
+    - key: geographic_anomaly
+      name: Geographic Anomaly
+      signals: [geo_velocity_kmh, ip_risk_score]
+      severity: low
+
+rideshare_fraud_types:
+  - key: gps_spoofing
+    name: GPS Spoofing
+    description: Driver fakes GPS location to inflate distance/fare
+    severity: high
+  - key: fake_ride
+    name: Fake Ride
+    description: Fabricated ride for payment fraud
+    severity: high
+  - key: driver_collusion
+    name: Driver-Passenger Collusion
+    description: Coordinated fraud between driver and passenger
+    severity: medium
+  - key: payment_fraud
+    name: Payment Fraud
+    description: Stolen payment method used for rides
+    severity: high
+
+enrichment_signals:
+  - name: bot_confidence
+    range: [0.0, 1.0]
+    importance: 0.629
+    description: Probability of automated/bot behavior
+  - name: device_age_days
+    range: [0, 3650]
+    importance: 0.137
+    description: Days since device was first seen
+  - name: velocity_24h
+    range: [0, 1000]
+    importance: 0.053
+    description: Transaction count in last 24 hours
+  - name: amount_zscore
+    range: [-5.0, 10.0]
+    importance: 0.045
+    description: Standard deviations from customer average amount
+  - name: geo_velocity_kmh
+    range: [0, 2000]
+    importance: 0.032
+    description: Speed between consecutive transaction locations
+  - name: new_beneficiary
+    range: [0, 1]
+    importance: 0.028
+    description: Binary flag for first-time payment recipient
+  - name: device_fingerprint_change
+    range: [0, 1]
+    importance: 0.025
+    description: Binary flag for device fingerprint mismatch
+  - name: ip_risk_score
+    range: [0.0, 1.0]
+    importance: 0.020
+    description: Risk score of originating IP address
+  - name: transaction_hour_risk
+    range: [0.0, 1.0]
+    importance: 0.015
+    description: Risk based on hour of transaction
+  - name: session_duration_seconds
+    range: [0, 86400]
+    importance: 0.010
+    description: Duration of user session

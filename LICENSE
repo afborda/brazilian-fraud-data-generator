@@ -1,16 +1,54 @@
-MIT License
+synthfin-data — Custom Non-Commercial License
 
-Copyright (c) 2024 Abner Fonseca
+Copyright (c) 2024-2026 Abner Fonseca
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+TERMS AND CONDITIONS
 
-The above copyright notice and this permission notice shall be included in all
+1. GRANT OF LICENSE FOR STUDY AND RESEARCH
+
+Permission is hereby granted, free of charge, to any individual obtaining a
+copy of this software and associated documentation files (the "Software"),
+to use, copy, and modify the Software solely for the following purposes:
+
+  a) Personal study and learning
+  b) Academic research and education
+  c) Non-commercial experimentation and evaluation
+  d) Contributions back to this project (pull requests, bug reports)
+
+2. COMMERCIAL USE PROHIBITED WITHOUT LICENSE
+
+The following uses are expressly PROHIBITED without a paid commercial license:
+
+  a) Use by companies, organizations, or any legal entity for any purpose
+  b) Use in production systems, services, or products (commercial or internal)
+  c) Integration into commercial software, SaaS platforms, or paid services
+  d) Use for revenue-generating activities, directly or indirectly
+  e) Redistribution as part of a commercial offering
+  f) Use for consulting, contracting, or client work
+  g) Training commercial machine learning models for deployment
+  h) Use in any business context, including internal tools and testing
+
+3. COMMERCIAL LICENSE
+
+Companies or individuals wishing to use this Software for any commercial
+purpose must obtain a paid commercial license. For licensing inquiries:
+
+  Website: https://synthfin.com.br
+  Email:   licensing@synthfin.com.br
+
+4. ATTRIBUTION
+
+All permitted uses must retain this copyright notice and license terms in all
 copies or substantial portions of the Software.
+
+5. DERIVATIVE WORKS
+
+Derivative works (forks, modifications, extensions) are subject to the same
+license terms. You may not relicense this Software or any derivative under
+more permissive terms. Commercial use of derivative works requires the same
+paid commercial license.
+
+6. DISCLAIMER
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -19,3 +57,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+7. ENFORCEMENT
+
+Any use in violation of these terms may result in legal action. The copyright
+holder reserves the right to pursue remedies for unauthorized commercial use,
+including injunctive relief and damages.
+
+---
+
+For questions about whether your use case requires a commercial license,
+contact licensing@synthfin.com.br.

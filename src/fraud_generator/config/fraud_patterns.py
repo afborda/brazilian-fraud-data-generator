@@ -28,7 +28,7 @@ FRAUD_PATTERNS: Dict[str, FraudPattern] = {
             'type_preference': ['PIX', 'TED'],    # Transferências
             'amount_multiplier': (1.0, 2.5),      # 1x-2.5x valor típico
         },
-        'prevalence': 0.20,  # 20% das fraudes
+        'prevalence': 0.28,  # 28% das fraudes — BCB/RAG: tipo mais comum no Brasil
         'fraud_score_base': 0.35,
     },
 

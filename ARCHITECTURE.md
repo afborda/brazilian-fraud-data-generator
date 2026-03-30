@@ -1,6 +1,6 @@
 # Architecture — synthfin-data
 
-> **Version:** 4.9.1 (v4-beta) — 2026-03-25  
+> **Version:** 4.11 (v4-beta) — 2026-03-25  
 > **Portuguese version:** [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
 
 ---
@@ -27,14 +27,18 @@
 9. [Connections (Streaming)](#9-connections-streaming)
 10. [Schema System](#10-schema-system)
 11. [Configuration Layer](#11-configuration-layer)
-12. [Data Models & Indexes](#12-data-models--indexes)
-13. [Utilities](#13-utilities)
-14. [Validators](#14-validators)
-15. [Design Decisions](#15-design-decisions)
-16. [Data Flow Diagrams](#16-data-flow-diagrams)
-17. [Performance Characteristics](#17-performance-characteristics)
-18. [Extension Guide](#18-extension-guide)
-19. [Environment & Dependencies](#19-environment--dependencies)
+12. [Enricher Pipeline](#12-enricher-pipeline)
+13. [Data Models & Indexes](#13-data-models--indexes)
+14. [Utilities](#14-utilities)
+15. [Validators](#15-validators)
+16. [Licensing System](#16-licensing-system)
+17. [Design Decisions](#17-design-decisions)
+18. [Data Flow Diagrams](#18-data-flow-diagrams)
+19. [Performance Characteristics](#19-performance-characteristics)
+20. [Extension Guide](#20-extension-guide)
+21. [Known Gaps & Limitations](#21-known-gaps--limitations)
+22. [Environment & Dependencies](#22-environment--dependencies)
+23. [SynthFin Ecosystem](#23-synthfin-ecosystem)
 
 ---
 
@@ -83,13 +87,16 @@ synthfin-data/
     │   └── workers/          Picklable worker functions
     ├── generators/           Entity generators (customer, device, driver, transaction, ride)
     ├── profiles/             Behavioural profile definitions
+    ├── enrichers/            8-stage transaction enrichment pipeline
     ├── exporters/            Output format strategy implementations
     ├── connections/          Streaming target strategy implementations
     ├── schema/               Declarative schema parsing, mapping, AI correction
-    ├── config/               Static configuration data
+    ├── config/               Static configuration data (banks, merchants, geography, fraud patterns)
     ├── models/               Data structures and index types
-    ├── utils/                Shared utilities (compression, weights, progress, streaming)
-    └── validators/           CPF validation algorithm
+    ├── utils/                Shared utilities (compression, weights, progress, streaming, parallel)
+    ├── validators/           CPF validation algorithm
+    ├── licensing/            HMAC-signed license system (5 plan tiers)
+    └── email/                Transactional email via Resend API
 ```
 
 ---
@@ -623,7 +630,64 @@ If the override file is absent, all values fall back to the hardcoded defaults w
 
 ---
 
-## 12. Data Models & Indexes
+## 12. Enricher Pipeline
+
+The enricher pipeline (introduced in v4.7) applies 8 sequential enrichment stages to each transaction record after initial generation. Each enricher implements `EnricherProtocol` and receives a shared `GeneratorBag` with read-only access to caches, RNG buffers, and config.
+
+### Pipeline Architecture
+
+```
+TransactionGenerator.generate()
+    │
+    └─► Raw transaction dict
+          │
+          └─► Enricher Pipeline (8 stages, canonical order)
+                │
+                ├─ 1. TemporalEnricher    — sets unusual_time flag
+                ├─ 2. GeoEnricher         — IBGE centroids, distance_from_home
+                ├─ 3. FraudEnricher       — fraud-pattern field overrides, multi-label taxonomy
+                ├─ 4. PIXEnricher         — BACEN pacs.008 fields (12 PIX-specific fields)
+                ├─ 5. DeviceEnricher      — device_age_days, emulator/vpn detection
+                ├─ 6. SessionEnricher     — velocity, merchant novelty, travel detection
+                ├─ 7. RiskEnricher        — fraud_risk_score, 17 signals, ring assignments
+                └─ 8. BiometricEnricher   — 10 biometric fields (null for free tier)
+                      │
+                      └─► Enriched transaction dict
+```
+
+### `EnricherProtocol` (Protocol)
+
+```python
+class EnricherProtocol(Protocol):
+    def enrich(self, tx: dict, bag: GeneratorBag) -> None: ...
+```
+
+All enrichers mutate `tx` in-place (no return value). The `GeneratorBag` dataclass provides shared state (customer ID, profile, device, session state, ring registry, etc.).
+
+### Enricher Details
+
+| # | Enricher | Fields Set | Tier |
+|---|----------|-----------|------|
+| 1 | `TemporalEnricher` | `unusual_time` | Free |
+| 2 | `GeoEnricher` | `geolocation_lat/lon`, `codigo_ibge_municipio`, `municipio_nome`; Pro+: `distance_from_home_km`, `is_known_location` | Free / Pro |
+| 3 | `FraudEnricher` | Fraud-pattern-specific overrides (amount, device, channel); 24+ fraud type labels | Free |
+| 4 | `PIXEnricher` | 12 BACEN fields: `end_to_end_id`, `ispb_pagador/recebedor`, `cpf_hash`, `pacs_status`, etc. | Free |
+| 5 | `DeviceEnricher` | `device_age_days`, `emulator_detected`, `vpn_active`, `ip_type` | Free |
+| 6 | `SessionEnricher` | `velocity_transactions_24h`, `accumulated_amount_24h`, `new_merchant/beneficiary`; Pro+: extended velocity windows | Free / Pro |
+| 7 | `RiskEnricher` | `fraud_risk_score`, `fraud_signals` (17 signals + 4 rules), `fraud_ring_id`, `ring_role` | Free |
+| 8 | `BiometricEnricher` | 10 biometric fields (`typing_speed_avg_ms`, `touch_pressure_avg`, etc.) | Paid only |
+
+### Pipeline Factory
+
+```python
+from fraud_generator.enrichers.pipeline_factory import get_default_pipeline
+
+pipeline = get_default_pipeline()  # returns list of 8 enricher instances in canonical order
+```
+
+---
+
+## 13. Data Models & Indexes
 
 ### `models/`
 
@@ -669,7 +733,7 @@ Maintains per-customer mutable state across multiple transaction records in the 
 
 ---
 
-## 13. Utilities
+## 14. Utilities
 
 ### `utils/streaming.py` (590 lines)
 
@@ -741,7 +805,7 @@ save_cached_indexes(redis_url, ...) -> None
 
 ---
 
-## 14. Validators
+## 15. Validators
 
 ### `validators/cpf.py` (257 lines)
 
@@ -759,7 +823,43 @@ The algorithm implements the standard mod-11 double-digit validation. CPFs are a
 
 ---
 
-## 15. Design Decisions
+## 16. Licensing System
+
+The licensing system (`src/fraud_generator/licensing/`) implements HMAC-SHA256 signed licenses with 5 plan tiers for the hosted API at synthfin.com.br. The open-source CLI has no license restrictions.
+
+### Plan Tiers
+
+| Plan | Events/month | Concurrent | Output GB | Kafka | req/s |
+|---|---:|---:|---:|---|---:|
+| FREE | 1M | 2 | 2.0 | No | 5.0 |
+| STARTER | 5M | 3 | 5.0 | No | 5.0 |
+| PRO | 100M | 10 | 20.0 | Yes | 20.0 |
+| TEAM | unlimited | unlimited | unlimited | Yes | 50.0 |
+| ENTERPRISE | unlimited | unlimited | unlimited | Yes | unlimited |
+
+### Components
+
+| Module | Class / Function | Purpose |
+|---|---|---|
+| `license.py` | `License`, `LicensePlan`, `LicenseError` | License dataclass with HMAC signing (`create()`, `verify_signature()`, `is_expired`) |
+| `limits.py` | `PlanLimits`, `PLAN_LIMITS` | Frozen dataclass per plan with 16 limit fields (rate, events, formats, etc.) |
+| `validator.py` | `load_from_env()`, `validate_env()`, `check_format_allowed()` | Reads `FRAUDGEN_*` env vars, validates HMAC signature, checks expiry, optional heartbeat |
+
+### License Validation Flow
+
+```
+ENV vars (FRAUDGEN_LICENSE_ID, FRAUDGEN_EMAIL, FRAUDGEN_PLAN, ...)
+  └─► load_from_env() → License object
+        └─► validate_env(phone_home=True)
+              ├─ verify_signature() — HMAC-SHA256 check
+              ├─ is_expired — datetime comparison
+              ├─ 7-day expiry warning
+              └─ _send_heartbeat() — POST to api.synthfin.com.br
+```
+
+---
+
+## 17. Design Decisions
 
 ### SOLID Modular > DDD > Clean Architecture
 
@@ -806,7 +906,7 @@ Fraud is injected by overwriting specific fields in an otherwise normal record (
 
 ---
 
-## 16. Data Flow Diagrams
+## 18. Data Flow Diagrams
 
 ### Batch Mode — Full Flow
 
@@ -879,7 +979,7 @@ stream.py --target kafka --type transactions
 
 ---
 
-## 17. Performance Characteristics
+## 19. Performance Characteristics
 
 | Metric | Value | Conditions |
 |---|---|---|
@@ -899,7 +999,7 @@ stream.py --target kafka --type transactions
 
 ---
 
-## 18. Extension Guide
+## 20. Extension Guide
 
 ### Adding a new output format
 
@@ -945,7 +1045,27 @@ stream.py --target kafka --type transactions
 
 ---
 
-## 19. Environment & Dependencies
+## 21. Known Gaps & Limitations
+
+| ID | Category | Issue | Severity | Status |
+|---|---|---|---|---|
+| P1 | Performance | Fraud patterns lack sequential/velocity checks | Medium | Open |
+| P2 | Performance | `random.choices()` per-record overhead | Low | Mitigated (WeightCache) |
+| P3 | Performance | Parquet append reads entire file into memory (OOM >1GB) | High | Open |
+| S1 | Security | Docker VERIFY_KEY exposed via ARG→ENV | High | Open |
+| S2 | Security | Container runs as root | Medium | Open |
+| T1 | Testing | No tests for Connections (Kafka, Webhook, Stdout) | Medium | Open |
+| T2 | Testing | No tests for Config modules (banks, geography, etc.) | Low | Open |
+| T3 | Testing | ~40% estimated test coverage | Medium | Open |
+| D1 | Data | CSV uses `.` separator, Parquet uses `_` for nested fields | Medium | Open |
+| D2 | Data | Ring registry is module-level singleton (thread-unsafe) | Medium | Open |
+| D3 | Data | Schema mode does not validate output against input schema | Low | Open |
+
+For a complete analysis, see [docs/analysis/ANALISE_GAPS_E_MELHORIAS.md](docs/analysis/ANALISE_GAPS_E_MELHORIAS.md).
+
+---
+
+## 22. Environment & Dependencies
 
 ### Python Version
 
@@ -1011,4 +1131,66 @@ The Docker image includes all core dependencies. For Kafka streaming, use the `-
 
 ---
 
-*Generated by GitHub Copilot — synthfin-data v4.9.1 (v4-beta, 25 fraud patterns, RAG-calibrated)*
+## 23. SynthFin Ecosystem
+
+The **synthfin-data** library is the core engine of a larger SaaS platform. This section documents the relationship between components.
+
+### Components
+
+| Component | Role | Stack | Visibility |
+|---|---|---|---|
+| **synthfin-data** (this repo) | Core data generation engine | Python, Faker, PyArrow, Pandas | Public (Docker Hub) |
+| **synthfin-api** | REST API wrapping the engine | FastAPI, Redis, MinIO, Stripe, Resend | Private (GHCR) |
+| **synthfin-web** | SaaS dashboard + marketing site | Next.js 15, React 19, Tailwind | Private (GHCR) |
+| **synthfin-saas** | Infrastructure orchestration | Docker Compose, Traefik v3, Ubuntu 24.04 | Private |
+
+### Production Architecture
+
+```
+Cloudflare (Edge: DNS + WAF + DDoS)
+  │
+  └── Traefik v3 (TLS via Let's Encrypt)
+        │
+        ├── synthfin.com.br        → Landpage (Next.js, port 3001)
+        ├── app.synthfin.com.br    → Dashboard (Next.js, port 3000)
+        ├── api.synthfin.com.br    → API (FastAPI, port 8000)
+        └── deploy.synthfin.com.br → CI/CD webhook (port 9090)
+```
+
+**Supporting services** (internal Docker network):
+- **Redis 7**: Cache, session state, job queue, rate limiting
+- **MinIO**: S3-compatible object storage for generated files
+- **Deploy webhook**: HMAC-authenticated endpoint that pulls GHCR images and restarts services
+
+### API Overview (v2)
+
+The API exposes 15 endpoints under `/v2/`:
+
+- **Auth**: register, verify email, rotate API key
+- **Generate**: POST job → Redis queue → multiprocessing worker → MinIO storage
+- **Jobs**: list, status, cancel
+- **Download**: presigned MinIO URL or direct stream
+- **Usage**: monthly quota and event counts
+- **Billing**: Stripe Checkout session creation, subscription cancellation
+- **Admin**: dashboard stats, user management, account freeze
+
+Authentication uses `Bearer fgen_sk_*` API keys. Rate limiting and quota tracking are enforced per plan tier via Redis.
+
+### CI/CD Pipeline
+
+```
+git push (main) → GitHub Actions
+  ├── Build 3 Docker images (API, Web, Landpage) → push to GHCR
+  └── Trigger deploy webhook on VPS
+        ├── docker pull latest images
+        ├── docker compose up -d --no-deps
+        └── docker image prune -f
+```
+
+### Full Documentation
+
+See [docs/analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md](docs/analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md) for a comprehensive ecosystem analysis including all endpoints, environment variables, security layers, and implementation status.
+
+---
+
+*Generated by GitHub Copilot — synthfin-data v4.10 (v4-beta, 25 fraud patterns, RAG-calibrated)*

@@ -6,15 +6,28 @@ test_csv_*/
 test_parquet_*/
 baseline_before/
 baseline_after/
+baseline_seed42/
+after_t1/
+analysis_output/
+output_test/
+benchmark_quality_output/
 doc/
 *.jsonl
 *.jsonl.gz
 *.csv
 *.parquet
+*.db
+*.pdf
+*.html
 data/
 datasets/
 tmp/
 temp/
+
+# Generated root-level files
+REALISM_METRICS.json
+CALIBRATION_PROCESS.md
+IMPROVEMENT_ANALYSIS.md
 
 # Documentation (generated/temporary analysis files)
 docs/benchmarks/benchmark_results/

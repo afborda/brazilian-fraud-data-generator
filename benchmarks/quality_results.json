@@ -1,0 +1,225 @@
+{
+  "summary": {
+    "overall_score": 9.7,
+    "max_possible": 10.0,
+    "tests_passed": 7,
+    "tests_total": 7,
+    "all_passed": true,
+    "grade": "A+",
+    "scores_by_test": {
+      "completeness": 10.0,
+      "uniqueness": 10.0,
+      "validity": 10.0,
+      "consistency": 9.9,
+      "distributions": 8.0,
+      "fraud_quality": 10.0,
+      "temporal_patterns": 10.0
+    },
+    "total_duration_sec": 13.37,
+    "records_analyzed": 100000,
+    "timestamp": "2026-03-27T15:49:35.450167"
+  },
+  "tests": {
+    "completeness": {
+      "test": "completeness",
+      "score": 10.0,
+      "total_records": 100000,
+      "total_fields": 82,
+      "core_fields": 44,
+      "conditional_fields": 38,
+      "completeness_pct": 100.0,
+      "missing_required_fields": [],
+      "fields_with_nulls": {},
+      "fields_with_empty": {},
+      "passed": true,
+      "duration_sec": 0.763
+    },
+    "uniqueness": {
+      "test": "uniqueness",
+      "score": 10.0,
+      "transaction_id_duplicates": 0,
+      "session_id_duplicates": 0,
+      "unique_customers": 2684,
+      "unique_devices": 6115,
+      "unique_merchants": 30459,
+      "unique_ips": 99984,
+      "tx_per_customer_avg": 37.3,
+      "devices_per_customer_avg": 2.28,
+      "passed": true,
+      "duration_sec": 0.188
+    },
+    "validity": {
+      "test": "validity",
+      "score": 10.0,
+      "field_validity_pct": {
+        "timestamp": 100.0,
+        "amount": 100.0,
+        "geolocation_lat": 100.0,
+        "geolocation_lon": 100.0,
+        "type": 100.0,
+        "channel": 100.0,
+        "status": 100.0,
+        "ip_address": 100.0,
+        "fraud_score": 100.0,
+        "cpf_valid": 100.0
+      },
+      "issues": {},
+      "passed": true,
+      "duration_sec": 0.216
+    },
+    "consistency": {
+      "test": "consistency",
+      "score": 9.9,
+      "consistency_pct": 99.86,
+      "issues": {
+        "legit_high_score": 506,
+        "fraud_low_score": 89,
+        "card_missing_hash": 116,
+        "accumulated_less_than_amount": 10
+      },
+      "issue_rate_pct": 0.72,
+      "passed": true,
+      "duration_sec": 0.084
+    },
+    "distributions": {
+      "test": "distributions",
+      "score": 8.0,
+      "entropies": {
+        "transaction_type": 0.7709,
+        "channel": 0.5618,
+        "hour_of_day": 0.916,
+        "day_of_week": 0.9665,
+        "behavioral_profile": 0.9375
+      },
+      "type_distribution_pct": {
+        "CREDIT_CARD": 23.79,
+        "PIX": 45.34,
+        "AUTO_DEBIT": 9.87,
+        "WITHDRAWAL": 0.96,
+        "DEBIT_CARD": 10.12,
+        "BOLETO": 6.2,
+        "TED": 3.72
+      },
+      "type_vs_expected": {
+        "PIX": {
+          "actual_pct": 45.34,
+          "expected_range": "30%-55%",
+          "in_range": true
+        },
+        "CREDIT_CARD": {
+          "actual_pct": 23.79,
+          "expected_range": "15%-30%",
+          "in_range": true
+        },
+        "DEBIT_CARD": {
+          "actual_pct": 10.12,
+          "expected_range": "8%-20%",
+          "in_range": true
+        }
+      },
+      "amount_statistics": {
+        "mean": 239.54,
+        "median": 104.9,
+        "std": 531.82,
+        "p5": 22.04,
+        "p25": 52.45,
+        "p75": 230.42,
+        "p95": 821.94,
+        "p99": 2346.41,
+        "skewness": 10.7596,
+        "kurtosis": 203.4274
+      },
+      "ks_test_lognormal": {
+        "statistic": 0.035491,
+        "p_value": 0.0,
+        "log_amounts_normal": false
+      },
+      "chi2_hour_pattern": {
+        "statistic": 92.6,
+        "p_value": 0.0,
+        "matches_expected_pattern": false
+      },
+      "passed": true,
+      "duration_sec": 0.305
+    },
+    "fraud_quality": {
+      "test": "fraud_quality",
+      "score": 10.0,
+      "fraud_rate_pct": 0.804,
+      "fraud_rate_in_range": true,
+      "expected_range": "0.5%-5.0%",
+      "total_frauds": 804,
+      "total_legit": 99196,
+      "fraud_types": 25,
+      "fraud_type_entropy": 0.9095,
+      "fraud_type_distribution": {
+        "ENGENHARIA_SOCIAL": 15.67,
+        "PIX_GOLPE": 12.81,
+        "CONTA_TOMADA": 6.72,
+        "CARTAO_CLONADO": 6.59,
+        "FRAUDE_APLICATIVO": 5.72,
+        "BOLETO_FALSO": 5.35,
+        "MULA_FINANCEIRA": 4.35,
+        "FALSA_CENTRAL_TELEFONICA": 4.23,
+        "COMPRA_TESTE": 4.23,
+        "MICRO_BURST_VELOCITY": 3.86,
+        "PHISHING_BANCARIO": 3.86,
+        "CARD_TESTING": 2.99,
+        "WHATSAPP_CLONE": 2.86,
+        "DISTRIBUTED_VELOCITY": 2.74,
+        "MAO_FANTASMA": 2.61
+      },
+      "score_separation": {
+        "fraud_mean_score": 58.61,
+        "legit_mean_score": 28.44,
+        "separation_gap": 30.17,
+        "ks_test": {
+          "statistic": 0.483,
+          "p_value": 7.954680579211736e-172,
+          "distributions_different": true
+        }
+      },
+      "amount_separation": {
+        "fraud_mean_amount": 698.73,
+        "legit_mean_amount": 235.82,
+        "ratio": 2.96
+      },
+      "ml_separability": {
+        "auc_roc": 0.9991,
+        "average_precision": 0.9732,
+        "test_size": 30000,
+        "test_fraud_count": 241,
+        "top_features": {
+          "bot_confidence": 0.6287,
+          "device_age_days": 0.1366,
+          "velocity_24h": 0.0527,
+          "amount": 0.0474,
+          "distance_last_km": 0.0231,
+          "hours_inactive": 0.0218,
+          "fraud_score": 0.0217,
+          "accumulated_24h": 0.0173,
+          "unusual_time": 0.0149,
+          "new_beneficiary": 0.0084
+        }
+      },
+      "passed": true,
+      "duration_sec": 11.763
+    },
+    "temporal_patterns": {
+      "test": "temporal_patterns",
+      "score": 10.0,
+      "business_hours_pct": 81.88,
+      "night_hours_pct": 4.19,
+      "weekday_pct": 86.37,
+      "weekend_pct": 13.63,
+      "has_realistic_peaks": true,
+      "peak_morning_pct": 14.87,
+      "peak_afternoon_pct": 14.67,
+      "peak_evening_pct": 16.11,
+      "unique_dates": 366,
+      "date_range_days": 365,
+      "passed": true,
+      "duration_sec": 0.046
+    }
+  }
+}

@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="VERSION"><img src="https://img.shields.io/badge/version-4.9.1-0F766E" alt="Version 4.9.1" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-166534" alt="MIT License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Custom%20Non--Commercial-DC2626" alt="Custom Non-Commercial License" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-1D4ED8" alt="Python 3.10 or newer" />
   <img src="https://img.shields.io/badge/domains-banking%20%7C%20ride--share-0F172A" alt="Banking and ride-share domains" />
   <img src="https://img.shields.io/badge/streaming-kafka%20%7C%20webhook%20%7C%20stdout-7C3AED" alt="Kafka, webhook and stdout streaming" />
@@ -43,9 +43,17 @@
 
 ## Open Source and Hosted API
 
-The entire generator codebase is in this repository under MIT. Running from source has **no technical limits** — you get every format, every target, every generator, and unlimited scale.
+The entire generator codebase is in this repository under a **custom non-commercial license**. You may use it freely for **personal study, academic research, and educational purposes**. Commercial use by companies or individuals for any revenue-generating purpose requires a paid license — see [LICENSE](LICENSE) for details.
 
-A hosted cloud API is available at [synthfin.com.br](https://synthfin.com.br) for teams that want managed generation without running their own infrastructure.
+Running from source has **no technical limits** — you get every format, every target, every generator, and unlimited scale.
+
+A hosted cloud API is available at [synthfin.com.br](https://synthfin.com.br) for teams that want managed generation without running their own infrastructure. The platform includes:
+
+- **REST API** at [api.synthfin.com.br](https://api.synthfin.com.br) — 15 endpoints (generate, jobs, download, usage, billing)
+- **Dashboard** at [app.synthfin.com.br](https://app.synthfin.com.br) — real-time job management, usage monitoring, billing
+- **Plans** from $9/month (Starter) to $99/month (Team), with Enterprise on request
+
+See [docs/analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md](docs/analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md) for a full ecosystem overview.
 
 ### What you get from the open-source library
 
@@ -54,7 +62,7 @@ A hosted cloud API is available at [synthfin.com.br](https://synthfin.com.br) fo
 | Generators | Banking transactions, ride-share rides, or both (`--type all`) |
 | Banking fraud | 25 patterns: `ENGENHARIA_SOCIAL`, `PIX_GOLPE`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `FRAUDE_APLICATIVO`, `BOLETO_FALSO`, `FALSA_CENTRAL_TELEFONICA`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `WHATSAPP_CLONE`, `DISTRIBUTED_VELOCITY`, `PHISHING_BANCARIO`, `FRAUDE_QR_CODE`, `FRAUDE_DELIVERY_APP`, `MAO_FANTASMA`, `CREDENTIAL_STUFFING`, `EMPRESTIMO_FRAUDULENTO`, `GOLPE_INVESTIMENTO`, `SIM_SWAP`, `PIX_AGENDADO_FRAUDE`, `SEQUESTRO_RELAMPAGO`, `SYNTHETIC_IDENTITY`, `DEEP_FAKE_BIOMETRIA` |
 | Ride-share fraud | 11 types: `GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`, `REFUND_ABUSE`, `PAYMENT_CHARGEBACK`, `DESTINATION_DISPARITY`, `ACCOUNT_TAKEOVER_RIDE` |
-| Fraud scoring | `fraud_risk_score` 0–100 from 17 signals and 4 correlation rules |
+| Fraud scoring | `fraud_risk_score` 0–100 from 17 signals and 4 correlation rules via 8-stage enricher pipeline |
 | Behavioral profiles | 7 transaction profiles + 7 ride profiles; sticky per customer |
 | Reproducibility | Deterministic seeds, custom date ranges, fixed customer pool |
 | Output formats | JSONL, JSON array, CSV, TSV, Parquet, Arrow IPC, database via SQLAlchemy |
@@ -63,10 +71,10 @@ A hosted cloud API is available at [synthfin.com.br](https://synthfin.com.br) fo
 | Object storage | MinIO and S3-compatible upload |
 | Schema mode | Declarative JSON schemas with optional AI field correction |
 | CLI | ~30 flags; full parallel worker control |
-| Validation | `validate_realism.py`, `check_schema.py`, pytest suite |
+| Validation | `validate_realism.py`, `check_schema.py`, pytest suite (220 test functions) |
 | Docker | Official image on Docker Hub |
 | Scale | Hardware-only limit |
-| Cost | Free forever |
+| Cost | Free for study and research; [commercial license](https://synthfin.com.br) required for business use |
 
 ## Start Fast
 

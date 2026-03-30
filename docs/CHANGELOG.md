@@ -26,6 +26,203 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.8.1 | **Higiene** | Sprint 1 bugs críticos: Redis auth, retenção 48h, heartbeat URL synthfin | 2026-03-19 |
 | v4.9 | **Realismo** | Quality scorecard: fraud_score overlap, new_beneficiary, device fields, amount calibration | 2026-03-19 |
 | v4.9.1 | **Identidade** | Rename project to synthfin-data; update all references, Docker image, versions | 2026-03-20 |
+| v4.10 | **Governança** | Licença non-commercial, análise de gaps, separação tiers, ARCHITECTURE atualizado | 2026-03-25 |
+| v4.11 | **Ecossistema** | Documentação do ecossistema completo (API, Web, SaaS), preços atualizados, ARCHITECTURE §23 | 2026-03-25 |
+| v4.12 | **Qualidade** | Benchmark de qualidade de dados: 7 baterias de teste, AUC-ROC, KS-test, chi-squared | 2026-03-27 |
+| v4.13 | **Agentes** | Dual-platform agent architecture: 3 agents, KB, scoped instructions, commands | 2026-03-27 |
+| v4.14 | **Agentes II** | 5 new agents, scoped instructions/rules, commands, full coverage | 2026-03-30 |
+| v4.15 | **Orquestrador** | Orchestrator agent, AGENTS.md, routing table, 9 total agents | 2026-03-30 |
+
+---
+
+## v4.15 — Orquestrador (2026-03-30)
+
+### Agente Orquestrador
+
+- **Novo agente `orchestrator`** — entry point padrão que analisa requests e despacha para o agente especialista correto
+- Dual-platform: `.github/agents/orchestrator.agent.md` + `.claude/agents/orchestration/orchestrator.md`
+- Routing table com keyword matching para 8 agentes especialistas
+- Suporte a multi-agent orchestration (tarefas que cruzam domínios)
+
+### Documentação de Agentes
+
+- **Novo `AGENTS.md`** na raiz — registry completo com routing table, signals, platform usage, multi-agent patterns
+- **Routing table** adicionada ao `CLAUDE.md` — seção "Agent Routing" com keyword → agent mapping
+- `copilot-instructions.md` atualizado: orchestrator como agente default, referência ao AGENTS.md
+
+### Infraestrutura
+
+- `.claude/settings.json`: 9 agentes (orchestrator + 8 especialistas)
+- Total: **9 agentes dual-platform** com orquestração centralizada
+
+---
+
+## v4.14 — Agentes II (2026-03-30)
+
+### Novos Agentes (Fase 2)
+
+- **5 novos agentes dual-platform** (VS Code Copilot + Claude Code):
+  - `test-generator` — geração de testes pytest, auditoria de cobertura, fixtures (threshold 0.90)
+  - `ci-cd-specialist` — workflows GitHub Actions, quality gates, pre-commit, versionamento (threshold 0.95)
+  - `performance-optimizer` — diagnóstico de bottlenecks, otimização, fix OOM P3, benchmarks (threshold 0.95)
+  - `config-architect` — criação/manutenção de config modules, convenção *_LIST/*_WEIGHTS/get_*() (threshold 0.90)
+  - `documentation-keeper` — governança de docs, CHANGELOG, versionamento atômico, cleanup (threshold 0.90)
+
+### Instruções Escopadas (Novos Domínios)
+
+- `.github/instructions/`: testing, cicd, performance, documentation (applyTo por glob)
+- `.claude/rules/`: testing, cicd, performance, documentation (paths por glob)
+
+### Novos Comandos/Prompts
+
+- VS Code: `generate-tests.prompt.md` (agent: test-generator), `version-bump.prompt.md` (agent: documentation-keeper)
+- Claude Code: `testing/generate-tests.md`, `docs/version-bump.md`
+
+### Infraestrutura
+
+- `.claude/settings.json`: 8 agentes configurados (3 existentes + 5 novos)
+- `copilot-instructions.md`: lista de agentes ativos atualizada para 8
+- Total de agentes: **8 dual-platform** com cobertura completa de domínios
+
+---
+
+## v4.13 — Agentes (2026-03-27)
+
+### Arquitetura de Agentes Dual-Platform
+
+- **Novo sistema de agentes** para VS Code Copilot (`.github/`) e Claude Code (`.claude/`)
+- **3 agentes MVP**:
+  - `fraud-pattern-engineer` — criação e validação de padrões de fraude (threshold 0.95)
+  - `data-quality-analyst` — benchmarks, distribuições, relatórios de qualidade (threshold 0.90)
+  - `synthfin-explorer` — exploração read-only do codebase (threshold 0.90)
+
+### Knowledge Base (Claude Code)
+
+- **brazilian-banking**: 8 arquivos (PIX protocol, CPF validation, bank codes, fraud injection, BCB calibration, fraud-types.yaml)
+- **synthetic-data**: 5 arquivos (distributions, behavioral profiles, entity chain, weighted random)
+- Manifest: `.claude/kb/_index.yaml` com line limits por tipo
+
+### Instruções Escopadas
+
+- `.github/instructions/`: generators, exporters, config (applyTo por glob)
+- `.claude/rules/`: equivalentes para Claude Code (paths por glob)
+
+### Comandos/Prompts
+
+- VS Code: `new-fraud-pattern.prompt.md`, `quality-report.prompt.md`
+- Claude Code: `fraud/new-fraud-pattern.md`, `quality/quality-report.md`
+
+### Infraestrutura
+
+- `CLAUDE.md` — root context (<150 linhas, WHAT-WHY-HOW)
+- `.claude/settings.json` — configuração dos 3 agentes
+- `copilot-instructions.md` — slimmed de ~257 para ~85 linhas (detalhes movidos para instructions escopadas)
+
+---
+
+## v4.12 — Qualidade (2026-03-27)
+
+### Benchmark de Qualidade de Dados
+
+- **Novo script**: `benchmarks/data_quality_benchmark.py` — benchmark completo com 7 baterias de teste de qualidade
+  - **Completude**: campos nulos, vazios, ausentes (distingue campos obrigatórios de condicionais)
+  - **Unicidade**: duplicatas em IDs, cardinalidade de clientes/dispositivos/merchants
+  - **Validade**: timestamps, amounts, coordenadas Brasil, IPs, CPFs, tipos/canais/status
+  - **Consistência**: relações lógicas entre campos (fraud_score vs is_fraud, card fields, velocity)
+  - **Distribuições**: entropia de Shannon, KS-test lognormal, chi-squared temporal, ranges esperados BCB
+  - **Qualidade de Fraude**: taxa, tipos, separabilidade ML (AUC-ROC via GradientBoosting), score separation
+  - **Padrões Temporais**: horário comercial, picos realistas, range temporal, weekday vs weekend
+- Scoring 0-10 por teste com grade final (A+ a F)
+- Resultado atual: **9.70/10 (A+)**, 7/7 testes aprovados
+- AUC-ROC: **0.9991**, Average Precision: **0.9732**
+- Top features: bot_confidence (0.629), device_age_days (0.137), velocity_24h (0.053)
+- Saída JSON para integração com CI/CD
+
+### .gitignore Atualizado
+
+- Adicionados diretórios de dados gerados: `baseline_seed42/`, `after_t1/`, `analysis_output/`, `output_test/`, `benchmark_quality_output/`
+- Adicionados padrões: `*.db`, `*.pdf`, `*.html`
+- Removidos do tracking: `REALISM_METRICS.json`, `CALIBRATION_PROCESS.md`, `IMPROVEMENT_ANALYSIS.md`
+
+---
+
+## v4.11 — Ecossistema (2026-03-25)
+
+### Documentação do Ecossistema Completo
+
+- **Novo doc**: `docs/analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md` — análise integrada dos 4 componentes do ecossistema
+  - **synthfin-data**: Motor de geração (este repositório, público)
+  - **synthfin-api**: API REST v2 (FastAPI, 15 endpoints, Redis, MinIO, Stripe, Resend)
+  - **synthfin-web**: Dashboard SaaS (Next.js 15) + Landing page com pricing
+  - **synthfin-saas**: Infraestrutura Docker Compose (8 serviços, Traefik, CI/CD, 6 camadas de segurança)
+- Documentação de todos os endpoints da API v2 (auth, generate, jobs, download, usage, billing, admin)
+- Diagrama completo do stack (Cloudflare → Traefik → FastAPI/Next.js → Redis/MinIO)
+- Mapeamento de variáveis de ambiente de produção (20+ vars)
+- Status de implementação: 20 funcionalidades ✅ completadas, 9 no backlog
+- Divergências identificadas entre documentação e código real
+
+### Preços Atualizados
+
+- **ANALISE_TIERS_PAGO_GRATUITO.md**: Preços corrigidos para refletir a landing page real
+  - Starter $9/mês, Pro $29/mês, Team $99/mês (antes: R$97, R$297, R$797)
+- **Plano de implementação atualizado**: 14 items marcados como ✅ (antes marcados como ⬜)
+  - API REST v2, rate limiting, usage tracking, admin dashboard, Stripe — todos implementados
+  - Dashboard SaaS, landing page, CI/CD, segurança 6 camadas — todos implementados
+
+### ARCHITECTURE.md Atualizado
+
+- **Nova seção §23**: SynthFin Ecosystem — visão geral dos 4 componentes, arquitetura de produção, API overview, CI/CD pipeline
+- **TOC expandido**: de 22 para 23 seções
+
+### README.md Atualizado
+
+- Seção "Open Source and Hosted API" ampliada com links para API, Dashboard e pricing
+- Referência ao documento de ecossistema
+
+---
+
+## v4.10 — Governança (2026-03-25)
+
+### Licença Atualizada
+
+- **Licença**: MIT → **Custom Non-Commercial License**
+- **Uso gratuito**: estudo pessoal, pesquisa acadêmica, experimentação não-comercial
+- **Uso comercial**: proibido sem licença paga — empresas devem adquirir licença em synthfin.com.br
+- **Derivados**: mesmas restrições; não pode ser relicenciado sob termos mais permissivos
+- **README atualizado**: badge de licença e seção "Open Source and Hosted API" refletem nova licença
+
+### Análise Profunda do Projeto
+
+- **Novo doc**: `docs/analysis/ANALISE_GAPS_E_MELHORIAS.md` — 8 problemas críticos, 12 maiores, 15 melhorias
+  - Segurança Docker (VERIFY_KEY exposta, container root)
+  - Thread-safety (_RingRegistry singleton)
+  - Parquet append OOM >1GB
+  - Cobertura de testes ~40% (220 funções, 12 arquivos)
+  - Separadores inconsistentes CSV (`.`) vs Parquet (`_`)
+- **Plano de priorização**: 4 sprints por severidade
+
+### Análise de Tiers Pago vs Gratuito
+
+- **Novo doc**: `docs/analysis/ANALISE_TIERS_PAGO_GRATUITO.md`
+- **Modelo**: Open Core — CLI aberto para estudo, API hospedada para uso comercial
+- **Diferenciadores pagos**: biometria (10 campos), velocity windows estendidos, geo clustering, API REST, suporte SLA
+- **Gates de enforcement**: BiometricEnricher (já implementado), GeoEnricher/SessionEnricher (proposto), API middleware
+- **Preços sugeridos**: STARTER R$97, PRO R$297, TEAM R$797, ENTERPRISE sob consulta
+
+### ARCHITECTURE.md Atualizado
+
+- **Novas seções**: §12 Enricher Pipeline (8 enrichers + protocol + factory), §16 Licensing System (5 planos + HMAC + validator), §21 Known Gaps & Limitations
+- **TOC expandido**: de 19 para 22 seções
+- **High-Level Structure**: adicionados enrichers/, licensing/, email/
+- **Numeração**: seções 12-22 reorganizadas para acomodar novos conteúdos
+
+### README.md Atualizado
+
+- **Badge**: MIT → Custom Non-Commercial
+- **Seção "Open Source"**: reflete nova licença non-commercial
+- **Fraud scoring**: menciona 8-stage enricher pipeline
+- **Testes**: 220 funções de teste mencionadas
+- **Custo**: atualizado para refletir licença comercial necessária para empresas
 
 ---
 
@@ -1324,5 +1521,5 @@ Colors: Primary green (#009739), accent gold (#FFDF00), blue (#002776)
 
 ---
 
-*Última atualização: Dezembro 2025*
-*Versão atual: v4.0-beta*
+*Última atualização: Março 2026*
+*Versão atual: v4.10 — Governança*
