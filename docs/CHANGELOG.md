@@ -32,6 +32,17 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.13 | **Agentes** | Dual-platform agent architecture: 3 agents, KB, scoped instructions, commands | 2026-03-27 |
 | v4.14 | **Agentes II** | 5 new agents, scoped instructions/rules, commands, full coverage | 2026-03-30 |
 | v4.15 | **Orquestrador** | Orchestrator agent, AGENTS.md, routing table, 9 total agents | 2026-03-30 |
+| v4.15.1 | **Docs Agentes** | README atualizado com documentação detalhada dos 9 agentes | 2026-03-30 |
+
+---
+
+## v4.15.1 — Docs Agentes (2026-03-30)
+
+### Documentação
+
+- **README.md** atualizado com seção "AI Agents" detalhando cada um dos 9 agentes: propósito, quando usar, como funciona, features, confidence threshold, e arquivos
+- Inclui instruções de uso por plataforma (VS Code Copilot mode selector, Claude Code CLI)
+- Tabela de multi-agent patterns para workflows compostos
 
 ---
 

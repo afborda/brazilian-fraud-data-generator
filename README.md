@@ -770,6 +770,136 @@ Yes. The project was designed for fraud detection model training, synthetic data
 
 </details>
 
+## AI Agents
+
+The project ships with **9 specialized AI agents** that run on both **VS Code Copilot** and **Claude Code**. Each agent has deep domain knowledge, scoped instructions, and a knowledge base tailored to its responsibilities.
+
+The **orchestrator** is the default entry point — describe what you need and it routes to the right specialist automatically. You can also invoke any specialist directly.
+
+See [AGENTS.md](AGENTS.md) for the full routing table, multi-agent patterns, and file paths.
+
+### Orchestrator
+
+| | |
+|---|---|
+| **Purpose** | Default entry point that analyzes any request and dispatches to the best specialist agent |
+| **When to use** | When unsure which agent to pick, for multi-domain tasks, or for general project questions |
+| **How it works** | Parses intent from the request, matches domain keywords against a routing table, and delegates to 1+ specialists. For multi-domain tasks it breaks the request into sub-tasks and dispatches them sequentially or in parallel. Handles general cross-domain questions directly when no specialist is needed |
+| **Key features** | Keyword-signal routing, multi-agent orchestration (sequential and parallel), confidence-based dispatch, transparent routing explanations |
+| **Files** | `.github/agents/orchestrator.agent.md` · `.claude/agents/orchestration/orchestrator.md` |
+
+### Fraud Pattern Engineer
+
+| | |
+|---|---|
+| **Purpose** | Create, validate, calibrate, and audit fraud patterns for banking and ride-share domains |
+| **When to use** | Adding new fraud types, adjusting fraud weights, auditing enricher signal coverage, or calibrating against BCB/Febraban real-world data |
+| **How it works** | Reads the knowledge base at `.claude/kb/brazilian-banking/` for real-world fraud references (BCB, Febraban, MJSP). Creates patterns in `config/fraud_patterns.py` following the project convention. Maps each pattern to enricher signals that produce realistic `fraud_risk_score` separation. Validates that anomaly multipliers, amount ranges, and prevalence weights match Brazilian market data |
+| **Key features** | 25 banking + 11 ride-share fraud types, BCB-calibrated prevalences, enricher signal mapping, fraud injection via field combination (not separate record types), knowledge base with PIX protocol specs, CPF validation rules, and fraud-types YAML catalog |
+| **Confidence** | 0.95 — poorly calibrated fraud compromises entire dataset quality |
+| **Files** | `.github/agents/fraud-pattern-engineer.agent.md` · `.claude/agents/fraud/fraud-pattern-engineer.md` |
+
+### Data Quality Analyst
+
+| | |
+|---|---|
+| **Purpose** | Validate generated data quality, run benchmarks, analyze statistical distributions, and generate quality reports |
+| **When to use** | Checking the 9.70/10 quality score, verifying AUC-ROC after changes, comparing before/after runs, inspecting field distributions, or validating output against schemas |
+| **How it works** | Runs `benchmarks/data_quality_benchmark.py` and parses the 7 quality batteries (completeness, uniqueness, distributions, temporal, geographic, fraud, consistency). Performs KS-tests and chi-squared tests on distributions. Compares A/B runs with identical seeds to isolate the impact of code changes. Validates output against bundled JSON schemas |
+| **Key features** | 7 quality batteries, AUC-ROC 0.9991 baseline, KS-test and chi-squared analysis, A/B run comparison, schema validation, formatted quality reports with actionable recommendations |
+| **Confidence** | 0.90 — analysis can have reasonable margin |
+| **Files** | `.github/agents/data-quality-analyst.agent.md` · `.claude/agents/quality/data-quality-analyst.md` |
+
+### Synthfin Explorer
+
+| | |
+|---|---|
+| **Purpose** | Read-only codebase exploration, onboarding orientation, impact analysis, and project health assessment |
+| **When to use** | Understanding how a subsystem works, tracing data flow through the pipeline, checking what breaks if you change a file, getting project health status, or onboarding to the codebase |
+| **How it works** | Navigates 86+ Python modules across 12 subdirectories. Provides architecture deep dives by reading protocols, base classes, and implementations. Traces dependency chains for impact analysis. Counts test coverage and checks benchmark/doc freshness for health assessments. Always cites file paths and line numbers |
+| **Key features** | Quick overview for newcomers, subsystem deep dives (generators, enrichers, exporters, connections, config, profiles, CLI), dependency chain tracing, impact analysis with risk levels, project health scoring |
+| **Confidence** | 0.90 — strictly read-only, never modifies files |
+| **Files** | `.github/agents/synthfin-explorer.agent.md` · `.claude/agents/exploration/synthfin-explorer.md` |
+
+### Test Generator
+
+| | |
+|---|---|
+| **Purpose** | Generate pytest tests for untested modules, audit test coverage gaps, create shared fixtures, and build integration tests |
+| **When to use** | Adding tests for new or untested code, auditing which modules have zero coverage, creating conftest.py fixtures, or testing end-to-end workflows (batch generation, streaming, schema validation) |
+| **How it works** | Reads the target module's public API, checks existing fixtures in `tests/conftest.py`, generates tests following pytest conventions (not unittest), runs the tests to verify they pass, and fixes any failures. Follows a prioritized coverage plan from P0 (validators/cpf.py) through P7 (schema engine) |
+| **Key features** | Priority-ordered coverage plan (P0–P7), uses real CPF validation (never mocks), pytest fixtures (`temp_output_dir`, `test_seed`, `sample_customer_data`), unit + integration test generation, automatic test execution and failure fixing |
+| **Confidence** | 0.90 — tests must pass, edge cases can be iterative |
+| **Files** | `.github/agents/test-generator.agent.md` · `.claude/agents/testing/test-generator.md` |
+
+### CI/CD Specialist
+
+| | |
+|---|---|
+| **Purpose** | Create and maintain GitHub Actions workflows, quality gates, pre-commit hooks, and release automation |
+| **When to use** | Adding linting/formatting/type-checking pipelines, setting up coverage enforcement, creating pre-commit hooks, automating version bumps and releases, or fixing broken CI pipelines |
+| **How it works** | Reads existing workflows in `.github/workflows/` (5 active: Docker publish, product deploy, infra deploy, site deploy, API sync). Creates new workflows or enhances existing ones following the project's established patterns. Configures tool settings in `pyproject.toml` and validates YAML syntax. Identifies missing quality gates and recommends progressive enforcement |
+| **Key features** | GitHub Actions workflows, Docker multi-platform builds (amd64 + arm64), pytest CI integration, ruff/mypy configuration, pre-commit hooks, atomic version bump automation, coverage thresholds (`--cov-fail-under`) |
+| **Confidence** | 0.95 — broken CI/CD breaks the entire deployment pipeline |
+| **Files** | `.github/agents/ci-cd-specialist.agent.md` · `.claude/agents/cicd/ci-cd-specialist.md` |
+
+### Performance Optimizer
+
+| | |
+|---|---|
+| **Purpose** | Diagnose bottlenecks, optimize memory usage, fix OOM issues, improve generation speed, and benchmark before/after changes |
+| **When to use** | Generation is slow, memory usage is too high, CSV/Parquet export fails on large datasets (>1GB), or you want to verify that an optimization actually improved performance without degrading data quality |
+| **How it works** | Profiles with cProfile (CPU) and memory_profiler (RSS). Identifies top functions by cumulative time and maps them to known issues (P2: `random.choices()` 25% overhead, P3: CSV/Parquet OOM >1GB). Applies targeted fixes (WeightCache, streaming writes, batch chunking) and benchmarks before/after. Always verifies AUC-ROC stays at 0.9991 and all tests pass after changes |
+| **Key features** | cProfile + memory_profiler integration, WeightCache + PrecomputeBuffers optimization, streaming `export_batch()` for OOM fix, multiprocessing tuning, before/after delta tables, quality-preserving optimization (never sacrifices AUC-ROC) |
+| **Confidence** | 0.95 — wrong optimization can degrade performance or data quality |
+| **Files** | `.github/agents/performance-optimizer.agent.md` · `.claude/agents/performance/performance-optimizer.md` |
+
+### Config Architect
+
+| | |
+|---|---|
+| **Purpose** | Create and maintain configuration modules following the strict `*_LIST` + `*_WEIGHTS` + `get_*()` convention |
+| **When to use** | Adding a new config domain (payment method, region, merchant category), adding entries to existing configs (banks, MCCs, cities), auditing all 14 config modules for convention compliance, or finding dead config entries not consumed by any generator |
+| **How it works** | Enforces the triple-export convention: every config module must export `*_LIST` (valid values), `*_WEIGHTS` (distribution weights summing to ~1.0), and `get_*()` (lookup or weighted random function). Audits all 14 modules in `src/fraud_generator/config/`. Cross-references config declarations against enricher consumption to detect dead entries. Rebalances weights proportionally when adding new entries |
+| **Key features** | Convention enforcement across 14 modules (banks, merchants, geography, distributions, transactions, rideshare, fraud_patterns, pix, seasonality, weather, devices, calibration_loader, municipios), weight normalization, dead config detection, enricher sync audit |
+| **Confidence** | 0.90 |
+| **Files** | `.github/agents/config-architect.agent.md` · `.claude/agents/config/config-architect.md` |
+
+### Documentation Keeper
+
+| | |
+|---|---|
+| **Purpose** | Enforce the 5 documentation governance rules, maintain version consistency, and manage the doc lifecycle |
+| **When to use** | Adding CHANGELOG entries, bumping versions (VERSION + pyproject.toml + CHANGELOG atomically), auditing doc freshness, syncing INDEX.md with actual files, or cleaning up ephemeral planning docs after delivery |
+| **How it works** | Enforces 5 rules: (1) changelog mandatory for every behavioral change, (2) INDEX.md stays in sync with actual docs, (3) planning docs are ephemeral — delivered → recorded → deleted, (4) no duplicate docs (check INDEX first), (5) outdated docs get deprecation headers before deletion. Bumps VERSION, pyproject.toml, and CHANGELOG atomically to prevent desync |
+| **Key features** | 5 governance rules enforcement, atomic version bumps (3 files), permanent vs ephemeral doc classification, INDEX.md sync audit, deprecation header management, stale doc detection |
+| **Confidence** | 0.90 |
+| **Files** | `.github/agents/documentation-keeper.agent.md` · `.claude/agents/documentation/documentation-keeper.md` |
+
+### Agent Platforms
+
+| Platform | How to use | Agent location |
+|----------|-----------|----------------|
+| **VS Code Copilot** | Select agent from the **mode selector dropdown** (not via `@`) | `.github/agents/*.agent.md` |
+| **Claude Code** | Invoke via `/agent:orchestrator` or `/agent:{name}` | `.claude/agents/{domain}/*.md` |
+
+**Slash commands** (VS Code): `/generate-tests`, `/version-bump`, `/new-fraud-pattern`, `/quality-report`
+
+**CLI commands** (Claude Code): `/testing/generate-tests`, `/docs/version-bump`, `/fraud/new-fraud-pattern`, `/quality/quality-report`
+
+### Multi-Agent Patterns
+
+Common workflows that chain multiple agents:
+
+| Scenario | Agents (in order) |
+|----------|-------------------|
+| Add feature + test it | specialist → test-generator |
+| Change + benchmark + changelog | specialist → data-quality-analyst → documentation-keeper |
+| Full project health report | synthfin-explorer + data-quality-analyst + test-generator (parallel) |
+| New config + wire to enricher | config-architect → fraud-pattern-engineer |
+| Optimize + verify quality | performance-optimizer → data-quality-analyst |
+| New workflow + update docs | ci-cd-specialist → documentation-keeper |
+
 ## Documentation
 
 - Main docs: [docs/README.md](docs/README.md)
@@ -777,4 +907,5 @@ Yes. The project was designed for fraud detection model training, synthetic data
 - Architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
 - Changelog: [docs/CHANGELOG.md](docs/CHANGELOG.md)
 - Docker publishing: [docs/DOCKER_HUB_PUBLISHING.md](docs/DOCKER_HUB_PUBLISHING.md)
+- Agent registry: [AGENTS.md](AGENTS.md)
 
