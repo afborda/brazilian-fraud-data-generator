@@ -7,7 +7,7 @@
 <p align="center">
   <a href="./README.md"><img src="https://img.shields.io/badge/lang-en-B91C1C" alt="Documentacao em ingles" /></a>
   <a href="./README.pt-BR.md"><img src="https://img.shields.io/badge/lang-pt--BR-15803D" alt="Documentacao em portugues" /></a>
-  <img src="https://img.shields.io/badge/python-3.8%2B-1D4ED8" alt="Python 3.8 ou superior" />
+  <img src="https://img.shields.io/badge/python-3.10%2B-1D4ED8" alt="Python 3.10 ou superior" />
   <img src="https://img.shields.io/badge/modos-batch%20%7C%20stream%20%7C%20schema-0F172A" alt="Batch, stream e schema" />
   <img src="https://img.shields.io/badge/saida-jsonl%20csv%20parquet%20arrow-7C3AED" alt="Saidas JSONL CSV Parquet Arrow" />
 </p>
@@ -35,23 +35,27 @@ Este repositório foi construído para quem precisa de um dataset sintético de 
   <tr>
     <td width="33%"><strong>Realismo brasileiro</strong><br />CPF válido, geografia nacional, perfis comportamentais, sazonalidade e sinais ligados a PIX e device.</td>
     <td width="33%"><strong>Pronto para produção</strong><br />Batch, streaming, schema mode, banco de dados, Kafka, webhook, MinIO ou S3.</td>
-    <td width="33%"><strong>Foco em fraude</strong><br />10 padrões bancários, 7 fraudes de ride-share, 17 sinais de risco e 4 regras de correlação.</td>
+    <td width="33%"><strong>Foco em fraude</strong><br />25 padrões bancários, 11 fraudes de ride-share, 17 sinais de risco e 4 regras de correlação.</td>
   </tr>
 </table>
 
 ## Open Source e planos comerciais
 
-Todo o código do gerador está neste repositório sob licença MIT. Rodar a partir do código-fonte **não tem limites técnicos** — você tem todos os formatos, todos os targets, todos os geradores e escala ilimitada. A camada de licenciamento só ativa quando variáveis `FRAUDGEN_*` são carregadas; sem elas, o código completo roda sem restrição.
+Todo o código do gerador está neste repositório sob **licença custom non-commercial**. Rodar a partir do código-fonte **não tem limites técnicos** — você tem todos os formatos, todos os targets, todos os geradores e escala ilimitada. Uso gratuito para estudo pessoal, pesquisa acadêmica e experimentação não-comercial. Uso comercial requer licença paga — veja [LICENSE](../LICENSE).
 
-Os planos comerciais acrescentam suporte, garantias de taxa e uma API hospedada futura. O trial gratuito de 30 dias dá tudo que o open source entrega, mais um preview de webhook, para você avaliar o streaming pago antes de pagar.
+Uma API hospedada está disponível em [synthfin.com.br](https://synthfin.com.br) para equipes que querem geração gerenciada sem operar infraestrutura própria. A plataforma inclui:
+
+- **REST API** em [api.synthfin.com.br](https://api.synthfin.com.br) — 15 endpoints (generate, jobs, download, usage, billing)
+- **Dashboard** em [app.synthfin.com.br](https://app.synthfin.com.br) — gestão de jobs, monitoramento, billing
+- **Planos** a partir de $9/mês (Starter) até $99/mês (Team), com Enterprise sob consulta
 
 ### O que o open source entrega (sem licença)
 
 | Categoria | O que está incluído |
 |---|---|
 | Geradores | Transações bancárias, corridas de ride-share ou ambos (`--type all`) |
-| Fraude bancária | 11 padrões: `ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`, `BOLETO_FALSO` |
-| Fraude ride-share | 7 tipos: `GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD` |
+| Fraude bancária | 25 padrões: `ENGENHARIA_SOCIAL`, `PIX_GOLPE`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `FRAUDE_APLICATIVO`, `BOLETO_FALSO`, `FALSA_CENTRAL_TELEFONICA`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `WHATSAPP_CLONE`, `DISTRIBUTED_VELOCITY`, `PHISHING_BANCARIO`, `FRAUDE_QR_CODE`, `FRAUDE_DELIVERY_APP`, `MAO_FANTASMA`, `CREDENTIAL_STUFFING`, `EMPRESTIMO_FRAUDULENTO`, `GOLPE_INVESTIMENTO`, `SIM_SWAP`, `PIX_AGENDADO_FRAUDE`, `SEQUESTRO_RELAMPAGO`, `SYNTHETIC_IDENTITY`, `DEEP_FAKE_BIOMETRIA` |
+| Fraude ride-share | 11 tipos: `GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`, `REFUND_ABUSE`, `PAYMENT_CHARGEBACK`, `DESTINATION_DISPARITY`, `ACCOUNT_TAKEOVER_RIDE` |
 | Score de fraude | `fraud_risk_score` 0–100 a partir de 17 sinais e 4 regras de correlação |
 | Perfis comportamentais | 7 perfis de transação + 7 perfis de ride-share; fixos por cliente |
 | Reprodutibilidade | Seeds determinísticas, intervalo de datas customizado, pool de clientes fixo |
@@ -74,8 +78,8 @@ Veja os planos disponíveis em [synthfin.com.br](https://synthfin.com.br).
 | Funcionalidade | Open Source (self-hosted) | Planos comerciais |
 |---|:---:|:---:|
 | Todos os geradores e formatos | ✓ | ✓ |
-| 11 padrões de fraude bancária | ✓ | ✓ |
-| 7 tipos de fraude ride-share | ✓ | ✓ |
+| 25 padrões de fraude bancária | ✓ | ✓ |
+| 11 tipos de fraude ride-share | ✓ | ✓ |
 | Streaming (stdout, Kafka, webhook) | ✓ | ✓ |
 | Workers paralelos, Docker | ✓ | ✓ |
 | Escala ilimitada | ✓ | ✓ |
@@ -484,18 +488,18 @@ Cada arquivo é JSONL — um objeto JSON por linha. Os exemplos abaixo são regi
 |---|---|
 | Bancário | PIX, TED, DOC, boleto, saque, POS, ecommerce, contexto de merchant, device e campos BACEN para PIX |
 | Ride-share | Uber, 99, Cabify e inDrive com motoristas, passageiros, surge, distância e impacto climático |
-| Labels de fraude | 10 padrões bancários e 7 tipos de fraude em corridas com taxa configurável |
+| Labels de fraude | 25 padrões bancários e 11 tipos de fraude em corridas com taxa configurável |
 | Score de fraude | `fraud_risk_score` de 0 a 100 baseado em 17 sinais e 4 regras de correlação |
 | Realismo temporal | Picos trimodais, pesos por dia da semana, Black Friday, Natal, 13o e Carnaval |
 | Validação | `validate_realism.py`, schemas prontos, checagem de schema e seeds determinísticas |
 
 ### Padrões de fraude bancária
 
-`ENGENHARIA_SOCIAL`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `PIX_GOLPE`, `FRAUDE_APLICATIVO`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `DISTRIBUTED_VELOCITY`
+`ENGENHARIA_SOCIAL`, `PIX_GOLPE`, `CONTA_TOMADA`, `CARTAO_CLONADO`, `FRAUDE_APLICATIVO`, `BOLETO_FALSO`, `FALSA_CENTRAL_TELEFONICA`, `COMPRA_TESTE`, `MULA_FINANCEIRA`, `CARD_TESTING`, `MICRO_BURST_VELOCITY`, `WHATSAPP_CLONE`, `DISTRIBUTED_VELOCITY`, `PHISHING_BANCARIO`, `FRAUDE_QR_CODE`, `FRAUDE_DELIVERY_APP`, `MAO_FANTASMA`, `CREDENTIAL_STUFFING`, `EMPRESTIMO_FRAUDULENTO`, `GOLPE_INVESTIMENTO`, `SIM_SWAP`, `PIX_AGENDADO_FRAUDE`, `SEQUESTRO_RELAMPAGO`, `SYNTHETIC_IDENTITY`, `DEEP_FAKE_BIOMETRIA`
 
 ### Tipos de fraude em ride-share
 
-`GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`
+`GHOST_RIDE`, `GPS_SPOOFING`, `SURGE_ABUSE`, `MULTI_ACCOUNT_DRIVER`, `PROMO_ABUSE`, `RATING_FRAUD`, `SPLIT_FARE_FRAUD`, `REFUND_ABUSE`, `PAYMENT_CHARGEBACK`, `DESTINATION_DISPARITY`, `ACCOUNT_TAKEOVER_RIDE`
 
 ## Formatos e integrações
 

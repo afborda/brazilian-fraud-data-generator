@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│    🇧🇷 BRAZILIAN FRAUD DATA GENERATOR v4-beta               │
+│    🇧🇷 SYNTHFIN-DATA v4.15.1                                │
 │                                                              │
 │  Objetivo: Gerar dados sintéticos realistas de fraude        │
 │            para testes, ML training, benchmarking            │
@@ -13,7 +13,8 @@
 │  Saída:    Arquivos de transações em JSONL/CSV/Parquet      │
 │  Deploy:   Local ou MinIO/S3 na nuvem                       │
 │                                                              │
-│  Performance Atual: 68k tx/s, 36s para 1GB                  │
+│  Quality Score: 9.70/10 (A+), AUC-ROC: 0.9991              │
+│  Fraudes: 25 bancárias + 11 ride-share                      │
 │  Scalabilidade: Até ~100GB local, >TB em cloud             │
 └──────────────────────────────────────────────────────────────┘
 ```

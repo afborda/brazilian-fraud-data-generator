@@ -33,6 +33,47 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.14 | **Agentes II** | 5 new agents, scoped instructions/rules, commands, full coverage | 2026-03-30 |
 | v4.15 | **Orquestrador** | Orchestrator agent, AGENTS.md, routing table, 9 total agents | 2026-03-30 |
 | v4.15.1 | **Docs Agentes** | README atualizado com documentação detalhada dos 9 agentes | 2026-03-30 |
+| v4.16 | **Higiene Docs** | Doc cleanup: version sync, stale removal, INDEX fix, license labels | 2026-03-31 |
+
+---
+
+## v4.16 — Higiene Docs (2026-03-31)
+
+### Sincronização de Versão
+
+- **Version sync**: `VERSION`, `pyproject.toml`, `Dockerfile`, `README.md` badge, `ARCHITECTURE.md`, `docs/ARQUITETURA.md`, `docs/INDEX.md`, `docs/01_VISAO_GERAL.md` — todos atualizados de 4.9.1 para 4.15.1 → 4.16
+- **Dockerfile**: license label corrigida de `MIT` para `Custom-Non-Commercial`; VERSION ARG atualizada
+
+### Documentação Removida (Ephemeral/Entregue)
+
+- **`CALIBRATION_PROCESS.md`** (raiz): planejamento de calibração v4.9, entregue — removido
+- **`IMPROVEMENT_ANALYSIS.md`** (raiz): análise de melhoria v4.9, entregue — removido
+- **`docs/ORGANIZATION_SUMMARY.txt`**: resumo da era v3.3 — removido
+- **`examples/REPOSITORY_ORGANIZATION.md`**: estrutura da era v3.3 — removido
+- **`docs/optimizations/`**: diretório vazio — removido
+- **`docs/release/`**: diretório vazio — removido
+
+### INDEX.md Corrigido
+
+- Removidos links quebrados: `analysis/ANALISE_PC.md`, `analysis/INDICE_ANALISE.md`, `fraudes/README.md`
+- Adicionados docs ausentes: `CALIBRACAO_DADOS_REAIS_BCB.md`, `CAPACITY_PLANNING.md`, `analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md`, `analysis/ANALISE_GAPS_E_MELHORIAS.md`, `analysis/ANALISE_TIERS_PAGO_GRATUITO.md`
+- Versão e data atualizadas de "4.9.1 / June 2025" para "4.16 / March 2026"
+- Estatísticas corrigidas: 35 docs, 9 analysis, 5 fraud research
+
+### Documentação Atualizada
+
+- **`docs/README.pt-BR.md`**: Python 3.8+ → 3.10+; fraudes 10+7 → 25+11; licença MIT → non-commercial; planos comerciais atualizados
+- **`docs/ANALISE_COMPLETA_PROJETO.md`**: versão 4.9.0 → 4.15.1, 30+ → 75+ módulos, licença MIT → non-commercial
+- **`docs/GUIA_TECNICO_COMPONENTES.md`**: versão 4.0.0 → 4.15.1
+- **`docs/analysis/RESUMO_EXECUTIVO.md`**: status dos 6 problemas críticos atualizado (4/6 resolvidos)
+- **`docs/analysis/VISUAL_SUMMARY.md`**: header v4-beta → v4.15.1, métricas de qualidade adicionadas
+- **`docs/analysis/ANALISE_PROFUNDA.md`**: título v4-beta → v4.15.1
+- **`docs/CAPACITY_PLANNING.md`**: versão 4.1.0 → 4.15.1
+
+### Sistema de Agentes (agent-ia/)
+
+- **Novo diretório `agent-ia/`** com 13 agentes documentados + README
+- **`ia-agent-norte.md`**: guia estratégico mestre do sistema multi-agente
 
 ---
 

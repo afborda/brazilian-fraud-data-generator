@@ -13,11 +13,11 @@ LABEL org.opencontainers.image.authors="Abner Fonseca <afborda@gmail.com>"
 LABEL org.opencontainers.image.url="https://github.com/afborda/synthfin-data"
 LABEL org.opencontainers.image.source="https://github.com/afborda/synthfin-data"
 LABEL org.opencontainers.image.documentation="https://github.com/afborda/synthfin-data#readme"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="Custom-Non-Commercial"
 LABEL org.opencontainers.image.vendor="Abner Fonseca"
 
 # Dynamic labels (set during build via --build-arg)
-ARG VERSION=4.9.1
+ARG VERSION=4.16
 ARG BUILD_DATE
 ARG VCS_REF
 # FRAUDGEN_VERIFY_KEY is baked into the image at build time.

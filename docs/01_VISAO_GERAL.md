@@ -54,7 +54,7 @@ Juntos, formam um ecossistema completo para geração de dados sintéticos de al
 
 ---
 
-## Números da Versão Atual (v4.9.1 / V5 Calibrado)
+## Números da Versão Atual (v4.15.1)
 
 | Métrica | Valor |
 |---------|-------|

@@ -1,4 +1,4 @@
-# Análise Profunda - synthfin-data v4-beta
+# Análise Profunda - synthfin-data v4.15.1
 
 ## 📋 Sumário Executivo
 

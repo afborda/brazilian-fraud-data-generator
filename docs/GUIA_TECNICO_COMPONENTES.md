@@ -1,7 +1,7 @@
 # 🔌 GUIA TÉCNICO DE COMPONENTES & USO
 
-**Data:** 3 de Março de 2026  
-**Versão:** 4.0.0  
+**Data:** 3 de Março de 2026 (atualizado Março 2026)  
+**Versão:** 4.15.1  
 **Propósito:** Referência técnica detalhada para desenvolvedores
 
 ---

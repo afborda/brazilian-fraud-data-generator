@@ -1,4 +1,4 @@
-# Arquitetura — synthfin-data v4.9.0
+# Arquitetura — synthfin-data v4.15.1
 
 > Documento técnico completo com diagramas de todas as camadas arquiteturais do projeto.
 

@@ -51,19 +51,19 @@ Deep-dive analysis of project architecture, performance metrics, and behavioral 
 |------|---------|
 | [RESUMO_EXECUTIVO.md](analysis/RESUMO_EXECUTIVO.md) | Executive summary of project status and achievements |
 | [ANALISE_PROFUNDA.md](analysis/ANALISE_PROFUNDA.md) | Deep architectural analysis |
-| [ANALISE_PC.md](analysis/ANALISE_PC.md) | Performance characteristics analysis |
 | [ANALISE_GANHOS_E_ARQUITETURA.md](analysis/ANALISE_GANHOS_E_ARQUITETURA.md) | Gains and architecture improvements |
+| [ANALISE_ECOSSISTEMA_SYNTHFIN.md](analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md) | Integrated ecosystem analysis (data + API + web + SaaS) |
+| [ANALISE_GAPS_E_MELHORIAS.md](analysis/ANALISE_GAPS_E_MELHORIAS.md) | Gap analysis: critical issues, improvements |
+| [ANALISE_TIERS_PAGO_GRATUITO.md](analysis/ANALISE_TIERS_PAGO_GRATUITO.md) | Free vs paid tier separation strategy |
 | [METRICAS_DETALHADAS.md](analysis/METRICAS_DETALHADAS.md) | Detailed performance metrics |
 | [VISUAL_SUMMARY.md](analysis/VISUAL_SUMMARY.md) | Visual project summary |
 | [ESTUDO_PERFIS_COMPORTAMENTAIS.md](analysis/ESTUDO_PERFIS_COMPORTAMENTAIS.md) | Behavioral profile research |
-| [INDICE_ANALISE.md](analysis/INDICE_ANALISE.md) | Analysis index |
 
 ### 🚨 Fraud Research (`/fraudes`)
 Fraud taxonomy, validation analysis, and implementation roadmap.
 
 | File | Purpose |
 |------|---------|
-| [README.md](fraudes/README.md) | Fraud documentation index |
 | [INDICE_EXECUTIVO.md](fraudes/INDICE_EXECUTIVO.md) | Executive index: 64+ fraud patterns found, TOP 5 actions |
 | [FRAUDES_DESCOBERTAS.md](fraudes/FRAUDES_DESCOBERTAS.md) | Deep fraud research: 50+ patterns discovered |
 | [ANALISE_VALIDACAO_DADOS.md](fraudes/ANALISE_VALIDACAO_DADOS.md) | Data validation: synthetic vs. reality quality metrics |
@@ -78,10 +78,11 @@ Fraud taxonomy, validation analysis, and implementation roadmap.
 |------|---------|
 | [GUIA_TECNICO_COMPONENTES.md](GUIA_TECNICO_COMPONENTES.md) | Component usage guide with code examples |
 | [ANALISE_COMPLETA_PROJETO.md](ANALISE_COMPLETA_PROJETO.md) | Comprehensive project analysis |
+| [CALIBRACAO_DADOS_REAIS_BCB.md](CALIBRACAO_DADOS_REAIS_BCB.md) | BCB real data calibration reference |
+| [CAPACITY_PLANNING.md](CAPACITY_PLANNING.md) | VPS capacity planning and RAM optimization |
 | [MEMORY_OPTIMIZATION.md](MEMORY_OPTIMIZATION.md) | Memory optimization strategies for 50GB+ datasets |
 | [MULTIPROCESSING_BENCHMARK.md](MULTIPROCESSING_BENCHMARK.md) | Streaming multiprocessing GIL bypass results |
 | [DOCKER_HUB_PUBLISHING.md](DOCKER_HUB_PUBLISHING.md) | Docker Hub publishing guide with CI/CD workflow |
-| [REPOSITORY_ORGANIZATION.md](REPOSITORY_ORGANIZATION.md) | Repository structure and git workflow guide |
 
 ---
 
@@ -106,17 +107,17 @@ Fraud taxonomy, validation analysis, and implementation roadmap.
 
 ## 📊 Project Statistics
 
-- **Total Documentation Files**: ~38
+- **Total Documentation Files**: ~35
 - **Ecosystem Docs (01–08)**: 8
-- **Analysis Documents**: 8
-- **Fraud Research Documents**: 6
+- **Analysis Documents**: 9
+- **Fraud Research Documents**: 5
 - **Technical Guides**: 7
 
 ---
 
 ## Version
 
-**Current Version**: 4.9.1
-**Last Updated**: June 2025
+**Current Version**: 4.16
+**Last Updated**: March 2026
 
 See [CHANGELOG](CHANGELOG.md) for version history.

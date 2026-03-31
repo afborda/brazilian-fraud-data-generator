@@ -27,14 +27,16 @@ Gera **datasets sintéticos realistas** de fraude financeira brasileira para:
 
 ## 🚨 Problemas Críticos
 
-| ID | Problema | Impacto | Severidade |
-|----|----------|--------|-----------|
-| **P1** | Fraude muito simplista (sem padrões) | Dados não realistas para ML | 🔴 ALTA |
-| **P2** | random.choices() chamado por transação | 25% do tempo em overhead | 🔴 ALTA |
-| **P3** | CSV/Parquet acumula lista inteira | OOM para >1GB | 🔴 ALTA |
-| **P4** | Sem retry em falhas MinIO | Data loss em produção | 🟠 MÉDIA |
-| **P5** | Campos de risco sempre None | JSON 10% maior | 🟡 BAIXA |
-| **P6** | Sem histórico do cliente | Velocidade, padrões não realistas | 🟠 MÉDIA |
+> Atualizado em Março 2026 (v4.15.1). Problemas resolvidos marcados com ✅.
+
+| ID | Problema | Impacto | Status |
+|----|----------|--------|--------|
+| **P1** | ~~Fraude muito simplista (sem padrões)~~ | Dados não realistas para ML | ✅ Resolvido (25 tipos bancários + 11 ride-share, enricher pipeline) |
+| **P2** | random.choices() chamado por transação | 25% do tempo em overhead | 🔄 Parcial (WeightCache implementado, otimização adicional pendente) |
+| **P3** | CSV/Parquet acumula lista inteira | OOM para >1GB | 🔴 Pendente |
+| **P4** | ~~Sem retry em falhas MinIO~~ | Data loss em produção | ✅ Resolvido (exponential backoff) |
+| **P5** | ~~Campos de risco sempre None~~ | JSON 10% maior | ✅ Resolvido (17 sinais + 4 regras) |
+| **P6** | ~~Sem histórico do cliente~~ | Velocidade, padrões não realistas | ✅ Resolvido (CustomerSessionState) |
 
 ---
 
@@ -309,6 +311,6 @@ O projeto é **bem arquitetado** mas com **gargalos claros** em 3 áreas:
 
 **Análise Concluída** ✅  
 **Data:** 29 de Janeiro de 2026  
-**Versão do Projeto:** v4-beta  
-**Branch:** `origin/v4-beta`
+**Versão do Projeto:** v4.15.1  
+**Branch:** `main`
 

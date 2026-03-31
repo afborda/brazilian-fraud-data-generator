@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.9.1-0F766E" alt="Version 4.9.1" /></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.16-0F766E" alt="Version 4.16" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Custom%20Non--Commercial-DC2626" alt="Custom Non-Commercial License" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-1D4ED8" alt="Python 3.10 or newer" />
   <img src="https://img.shields.io/badge/domains-banking%20%7C%20ride--share-0F172A" alt="Banking and ride-share domains" />
