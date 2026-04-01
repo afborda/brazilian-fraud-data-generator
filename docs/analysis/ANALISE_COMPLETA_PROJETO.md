@@ -795,7 +795,7 @@ Teste: Benchmark em test_phase_2_optimizations.py
 ### Otimizações
 - ✅ [PHASE_2_1_IMPLEMENTATION.md](docs/optimizations/PHASE_2_1_IMPLEMENTATION.md) - Compressão nativa
 - ✅ [OPTIMIZATIONS_SUMMARY.md](docs/optimizations/OPTIMIZATIONS_SUMMARY_PHASE_1.md) - Fase 1
-- ✅ [MEMORY_OPTIMIZATION.md](docs/MEMORY_OPTIMIZATION.md) - Estratégias de memória
+- ✅ [MEMORY_OPTIMIZATION.md](../performance/MEMORY_OPTIMIZATION.md) - Estratégias de memória
 
 ### Planejamento
 - ✅ [PLANO_IMPLEMENTACAO.md](docs/planning/PLANO_IMPLEMENTACAO.md) - Roadmap detalhado

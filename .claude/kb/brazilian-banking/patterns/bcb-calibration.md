@@ -52,4 +52,4 @@ synthfin-data uses BCB (Banco Central do Brasil) public statistics to ensure gen
 2. Update parameters in `config/calibration_loader.py`
 3. Run quality benchmark: `python benchmarks/data_quality_benchmark.py`
 4. Verify distributions via KS-test (should not reject at α=0.05)
-5. Update `docs/CALIBRACAO_DADOS_REAIS_BCB.md` with new data source
+5. Update `docs/analysis/CALIBRACAO_DADOS_REAIS_BCB.md` with new data source

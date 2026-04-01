@@ -209,9 +209,9 @@ Middlewares Traefik configurados:
 | `_benchmark_evolucao.py` | Comparação before/after |
 | `validate_realism.py` | Score de realismo (10 dimensões) |
 | `check_schema.py` | Validação de schema de output |
-| `tstr_benchmark.py` | Train Synthetic Test Real (LR/RF/XGBoost) |
-| `privacy_metrics.py` | Métricas de privacidade |
-| `qde_filter.py` | Quality, Diversity, Exclusivity filter |
+| `tools/tstr_benchmark.py` | Train Synthetic Test Real (LR/RF/XGBoost) |
+| `tools/privacy_metrics.py` | Métricas de privacidade |
+| `tools/qde_filter.py` | Quality, Diversity, Exclusivity filter |
 
 ---
 

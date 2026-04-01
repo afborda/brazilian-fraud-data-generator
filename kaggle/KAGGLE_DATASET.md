@@ -235,7 +235,7 @@ This dataset was **not generated with random distributions**. Every key paramete
 | Geographic concentration (SP+RJ+MG) | ~40% of financial volume | 38.2% ✅ |
 | Elderly fraud ticket | R$ 4,820 (5× higher) | Modeled via profiles |
 
-> **Full calibration methodology**: See the [BCB Calibration Document](https://github.com/afborda/synthfin-data/blob/main/docs/CALIBRACAO_DADOS_REAIS_BCB.md) in the source repository.
+> **Full calibration methodology**: See the [BCB Calibration Document](https://github.com/afborda/synthfin-data/blob/main/docs/analysis/CALIBRACAO_DADOS_REAIS_BCB.md) in the source repository.
 
 ## How the Tool Works — Generation Pipeline
 

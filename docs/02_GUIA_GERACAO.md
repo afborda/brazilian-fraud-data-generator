@@ -286,7 +286,7 @@ python check_schema.py
 
 ```bash
 # Treina modelos em dados sintéticos, testa em dados reais
-python tstr_benchmark.py
+python tools/tstr_benchmark.py
 ```
 
 Resultados: AUC gap = 0.0% nos modelos LR, RF e XGBoost.

@@ -34,6 +34,74 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.15 | **Orquestrador** | Orchestrator agent, AGENTS.md, routing table, 9 total agents | 2026-03-30 |
 | v4.15.1 | **Docs Agentes** | README atualizado com documentação detalhada dos 9 agentes | 2026-03-30 |
 | v4.16 | **Higiene Docs** | Doc cleanup: version sync, stale removal, INDEX fix, license labels | 2026-03-31 |
+| v4.16.1 | **Organização** | Reorganização de docs/: subdiretórios analysis/, performance/, cross-refs atualizados | 2026-03-31 |
+| v4.17 | **README** | README reescrito, agent-ia/ removido, tools/ criado, docs/README.md criado | 2026-04-01 |
+
+---
+
+## v4.17 — README (2026-04-01)
+
+### README Reescrito
+
+- **README.md**: reescrito de 911 → 344 linhas, focado na experiência do usuário
+- Seções movidas para docs existentes: RAG Calibration → `07_CATALOGO_FRAUDES.md`, Real CEP Pipeline → `GUIA_TECNICO_COMPONENTES.md`, Before vs After benchmark → `analysis/`, descrição detalhada de 9 agentes → `AGENTS.md`
+- Quick Start priorizado: primeiro comando gera dados em <2 min
+- Adicionadas seções: Project Structure, Utility Scripts
+
+### Documentação Removida (Obsoleta)
+
+- **`agent-ia/`** (14 arquivos): sistema antigo de 13 agentes — substituído por `.github/agents/` + `.claude/agents/` + `AGENTS.md`
+- **`ia-agent-norte.md`**: guia estratégico do sistema antigo — substituído por `AGENTS.md`
+
+### Reorganização de Arquivos
+
+- **`tools/`**: novo diretório para scripts utilitários standalone
+  - `backtest_rules.py` — movido da raiz
+  - `privacy_metrics.py` — movido da raiz
+  - `qde_filter.py` — movido da raiz
+  - `tstr_benchmark.py` — movido da raiz
+  - `validate/dashboard.py` + `validate/requirements.txt` — movidos da raiz
+
+### Dados Gerados Removidos (~1.9 GB)
+
+- `after_t1/`, `baseline_after/`, `baseline_seed42/`, `benchmark_quality_output/`, `analysis_output/`, `output_test/`, `REALISM_METRICS.json` — todos gitignored, regeneráveis
+
+### Link Quebrado Corrigido
+
+- **`docs/README.md`**: criado como hub de documentação em inglês (referenciado pelo README.md)
+
+### INDEX.md Atualizado
+
+- Adicionada seção Utility Scripts (`/tools`)
+- Link para `AGENTS.md` adicionado à seção Main Documentation
+- Versão atualizada para 4.17
+
+---
+
+## v4.16.1 — Organização Docs (2026-03-31)
+
+### Reorganização de Diretórios
+
+- **Novo subdiretório `docs/performance/`**: criado para agrupar documentação de performance
+  - `CAPACITY_PLANNING.md` — movido da raiz de docs/
+  - `MEMORY_OPTIMIZATION.md` — movido da raiz de docs/
+  - `MULTIPROCESSING_BENCHMARK.md` — movido da raiz de docs/
+- **`docs/analysis/`**: 2 documentos movidos da raiz de docs/
+  - `ANALISE_COMPLETA_PROJETO.md` — análise completa do projeto
+  - `CALIBRACAO_DADOS_REAIS_BCB.md` — calibração com dados reais BCB
+- **`docs/benchmarks/`**: conteúdo migrado para `benchmarks/` (raiz) — diretório removido
+- **PDF duplicado removido**: `BrazilData_Master_Unificado_v1 (1).pdf`
+- **PDF Febraban**: movido para `documentodeestudos/`
+
+### Cross-References Atualizadas
+
+- `docs/INDEX.md`: reescrito com novos paths e seção Performance adicionada
+- `docs/GUIA_TECNICO_COMPONENTES.md`: link para ANALISE_COMPLETA → `analysis/`
+- `docs/analysis/ANALISE_COMPLETA_PROJETO.md`: link MEMORY_OPTIMIZATION → `../performance/`
+- `docs/README.pt-BR.md`: referência MULTIPROCESSING_BENCHMARK → `docs/performance/`
+- `docs/analysis/ANALISE_GAPS_E_MELHORIAS.md`: path CAPACITY_PLANNING → `docs/performance/`
+- `kaggle/KAGGLE_DATASET.md`: GitHub URL CALIBRACAO → `docs/analysis/`
+- `.claude/kb/.../bcb-calibration.md`: path atualizado
 
 ---
 

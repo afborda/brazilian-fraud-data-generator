@@ -963,7 +963,7 @@ cpf = generate_valid_cpf()  # Garantido válido
 
 ## 🚀 PRÓXIMOS PASSOS
 
-1. **Ler:** [ANALISE_COMPLETA_PROJETO.md](ANALISE_COMPLETA_PROJETO.md)
+1. **Ler:** [ANALISE_COMPLETA_PROJETO.md](analysis/ANALISE_COMPLETA_PROJETO.md)
 2. **Praticar:** Rodar `generate.py` e `stream.py` localmente
 3. **Estender:** Criar seu próprio exporter/connection
 4. **Contribuir:** Submeter PR contra v4-beta

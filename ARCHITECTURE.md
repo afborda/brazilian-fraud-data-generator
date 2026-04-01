@@ -1,6 +1,6 @@
 # Architecture — synthfin-data
 
-> **Version:** 4.16 — 2026-03-31  
+> **Version:** 4.17 — 2026-04-01  
 > **Portuguese version:** [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
 
 ---

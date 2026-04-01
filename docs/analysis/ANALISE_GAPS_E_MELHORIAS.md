@@ -73,7 +73,7 @@ ENV FRAUDGEN_VERIFY_KEY=${FRAUDGEN_VERIFY_KEY}
 
 ### C8. CAPACITY_PLANNING Diverge do Código
 
-**Arquivo**: `docs/CAPACITY_PLANNING.md` vs `src/fraud_generator/licensing/limits.py`  
+**Arquivo**: `docs/performance/CAPACITY_PLANNING.md` vs `src/fraud_generator/licensing/limits.py`  
 **Problema**: Doc diz FREE = 5K events/month; código diz FREE = 1M events/month.  
 **Impacto**: Informação contraditória sobre limites do plano gratuito.
 
