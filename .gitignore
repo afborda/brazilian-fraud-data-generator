@@ -1,4 +1,27 @@
-# Generated Data & Output
+# ============================================================
+# synthfin-data .gitignore
+# ============================================================
+
+# ── Secrets & Credentials ──────────────────────────────────
+# NEVER commit secrets. Only .example files are allowed.
+.env
+.env.*
+!.env.*.example
+!.env.server.example
+license.env
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+*.secret
+**/credentials/
+**/secrets/
+*.token
+api_key*
+
+# ── Generated Data & Output ────────────────────────────────
 output/
 test_output/
 test_jsonl_*/
@@ -11,35 +34,41 @@ after_t1/
 analysis_output/
 output_test/
 benchmark_quality_output/
-doc/
-*.jsonl
-*.jsonl.gz
-*.csv
-*.parquet
-*.db
-*.pdf
-*.html
 data/
 datasets/
 tmp/
 temp/
 
-# Generated root-level files
+# Data files (anywhere in tree)
+*.jsonl
+*.jsonl.gz
+*.csv
+*.parquet
+*.arrow
+*.ipc
+*.feather
+*.avro
+*.orc
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Generated Root-Level Files ─────────────────────────────
 REALISM_METRICS.json
 CALIBRATION_PROCESS.md
 IMPROVEMENT_ANALYSIS.md
 
-# Documentation (generated/temporary analysis files)
+# ── Documents (generated/temporary) ───────────────────────
 docs/benchmarks/benchmark_results/
 docs/benchmarks/*.log
 docs/*.txt
-docs/ANALISE_*.md
 docs/ORGANIZATION_*.md
 docs/STATUS_*.md
 docs/PHASE_*_INTEGRATION_*.md
 docs/REPOSITORY_*.md
+doc/
 
-# Python
+# ── Python ─────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -64,15 +93,17 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual Environments
+# ── Virtual Environments ──────────────────────────────────
 venv/
 env/
 ENV/
 env.bak/
 venv.bak/
 .venv/
+.conda/
+conda-env/
 
-# IDE & Editors
+# ── IDE & Editors ─────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
@@ -86,8 +117,10 @@ venv.bak/
 *.sublime-workspace
 .vim/
 .emacs.d/
+*.iml
+.gradle/
 
-# Testing & Coverage
+# ── Testing & Coverage ────────────────────────────────────
 .pytest_cache/
 .coverage
 .coverage.*
@@ -95,11 +128,12 @@ htmlcov/
 .tox/
 .hypothesis/
 *.cover
-.pytest_cache
 test-results.xml
 .nox/
+coverage.xml
+junit.xml
 
-# Benchmarks & Profiling
+# ── Benchmarks & Profiling ────────────────────────────────
 *.prof
 *.cProfile
 *.pstats
@@ -109,17 +143,28 @@ perf_results/
 benchmark_output.log
 benchmark_results/
 
-# Environment Variables
-.env
-.env.local
-.env.*.local
+# ── ML Models & Artifacts ─────────────────────────────────
+*.pickle
+*.pkl
+*.h5
+*.hdf5
+*.model
+*.onnx
+*.pt
+*.pth
+*.weights
+*.joblib
+mlruns/
+wandb/
 
-# OS Files
+# ── OS Files ──────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 *.lnk
+Desktop.ini
+ehthumbs.db
 
-# Temporary Files
+# ── Temporary & Backup Files ─────────────────────────────
 *.tmp
 *.bak
 *.swp
@@ -127,31 +172,31 @@ Thumbs.db
 .temp/
 .tmp/
 
-# Database Files
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs
+# ── Logs ──────────────────────────────────────────────────
 *.log
 logs/
 *.out
 
-# IDE specific
-.idea/
-*.iml
-.gradle/
-.vscode/settings.json
-.vscode/extensions.json
+# ── Docker ────────────────────────────────────────────────
+docker-compose.override.yml
 
-# Documentation Build
+# ── Documentation Build ───────────────────────────────────
 site/
 docs/_build/
 docs/.sphinx/
+*.pdf
+*.html
 
-# Cache Files
+# ── Cache Files ───────────────────────────────────────────
 .cache/
 *.cache
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# ── Jupyter ───────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
 
 # MinIO/S3 Credentials (NEVER commit!)
 .aws/
