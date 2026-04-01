@@ -22,7 +22,6 @@ Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à 
 | 01 | [Visão Geral](01_VISAO_GERAL.md) | Ecossistema, componentes, métricas, workflow |
 | 02 | [Guia de Geração](02_GUIA_GERACAO.md) | Como e por que gerar dados, 3 modos, pipeline 4 fases |
 | 03 | [Arquitetura Técnica](03_ARQUITETURA_TECNICA.md) | 5 camadas, estrutura de diretórios, fluxo de calibração |
-| 04 | [API & RAG — Referência](04_API_RAG_REFERENCIA.md) | Todos os endpoints, RAG internals, LLM fallback, CORS |
 | 05 | [Notebooks & Calibração](05_NOTEBOOKS_CALIBRACAO.md) | 8 notebooks detalhados, 14 scripts de suporte |
 | 06 | [Stack Tecnológico](06_STACK_TECNOLOGICO.md) | Dependências, infra Docker/Traefik, Qdrant, LLMs, testes |
 | 07 | [Catálogo de Fraudes](07_CATALOGO_FRAUDES.md) | 25 tipos bancários + 11 ride-share, prevalências, RAG scores |
@@ -32,21 +31,11 @@ Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à 
 
 ## 📂 Subdiretórios
 
-### 📊 Análise & Insights (`/analysis`) — 11 docs
+### 📊 Análise & Insights (`/analysis`) — 1 doc
 
 | File | Purpose |
 |------|---------|
-| [RESUMO_EXECUTIVO.md](analysis/RESUMO_EXECUTIVO.md) | Resumo executivo do projeto |
 | [ANALISE_PROFUNDA.md](analysis/ANALISE_PROFUNDA.md) | Análise arquitetural profunda |
-| [ANALISE_COMPLETA_PROJETO.md](analysis/ANALISE_COMPLETA_PROJETO.md) | Análise completa do projeto (75+ módulos) |
-| [ANALISE_GANHOS_E_ARQUITETURA.md](analysis/ANALISE_GANHOS_E_ARQUITETURA.md) | Ganhos de performance e melhorias SOLID |
-| [ANALISE_ECOSSISTEMA_SYNTHFIN.md](analysis/ANALISE_ECOSSISTEMA_SYNTHFIN.md) | Ecossistema integrado (data + API + web + SaaS) |
-| [ANALISE_GAPS_E_MELHORIAS.md](analysis/ANALISE_GAPS_E_MELHORIAS.md) | Gaps, erros e melhorias identificados |
-| [ANALISE_TIERS_PAGO_GRATUITO.md](analysis/ANALISE_TIERS_PAGO_GRATUITO.md) | Estratégia de separação free vs paid |
-| [CALIBRACAO_DADOS_REAIS_BCB.md](analysis/CALIBRACAO_DADOS_REAIS_BCB.md) | Calibração com dados reais BCB + RAG |
-| [METRICAS_DETALHADAS.md](analysis/METRICAS_DETALHADAS.md) | Métricas detalhadas de performance |
-| [VISUAL_SUMMARY.md](analysis/VISUAL_SUMMARY.md) | Resumo visual do projeto |
-| [ESTUDO_PERFIS_COMPORTAMENTAIS.md](analysis/ESTUDO_PERFIS_COMPORTAMENTAIS.md) | Pesquisa de perfis comportamentais |
 
 ### ⚡ Performance (`/performance`) — 3 docs
 
@@ -103,13 +92,11 @@ Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à 
 
 ### Para novos desenvolvedores:
 1. Ler [README](README.md) (5 min)
-2. Ver [RESUMO_EXECUTIVO.md](analysis/RESUMO_EXECUTIVO.md) (10 min)
-3. Revisar [GUIA_TECNICO_COMPONENTES.md](GUIA_TECNICO_COMPONENTES.md) (20 min)
+2. Revisar [GUIA_TECNICO_COMPONENTES.md](GUIA_TECNICO_COMPONENTES.md) (20 min)
 
 ### Para entender a arquitetura:
 1. Ler [ARQUITETURA.md](ARQUITETURA.md)
 2. Revisar [ANALISE_PROFUNDA.md](analysis/ANALISE_PROFUNDA.md)
-3. Conferir [METRICAS_DETALHADAS.md](analysis/METRICAS_DETALHADAS.md)
 
 ### Para pesquisa de fraude:
 1. Ler [FRAUDES_DESCOBERTAS.md](fraudes/FRAUDES_DESCOBERTAS.md)
@@ -122,13 +109,13 @@ Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à 
 
 | Categoria | Quantidade |
 |-----------|-----------|
-| Ecosystem Docs (01–08) | 8 |
-| Analysis & Insights | 11 |
+| Ecosystem Docs (01–08) | 7 |
+| Analysis & Insights | 1 |
 | Performance | 3 |
 | Fraud Research | 5 |
 | Technical Guides | 2 |
 | Reference (estudos) | 7 (+13 PDFs) |
-| **Total** | **~36 docs + 13 PDFs** |
+| **Total** | **~25 docs + 13 PDFs** |
 
 ---
 

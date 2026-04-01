@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synthfin-data"
-version = "4.17"
+version = "4.17.1"
 description = "Synthetic fraud data generator for Brazilian banking, PIX and ride-share systems"
 requires-python = ">=3.10"
 dependencies = [

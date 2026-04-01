@@ -20,11 +20,6 @@ LABEL org.opencontainers.image.vendor="Abner Fonseca"
 ARG VERSION=4.16
 ARG BUILD_DATE
 ARG VCS_REF
-# FRAUDGEN_VERIFY_KEY is baked into the image at build time.
-# It must match the FRAUDGEN_SECRET_KEY on your admin server.
-# NEVER commit the real key — pass it as a CI/CD secret.
-ARG FRAUDGEN_VERIFY_KEY="CHANGE_THIS_IN_PRODUCTION_BUILD_ARG"
-
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${VCS_REF}"
@@ -33,8 +28,7 @@ LABEL org.opencontainers.image.revision="${VCS_REF}"
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV FRAUD_GENERATOR_VERSION=${VERSION}
-# Bake the verify key so validator.py can read it at runtime
-ENV FRAUDGEN_VERIFY_KEY=${FRAUDGEN_VERIFY_KEY}
+# Pass FRAUDGEN_VERIFY_KEY at runtime: docker run -e FRAUDGEN_VERIFY_KEY=...
 
 WORKDIR /app
 

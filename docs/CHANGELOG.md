@@ -36,6 +36,34 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.16 | **Higiene Docs** | Doc cleanup: version sync, stale removal, INDEX fix, license labels | 2026-03-31 |
 | v4.16.1 | **Organização** | Reorganização de docs/: subdiretórios analysis/, performance/, cross-refs atualizados | 2026-03-31 |
 | v4.17 | **README** | README reescrito, agent-ia/ removido, tools/ criado, docs/README.md criado | 2026-04-01 |
+| v4.17.1 | **Auditoria** | Remoção de docs sensíveis, workflows privados, fix Dockerfile key | 2026-04-01 |
+
+---
+
+## v4.17.1 — Auditoria (2026-04-01)
+
+### Documentos Sensíveis Removidos
+
+- **`docs/analysis/`**: removidos 10 docs que expunham estratégia de negócio, pricing, gaps internos, infraestrutura privada
+  - `ANALISE_TIERS_PAGO_GRATUITO.md` — pricing strategy (movido para repo privado)
+  - `ANALISE_ECOSSISTEMA_SYNTHFIN.md` — infra/server details (movido para repo privado)
+  - `ANALISE_GAPS_E_MELHORIAS.md` — vulnerabilidades internas (movido para repo privado)
+  - `ANALISE_COMPLETA_PROJETO.md`, `ANALISE_GANHOS_E_ARQUITETURA.md`, `RESUMO_EXECUTIVO.md`, `VISUAL_SUMMARY.md`, `METRICAS_DETALHADAS.md`, `CALIBRACAO_DADOS_REAIS_BCB.md`, `ESTUDO_PERFIS_COMPORTAMENTAIS.md`
+- **`docs/04_API_RAG_REFERENCIA.md`**: expunha URLs de produção e endpoints privados
+
+### Workflows Privados Removidos
+
+- **`deploy-infra.yml`**, **`deploy-product.yml`**, **`deploy-site.yml`**, **`bump-synthfin-api.yml`**: workflows de deploy VPS e cross-repo automation — pertencem ao repo de infraestrutura privado
+
+### Segurança
+
+- **Dockerfile**: removido `ARG/ENV FRAUDGEN_VERIFY_KEY` hardcoded — agora deve ser passado em runtime via `docker run -e`
+- **`.claude/settings.json`**: removido (configuração interna de agentes AI)
+
+### INDEX.md Atualizado
+
+- Referências a docs removidos atualizadas
+- Contagem de docs corrigida
 
 ---
 
