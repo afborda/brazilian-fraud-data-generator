@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# synthfin-core → synthfin-api auto-update
+# ─────────────────────────────────────────────────────────────────────────────
+# When a new tag (v*) is pushed to main, dispatches an event to synthfin-api
+# so it can auto-bump the fraud-generator dependency, rebuild, deploy, and
+# send a release email with the changelog.
+#
+# Trigger: push of a tag matching v* (e.g. v5.0.0)
+# Requires: REPO_TOKEN secret (PAT with repo + workflow scope)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Notify API of New Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  dispatch-update:
+    name: Dispatch update to synthfin-api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for changelog extraction)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version and changelog
+        id: meta
+        run: |
+          # Tag name (e.g. v5.0.0)
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Find the previous tag to build changelog
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p')
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "Building changelog from $PREV_TAG to $TAG"
+            # Get commit messages between tags, one per line
+            CHANGELOG=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges | head -20)
+          else
+            echo "No previous tag found, using last 10 commits"
+            CHANGELOG=$(git log --pretty=format:"- %s" --no-merges -10)
+          fi
+
+          # Write multiline output
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Version: $VERSION"
+          echo "Changelog:"
+          echo "$CHANGELOG"
+
+      - name: Dispatch to synthfin-api
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.REPO_TOKEN }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: 'afborda',
+              repo: 'synthfin-api',
+              event_type: 'core-updated',
+              client_payload: {
+                tag:       '${{ steps.meta.outputs.tag }}',
+                version:   '${{ steps.meta.outputs.version }}',
+                changelog: `${{ steps.meta.outputs.changelog }}`,
+              },
+            });
+            console.log('Dispatched core-updated event to synthfin-api ✓');
+            console.log('Tag: ${{ steps.meta.outputs.tag }}');
