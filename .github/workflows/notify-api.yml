@@ -6,7 +6,7 @@
 # send a release email with the changelog.
 #
 # Trigger: push of a tag matching v* (e.g. v5.0.0)
-# Requires: REPO_TOKEN secret (PAT with repo + workflow scope)
+# Requires: SYNTHFIN_DEPLOY_PAT secret (PAT with repo + workflow scope)
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Notify API of New Release
@@ -61,7 +61,7 @@ jobs:
       - name: Dispatch to synthfin-api
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.REPO_TOKEN }}
+          github-token: ${{ secrets.SYNTHFIN_DEPLOY_PAT }}
           script: |
             await github.rest.repos.createDispatchEvent({
               owner: 'afborda',
