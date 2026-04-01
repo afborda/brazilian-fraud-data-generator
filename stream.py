@@ -182,11 +182,21 @@ def run_streaming(
     # Base timestamp para garantir IDs únicos entre reinicializações
     # Usa timestamp em milissegundos como prefixo
     base_tx_id = int(time.time() * 1000)
+
+    # External kill-switch support (redis-stream target)
+    _has_should_stop = hasattr(connection, 'should_stop')
+    _stop_check_interval = 500  # check every N events
     
     while _running:
         # Check max events
         if max_events and event_count >= max_events:
             break
+
+        # Check external kill-switch periodically
+        if _has_should_stop and event_count % _stop_check_interval == 0 and event_count > 0:
+            if connection.should_stop():
+                print("\n   ⏹️  External stop signal received")
+                break
         
         # Select random customer/device
         customer, device = random.choice(pairs)
@@ -371,6 +381,12 @@ def run_rides_streaming(
         # Check max events
         if max_events and event_count >= max_events:
             break
+
+        # Check external kill-switch periodically
+        if hasattr(connection, 'should_stop') and event_count % 500 == 0 and event_count > 0:
+            if connection.should_stop():
+                print("\n   ⏹️  External stop signal received")
+                break
         
         # Select random passenger (customer)
         passenger = random.choice(customers)
@@ -582,6 +598,11 @@ def _run_parallel(
     return event_count, error_count, time.time() - start_time
 
 
+def _env(name: str, default: str = "") -> str:
+    """Read env var (for containerised / SaaS mode)."""
+    return os.environ.get(name, default)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="🇧🇷 synthfin-data - Streaming Mode v4.9.0",
@@ -613,33 +634,33 @@ Available targets: """ + ", ".join(list_targets())
     parser.add_argument(
         '--type',
         type=str,
-        default='transactions',
+        default=_env('STREAM_TYPE', 'transactions'),
         choices=['transactions', 'rides'],
-        help='Type of data to stream: transactions or rides. Default: transactions'
+        help='Type of data to stream: transactions or rides. Default: transactions (env: STREAM_TYPE)'
     )
     
     # Target selection
     parser.add_argument(
         '--target', '-t',
         type=str,
-        required=True,
+        default=_env('STREAM_TARGET', ''),
         choices=list_targets(),
-        help='Streaming target (kafka, webhook, stdout)'
+        help='Streaming target (kafka, webhook, stdout, redis-stream). (env: STREAM_TARGET)'
     )
     
     # Rate control
     parser.add_argument(
         '--rate', '-r',
         type=float,
-        default=10.0,
-        help='Events per second. Default: 10'
+        default=float(_env('STREAM_RATE', '10')),
+        help='Events per second. Default: 10 (env: STREAM_RATE)'
     )
     
     parser.add_argument(
         '--max-events', '-n',
         type=int,
-        default=None,
-        help='Maximum events to generate (infinite if not set)'
+        default=int(_env('MAX_EVENTS', '0')) or None,
+        help='Maximum events to generate (infinite if not set). (env: MAX_EVENTS)'
     )
     
     # Kafka options
@@ -661,8 +682,8 @@ Available targets: """ + ", ".join(list_targets())
     parser.add_argument(
         '--webhook-url',
         type=str,
-        default=None,
-        help='Webhook URL for HTTP target'
+        default=_env('WEBHOOK_URL') or None,
+        help='Webhook URL for HTTP target (env: WEBHOOK_URL)'
     )
     
     parser.add_argument(
@@ -677,15 +698,15 @@ Available targets: """ + ", ".join(list_targets())
     parser.add_argument(
         '--customers', '-c',
         type=int,
-        default=1000,
-        help='Number of customers to simulate. Default: 1000'
+        default=int(_env('STREAM_CUSTOMERS', '1000')),
+        help='Number of customers to simulate. Default: 1000 (env: STREAM_CUSTOMERS)'
     )
     
     parser.add_argument(
         '--fraud-rate',
         type=float,
-        default=0.02,
-        help='Fraud rate (0.0-1.0). Default: 0.02 (2%%)'
+        default=float(_env('FRAUD_RATE', '0.02')),
+        help='Fraud rate (0.0-1.0). Default: 0.02 (2%%) (env: FRAUD_RATE)'
     )
     
     parser.add_argument(
@@ -704,8 +725,8 @@ Available targets: """ + ", ".join(list_targets())
     parser.add_argument(
         '--redis-url',
         type=str,
-        default=None,
-        help='Redis URL for caching base data (e.g., redis://localhost:6379/0)'
+        default=_env('REDIS_URL') or None,
+        help='Redis URL for caching base data (e.g., redis://localhost:6379/0) (env: REDIS_URL)'
     )
 
     parser.add_argument(
@@ -739,10 +760,10 @@ Available targets: """ + ", ".join(list_targets())
     parser.add_argument(
         '--workers', '-w',
         type=int,
-        default=1,
+        default=int(_env('STREAM_WORKERS', '1')),
         help='Number of parallel generator workers (multiprocessing). '
              'Default: 1 (single-process, original behaviour). '
-             'Set to number of CPU cores for maximum throughput.'
+             'Set to number of CPU cores for maximum throughput. (env: STREAM_WORKERS)'
     )
 
     parser.add_argument(
@@ -756,13 +777,21 @@ Available targets: """ + ", ".join(list_targets())
     parser.add_argument(
         '--quiet', '-q',
         action='store_true',
-        help='Suppress progress output'
+        default=_env('STREAM_QUIET', '') == '1',
+        help='Suppress progress output (env: STREAM_QUIET=1)'
     )
     
     parser.add_argument(
         '--pretty',
         action='store_true',
         help='Pretty-print JSON (stdout only)'
+    )
+
+    parser.add_argument(
+        '--stream-id',
+        type=str,
+        default=_env('STREAM_ID', ''),
+        help='Unique stream session ID for redis-stream target (env: STREAM_ID)'
     )
     
     parser.add_argument(
@@ -772,6 +801,10 @@ Available targets: """ + ", ".join(list_targets())
     )
     
     args = parser.parse_args()
+
+    # ── Validate target was provided ─────────────────────────────────────────
+    if not args.target:
+        parser.error("--target is required (or set STREAM_TARGET env var)")
 
     # ── License: check if this target is allowed on this plan ────────────────
     try:
@@ -932,6 +965,17 @@ Available targets: """ + ", ".join(list_targets())
     elif args.target == 'stdout':
         connection.connect(pretty=args.pretty)
         print(f"   ✅ Stdout ready")
+
+    elif args.target == 'redis-stream':
+        stream_id = args.stream_id or f"stream_{int(time.time())}"
+        redis_url = args.redis_url or _env('REDIS_URL', 'redis://localhost:6379/0')
+        connection.connect(
+            redis_url=redis_url,
+            stream_id=stream_id,
+            maxlen=10_000,
+            batch_size=50,
+        )
+        print(f"   ✅ Redis Stream configured (stream:{stream_id})")
     
     # Phase 3: Start streaming
     print(f"\n📋 Phase 3: Streaming {data_type_name}...")

@@ -6,12 +6,14 @@ from .base import ConnectionProtocol
 from .kafka_connection import KafkaConnection
 from .webhook_connection import WebhookConnection
 from .stdout_connection import StdoutConnection
+from .redis_stream_connection import RedisStreamConnection
 
 # Registry of available connections
 CONNECTIONS = {
     'kafka': KafkaConnection,
     'webhook': WebhookConnection,
     'stdout': StdoutConnection,
+    'redis-stream': RedisStreamConnection,
 }
 
 
@@ -40,6 +42,7 @@ __all__ = [
     'KafkaConnection',
     'WebhookConnection',
     'StdoutConnection',
+    'RedisStreamConnection',
     'get_connection',
     'list_targets',
     'is_target_available',

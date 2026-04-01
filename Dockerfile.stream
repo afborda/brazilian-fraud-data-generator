@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SynthFin Stream — Ephemeral container for real-time data streaming.
+#
+# Runs stream.py from the fraud-generator library with configuration
+# supplied entirely via environment variables.  The API launches one
+# container per user stream session and kills it when done.
+#
+# Required env vars:
+#   STREAM_TARGET    redis-stream | stdout | webhook | kafka
+#   STREAM_RATE      events per second (e.g. 50)
+#   REDIS_URL        redis://:password@redis:6379/0
+#   STREAM_ID        unique session id (e.g. str_abc123)
+#
+# Optional env vars:
+#   STREAM_TYPE      transactions (default) | rides
+#   FRAUD_RATE       0.0–1.0 (default 0.03)
+#   MAX_EVENTS       auto-stop after N events (default: unlimited)
+#   STREAM_CUSTOMERS number of simulated customers (default 500)
+#   STREAM_WORKERS   number of multiprocessing workers (default 1)
+#   STREAM_QUIET     1 to suppress progress output
+# ─────────────────────────────────────────────────────────────────────────────
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System deps (git required for pip git+ installs)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt requirements-streaming.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-streaming.txt
+
+# Copy source
+COPY src/ ./src/
+COPY stream.py ./
+
+# No data directory needed — streaming writes to Redis, not disk.
+
+# Default env vars (overridden at docker run time)
+ENV PYTHONPATH=/app/src \
+    STREAM_TARGET=redis-stream \
+    STREAM_RATE=10 \
+    STREAM_CUSTOMERS=500 \
+    FRAUD_RATE=0.03 \
+    STREAM_QUIET=1
+
+# Healthcheck: container is alive if the process is running
+HEALTHCHECK --interval=15s --timeout=3s --start-period=5s \
+    CMD pgrep -f "stream.py" > /dev/null || exit 1
+
+# Graceful shutdown: stream.py handles SIGTERM via signal_handler
+STOPSIGNAL SIGTERM
+
+ENTRYPOINT ["python", "stream.py"]
