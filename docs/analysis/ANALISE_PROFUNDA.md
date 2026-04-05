@@ -1,11 +1,11 @@
-# Análise Profunda - synthfin-data v4.15.1
+# Análise Profunda - synthfin-data v4.17
 
 ## 📋 Sumário Executivo
 
-O projeto é um **gerador de dados sintéticos de fraude brasileira** otimizado para produção. Cria transações financeiras realistas (PIX, cartão de crédito, etc.) e dados de corridas (Uber, 99, etc.) com padrões comportamentais, possibilidade de fraude configurável e múltiplos formatos de exportação (JSONL, CSV, Parquet).
+O projeto é um **gerador de dados sintéticos de fraude brasileira** otimizado para produção. Cria transações financeiras realistas (PIX, cartão de crédito, etc.) e dados de corridas (Uber, 99, etc.) com padrões comportamentais, injeção de fraude via pipeline de 8 enrichers, e múltiplos formatos de exportação (JSONL, CSV, Parquet, MinIO/S3).
 
 **Stack:**
-- Python 3
+- Python 3.10+
 - Multiprocessing / Concurrent.futures (paralelismo)
 - Faker (geração de dados)
 - Pandas / PyArrow (processamento)
@@ -31,9 +31,20 @@ src/fraud_generator/
 ├── generators/          # Gera dados sintéticos
 │   ├── customer.py      # Clientes com CPF, perfil, renda
 │   ├── device.py        # Dispositivos associados
-│   ├── transaction.py   # Transações (PIX, cartão, etc)
-│   └── ride.py          # Corridas de ride-share
-├── models/              # Dataclasses dos entidades
+│   ├── transaction.py   # Transações (PIX, cartão, etc) + pipeline enrichers
+│   ├── ride.py          # Corridas de ride-share
+│   ├── score.py         # fraud_risk_score (17 sinais, 0-100)
+│   └── correlations.py  # 4 regras de correlação → match_fraud_rule()
+├── enrichers/           # Pipeline de 8 estágios (ORDEM CRÍTICA)
+│   ├── temporal.py      # 1. unusual_time flag
+│   ├── geo.py           # 2. lat/lon, distância
+│   ├── fraud.py         # 3. overrides de amount/location/device/channel
+│   ├── pix.py           # 4. campos BACEN pacs.008
+│   ├── device.py        # 5. sinais de device (emulator, rooted, new)
+│   ├── session.py       # 6. velocity 24h, merchant novelty, impossible travel
+│   ├── risk.py          # 7. fraud_risk_score + ring TPRD2
+│   └── biometric.py     # 8. biometria (license-gated)
+├── models/              # Dataclasses das entidades
 │   ├── customer.py
 │   ├── device.py
 │   ├── transaction.py
@@ -252,277 +263,85 @@ PROFILES = {
 
 ## 🎭 Estratégia de Fraude
 
-### **Abordagem Atual (Simplista):**
+### **Abordagem Implementada (Pipeline de Enrichers):**
+
 ```python
-is_fraud = random.random() < fraud_rate  # Bernoulli simples
-if is_fraud:
-    fraud_type = weighted_choice(FRAUD_TYPES)  # Ex: account_takeover
-    valor *= 1.5  # Multiplicador arbitrário
-    # Alguns campos marcam como suspeito (unusual_time, new_beneficiary)
+# 1. Decide se é fraude (Bernoulli com fraud_rate)
+is_fraud = random.random() < fraud_rate
+fraud_type = weighted_choice(FRAUD_TYPES_LIST, FRAUD_TYPES_WEIGHTS)
+
+# 2. Gera TX base
+tx = {base_fields}
+
+# 3. Monta GeneratorBag com contexto
+bag = GeneratorBag(is_fraud=is_fraud, fraud_type=fraud_type, ...)
+
+# 4. Pipeline de 8 enrichers em sequência (ORDEM CRÍTICA)
+for enricher in [TemporalEnricher, GeoEnricher, FraudEnricher, PIXEnricher,
+                 DeviceEnricher, SessionEnricher, RiskEnricher, BiometricEnricher]:
+    enricher.enrich(tx, bag)  # Muta tx in-place
+
+# 5. fraud_risk_score calculado pelo RiskEnricher (17 sinais, 0-100)
 ```
 
-### **Problemas:**
-1. **Não correlaciona com histórico** → fraude em dia anormal não detecta
-2. **Sem sequências de fraude** → real: fraude vem em clusters
-3. **Campos de risco isolados** → não há pattern matching
-4. **Fraud types não determinam características** → "account_takeover" não muda IP/device/location
-5. **Sem contextualização temporal** → mesma taxa 24/7 (real: picos à noite)
+**FraudEnricher** aplica características do padrão (25 tipos em `config/fraud_patterns.py`):
+- `CONTA_TOMADA`: amount_multiplier (1.5–5x), time_anomaly HIGH, device_anomaly HIGH
+- `PIX_GOLPE`: new_beneficiary_prob 0.95, channel_preference PIX
+- `ENGENHARIA_SOCIAL`: valor aparentemente normal, sem anomalia de device
+- [+22 outros padrões com características distintas]
 
-### **Exemplos de Padrões Perdidos:**
-- ✅ Account takeover: `new_device + different_location + high_velocity`
-- ✅ Card cloning: `same_merchant_series + different_IP`
-- ✅ Social engineering: `round_numbers + unusual_time + new_beneficiary`
-- ✅ Money laundering: `high_volume + round_values + same_beneficiary`
-
----
-
-## 🔧 Melhorias Recomendadas
-
-### **CURTO PRAZO (1-2 dias)**
-
-#### **1. Cache de Weights (30% speedup transações)**
+**RiskEnricher** computa `fraud_risk_score` via 17 sinais independentes:
 ```python
-# ANTES: random.choices() rebuild weights cada vez
-tx_type = random.choices(TX_TYPES_LIST, weights=TX_TYPES_WEIGHTS)[0]
-
-# DEPOIS: pre-compute cumulative distribution
-cumsum = np.cumsum(TX_TYPES_WEIGHTS)  # Uma vez!
-idx = np.searchsorted(cumsum, random.random() * cumsum[-1])
-tx_type = TX_TYPES_LIST[idx]
-```
-
-#### **2. Cache de Merchants (20% speedup)**
-```python
-# ANTES:
-merchants = get_merchants_for_mcc(mcc_code)  # DB lookup toda vez
-merchant_name = random.choice(merchants)
-
-# DEPOIS:
-MERCHANTS_CACHE = {}  # Build once
-merchant_name = random.choice(MERCHANTS_CACHE[mcc_code])
-```
-
-#### **3. Remover campos de risco desnecessários (5% speedup)**
-```python
-# ANTES: Calcula fields que sempre são None
-distance_from_last_txn_km = None  # Sem histórico
-time_since_last_txn_min = None
-
-# DEPOIS: Remover ou substituir por algo realista
-# Se quer histórico: manter estado (não é sintético puro)
-# Se quer sintético puro: remover completamente
-```
-
-#### **4. Melhorar IP Brasil geração (2% speedup)**
-```python
-# ANTES: Concatenação string + random 4x
-ip = f"{prefix}.{r()}.{r()}.{r()}"
-
-# DEPOIS: Tuple de inteiros (mais rápido)
-ip = f"{prefix}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}"
+# Os 5 sinais de maior peso:
+_W_ACTIVE_CALL  = 35  # Vítima no telefone com fraudador
+_W_EMULATOR     = 35  # Device emulado (MALWARE_ATS)
+_W_ROOTED       = 30  # Device rooted/jailbroken
+_W_TYPING_BOT   = 30  # Typing < 15ms → script
+_W_ACCEL_SESSION = 28 # Zero accel + sessão < 5s → device estático
 ```
 
 ---
 
-### **MÉDIO PRAZO (1 semana)**
+## 🔧 Estado das Otimizações (v4.17)
 
-#### **5. Fraude Contextualizada (Realismos +40%)**
-```python
-def generate_fraud(customer_profile, last_transactions):
-    """Gera fraude com padrões realistas."""
-    
-    if fraud_type == 'account_takeover':
-        # Device DIFERENTE do histórico
-        device_id = generate_new_device()
-        
-        # IP DIFERENTE da localização do cliente
-        customer_state = customer['state']
-        location_state = random.choice([s for s in STATES if s != customer_state])
-        lat, lon = get_state_center(location_state)
-        
-        # Valor anormalmente ALTO vs histórico
-        avg_valor = np.mean([t['amount'] for t in last_transactions[-30:]])
-        valor = avg_valor * random.uniform(5, 10)
-        
-        # Hora anormal
-        unusual_time = random.choice(hours=[22, 23, 0, 1, 2, 3])
-        
-    elif fraud_type == 'card_cloning':
-        # Mesmo merchant repetido
-        merchant = last_merchants[-1]  # Clone da última
-        
-        # Valores similares (padrão: teste com valores baixos depois altos)
-        valor = [random.uniform(1, 5) for _ in range(3)] + [5000]
-```
+As otimizações abaixo foram **implementadas** nas versões v4.x:
 
-#### **6. Série Temporal de Comportamento**
-```python
-# ANTES: Cada transação independente
-# DEPOIS: Manter estado do cliente no dia
-class CustomerSession:
-    def __init__(self):
-        self.transactions_today = []
-        self.merchants_visited = set()
-        self.velocity = 0
-        self.accumulated_amount = 0.0
-    
-    def add_transaction(self, tx):
-        self.transactions_today.append(tx)
-        self.velocity = len(self.transactions_today)
-        self.accumulated_amount += tx['amount']
-        # Usa para calcular limits, risk, etc
-```
+| Otimização | Status | Onde |
+|------------|--------|------|
+| Cache de Weights | ✅ Implementado | `utils/weight_cache.py` — WeightCache (bisect O(log n)) |
+| Cache de Merchants | ✅ Implementado | `config/merchants.py` — dict cache por MCC |
+| PrecomputeBuffers (IPs, hashes, floats) | ✅ Implementado | `utils/precompute.py` — ring buffer 10k valores |
+| CustomerSession (velocity, merchant novelty) | ✅ Implementado | `utils/streaming.py` — CustomerSessionState |
+| Fraude contextualizada por padrão | ✅ Implementado | Pipeline de enrichers + `config/fraud_patterns.py` |
+| fraud_risk_score (17 sinais) | ✅ Implementado | `generators/score.py` |
+| GIL bypass para streaming | ✅ Implementado | `utils/parallel.py` — ParallelStreamManager |
 
-#### **7. Paralelizar Customer Generation (20% speedup Fase 1)**
-```python
-# ANTES: Sequential loop 10k vezes
-for i in range(num_customers):
-    customer_gen.generate(f"CUST_{i}")
-
-# DEPOIS: ProcessPool com chunk
-def _generate_customer(customer_id):
-    return customer_gen.generate(customer_id)
-
-with ProcessPool(max_workers=8) as pool:
-    customers = pool.map(_generate_customer, [f"CUST_{i}" for i in range(num_customers)])
-```
-
-#### **8. CSV/Parquet Streaming (OOM fix)**
-```python
-# ANTES: Parquet acumula DataFrame inteira
-transactions = [...]  # 1M registros
-df = pd.DataFrame(transactions)
-df.to_parquet(path)  # OOM se >10GB
-
-# DEPOIS: Streaming Parquet writer
-writer = ParquetWriter(path)
-for batch in batches_of_1000:
-    df = pd.DataFrame(batch)
-    writer.write_table(pa.Table.from_pandas(df))
-writer.close()
-```
-
----
-
-### **LONGO PRAZO (2+ semanas)**
-
-#### **9. Persistência de Estado para Customers (Realismo +50%)**
-```python
-# Criar arquivo CSV para cada cliente com histórico
-# | date | merchant | amount | location | device | ...
-# Simula velocidade, padrões, anomalias reais
-
-class CustomerHistoryTracker:
-    def load(self, customer_id):
-        """Carrega histórico dos últimos 30 dias."""
-        df = pd.read_csv(f"history/{customer_id}.csv")
-        return df
-    
-    def calculate_baseline(self, transactions):
-        """Mean, std, percentiles."""
-        return {
-            'avg_amount': np.mean(transactions['amount']),
-            'avg_velocity': len(transactions) / 30,  # por dia
-            'favorite_merchants': Counter(transactions['merchant']),
-            'preferred_times': Counter(transactions['hour']),
-        }
-```
-
-#### **10. Geração de Anomalias Realistas**
-```python
-# Em vez de fraude aleatória, gerar patterns:
-# 1. Velocity (N transações em K minutos)
-# 2. Impossible travel (2 cidades, distância impossível em tempo)
-# 3. Round amounts (2000, 5000, 10000 BRL exatos)
-# 4. Value burst (5x média historicamente)
-# 5. New beneficiary (primeira vez transferência para CPF)
-# 6. Unusual merchant category (cliente varejo compra em B2B)
-
-def detect_anomalies(transaction, history):
-    """Marca campos de risco baseado em história."""
-    anomalies = []
-    
-    baseline = calculate_baseline(history)
-    
-    if transaction['amount'] > baseline['avg_amount'] * 5:
-        anomalies.append('high_value')
-        transaction['anomaly_score'] += 0.3
-    
-    # ... mais 10+ heurísticas
-    
-    return transaction
-```
-
-#### **11. Integração com Machine Learning**
-```python
-# Treinar modelo de detecção de fraude nas primeiras rodadas
-# Usar para calibrar fraud_rate dinamicamente
-
-from sklearn.ensemble import IsolationForest
-
-# Coletar transações sintéticas de dias anteriores
-X = fetch_generated_transactions(days=7)
-
-model = IsolationForest(contamination=0.02)
-model.fit(X)
-
-# Usar para score de fraude
-fraud_score = -model.decision_function(new_transaction)  # 0-1
-is_fraud = fraud_score > threshold
-```
-
-#### **12. Dados de Rejeição Realistas**
-```python
-# ANTES: is_fraud → status = 'APPROVED' | 'DECLINED' (50/50)
-# DEPOIS: Context-based rejection
-
-refusal_probabilities = {
-    'INSUFFICIENT_BALANCE': 0.3,
-    'FRAUD_SUSPECT': 0.2,
-    'LIMIT_EXCEEDED': 0.2,
-    'CVV_ERROR': 0.15,
-    'CARD_BLOCKED': 0.1,
-    'CARD_EXPIRED': 0.05,
-}
-
-# Se valor alto + new_beneficiary → 50% FRAUD_SUSPECT
-# Se autofraude → 80% APPROVED (sistema confia no cliente)
-# Se account_takeover → 100% BLOCKED
-```
+**Ainda pendente (P3):** CSV/Parquet streaming OOM para datasets >1GB — acumula list em memória antes de escrever.
 
 ---
 
 ## 📈 Benchmarks e Capacidades
 
-### **Performance Atual (v4-beta)**
+### **Performance (v4.17, com WeightCache + PrecomputeBuffers)**
 ```
-Hardware: CPU 8-core, 16GB RAM
-Target: 1GB JSONL
+Hardware: 18-core Linux, Python 3.12
 
-Phase 1 (Customers):   2.1s  (10k clientes, 30k devices)
-Phase 2 (Transactions): 18.3s (2.5M transações, 10 workers)
-Phase 3 (Drivers):     0.8s  (1000 drivers)
-Phase 4 (Rides):       15.2s (1.6M rides, 10 workers)
-─────────────────────────────
-Total:                 36.4s (~27.3MB/s throughput)
+Transactions  8 workers:  ~58.000 evt/s  (~125 MB/s JSONL)
+Rides         4 workers:  ~67.000 evt/s  (~77 MB/s JSONL)
+All types     4 workers:  ~55.000 evt/s  (~119 MB/s JSONL)
 
-Output size: 1.02GB JSONL
+1 GB JSONL: ~8-10s com 8 workers
 ```
 
-### **Análise de Bottleneck:**
-- Phase 2 + 4 (paralelizadas): 33.5s de 36.4s = **92% do tempo**
-- Se cache weights (25% speedup): ~25s
-- Se streaming CSV (OOM fix): ~+10s vs atual (Parquet + cache)
+Ver `benchmarks/comprehensive_benchmark.py` para regenerar e `docs/performance/CAPACITY_PLANNING.md` para projeções de VPS.
 
-### **Escalabilidade Projetada:**
-| Tamanho | Customers | Transactions | Tempo Estimado | Files |
-|---------|-----------|--------------|----------------|-------|
-| 1GB     | 10k       | 2.5M         | 36s            | 10    |
-| 10GB    | 100k      | 25M          | 360s (6m)      | 100   |
-| 100GB   | 1M        | 250M         | 3600s (60m)    | 1000  |
-| 1TB     | 10M       | 2.5B         | 10h            | 10k   |
-
-**Problema a escala:** Fase 1 (customer gen) não paralelizável trivialmente → seria gargalo em 1TB+.
+### **Escalabilidade:**
+| Tamanho | Customers | Transactions | Tempo (~8w) |
+|---------|-----------|--------------|-------------|
+| 1GB     | 10k       | 2.5M         | ~10s        |
+| 10GB    | 100k      | 25M          | ~90s        |
+| 100GB   | 1M        | 250M         | ~15min      |
+| 1TB     | 10M       | 2.5B         | ~150min     |
 
 ---
 

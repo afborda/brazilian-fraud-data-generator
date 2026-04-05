@@ -2,17 +2,21 @@
 Configuration module for transaction types, fraud types, and payment methods.
 """
 
-# Transaction types (PIX weighted higher - realistic for Brazil 2024)
+# Transaction types — calibrated against BCB payment statistics 2024
+# PIX: 65% of all digital transactions (BCB Nota Imprensa Q4 2024)
+# Cards: ~22% combined (Relatório de Sistemas de Pagamento BCB 2024)
+# TED: ~7% (declining but still significant for high-value B2B)
+# Boleto: ~5% (declining with PIX growth)
 TRANSACTION_TYPES = {
-    'PIX': 42,            # 42% - PIX dominates Brazil
-    'CREDIT_CARD': 22,    # 22% - Credit card
-    'DEBIT_CARD': 13,     # 13% - Debit card
-    'BOLETO': 7,          # 7%  - Bank slip (Brazilian term)
-    'TED': 3,             # 3%  - Wire transfer (Brazilian term)
-    'WITHDRAWAL': 3,      # 3%  - Cash withdrawal (decreasing)
-    'DOC': 1,             # 1%  - DOC transfer (Brazilian term, being phased out)
-    'AUTO_DEBIT': 5,      # 5%  - Automatic debit (bills, subscriptions)
-    'MOBILE_TOPUP': 4,    # 4%  - Mobile phone top-up
+    'PIX': 65,            # 65% - Dominant channel (BCB 2024: 4B+ tx/month)
+    'CREDIT_CARD': 14,    # 14% - Reduced: cards losing share to PIX
+    'DEBIT_CARD': 8,      # 8%  - Reduced: contactless PIX replacing debit
+    'BOLETO': 5,          # 5%  - BCB 2024: declining with PIX growth
+    'TED': 5,             # 5%  - BCB 2024: ~7% (high-value B2B transfers)
+    'AUTO_DEBIT': 1,      # 1%  - Recurring bills
+    'WITHDRAWAL': 1,      # 1%  - ATM cash (sharply declining)
+    'MOBILE_TOPUP': 1,    # 1%  - Mobile phone recharge
+    # DOC removed — BCB discontinued in 2024
 }
 
 TX_TYPES_LIST = list(TRANSACTION_TYPES.keys())

@@ -1,12 +1,12 @@
 # Capacity Planning: VPS × Planos × Usuários Concorrentes
 
 **Data:** 2026-03-05 (atualizado Março 2026)  
-**Versão:** 4.15.1 — com otimizações RAM + multiprocessing  
+**Versão:** 4.17 — com otimizações RAM + multiprocessing  
 **Benchmark real:** máquina 18 cores (dev), projetado para VPS 4-24 cores  
 
 ---
 
-## 1. Otimização RAM Implementada (OTIMIZAÇÃO 3)
+## 1. Otimização RAM Implementada (PrecomputeBuffers)
 
 ### O que é
 Ao invés de chamar `random.choices()`, `random.uniform()`, `hashlib.sha256()` individualmente para **cada evento**, pré-geramos **10.000 valores de uma vez** em arrays na RAM e consumimos sequencialmente.

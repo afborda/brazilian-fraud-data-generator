@@ -1,7 +1,7 @@
 # 🔌 GUIA TÉCNICO DE COMPONENTES & USO
 
 **Data:** 3 de Março de 2026 (atualizado Março 2026)  
-**Versão:** 4.15.1  
+**Versão:** 4.17  
 **Propósito:** Referência técnica detalhada para desenvolvedores
 
 ---
@@ -236,6 +236,67 @@ ride = gen.generate(
 #   'is_fraud': False,
 #   'fraud_type': None
 # }
+```
+
+---
+
+### 1️⃣b ENRICHERS - Pipeline de 8 Estágios
+
+O `TransactionGenerator` aplica automaticamente o pipeline de enrichers após gerar cada transação base. Você não precisa chamá-los diretamente, mas pode customizá-los.
+
+**Pipeline padrão (`enrichers/pipeline_factory.py`):**
+```python
+from fraud_generator.enrichers.pipeline_factory import get_default_pipeline
+
+# Pipeline padrão: 8 enrichers em ordem crítica
+pipeline = get_default_pipeline()
+# [TemporalEnricher, GeoEnricher, FraudEnricher, PIXEnricher,
+#  DeviceEnricher, SessionEnricher, RiskEnricher, BiometricEnricher]
+```
+
+**Como cada enricher muta a transação:**
+```python
+# TemporalEnricher → adiciona unusual_time (bool)
+# GeoEnricher → adiciona lat, lon, distance_from_last_txn_km
+# FraudEnricher → se is_fraud, override amount, location, channel por padrão
+# PIXEnricher → adiciona pix_key_type, end_to_end_id, ispb_pagador, etc (se type=PIX)
+# DeviceEnricher → adiciona is_emulator, is_rooted, device_new_for_customer
+# SessionEnricher → adiciona velocity_transactions_24h, merchant_is_novel, impossible_travel
+# RiskEnricher → computa fraud_risk_score (0-100) via 17 sinais
+# BiometricEnricher → adiciona typing_interval_ms, touch_pressure (license-gated)
+```
+
+**Campos adicionados pelo pipeline:**
+| Enricher | Campos principais |
+|----------|------------------|
+| Temporal | `unusual_time`, `transaction_hour` |
+| Geo | `latitude`, `longitude`, `distance_from_last_txn_km` |
+| Fraud | `is_fraud`, `fraud_type`, `fraud_score` |
+| PIX | `pix_key_type`, `end_to_end_id`, `ispb_pagador`, `ispb_recebedor`, `pix_modalidade` |
+| Device | `is_emulator`, `is_rooted`, `device_new_for_customer` |
+| Session | `velocity_transactions_24h`, `accumulated_amount_24h`, `merchant_is_novel`, `impossible_travel` |
+| Risk | `fraud_risk_score` (0-100), `risk_ring` (TPRD2) |
+| Biometric | `typing_interval_ms`, `touch_pressure`, `accel_magnitude` |
+
+**Para usar TransactionGenerator com o pipeline:**
+```python
+from fraud_generator.generators.transaction import TransactionGenerator
+from fraud_generator.enrichers.pipeline_factory import get_default_pipeline
+from fraud_generator.utils.streaming import CustomerSessionState
+
+tx_gen = TransactionGenerator(
+    enrichers=get_default_pipeline(),
+    fraud_rate=0.015,
+    seed=42,
+)
+
+session = CustomerSessionState(customer_id="CUST_001")
+tx = tx_gen.generate(
+    customer=customer,
+    device=device,
+    session_state=session,
+)
+# tx já contém todos os campos enriquecidos
 ```
 
 ---

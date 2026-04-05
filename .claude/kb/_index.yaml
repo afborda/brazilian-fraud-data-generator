@@ -54,6 +54,12 @@ domains:
         type: pattern
         max_lines: 200
 
+  codebase-ground-truth:
+    description: Ground truth map verified against source code (not docs)
+    path: codebase-ground-truth.md
+    type: reference
+    verified: 2026-04-05
+
 # Planned domains (Fase 2-3):
 # fraud-detection:
 #   description: ML fraud detection, enrichment signals, sequential patterns

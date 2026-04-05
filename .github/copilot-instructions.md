@@ -11,7 +11,7 @@ High-performance synthetic data generator for **Brazilian banking & ride-share f
 | Mode | Entry | Pipeline | Key Args |
 |------|-------|----------|----------|
 | Batch | `generate.py` | Generator → Exporter → Disk | `--size`, `--format`, `--workers` |
-| Stream | `stream.py` | Generator → Connection → Network | `--target {stdout\|kafka\|webhook}`, `--rate` |
+| Stream | `stream.py` | Generator → Connection → Network | `--target {stdout\|kafka\|webhook\|redis-stream}`, `--rate` |
 
 **Strategy pattern**: Exporters (`ExporterProtocol`) and Connections (`ConnectionProtocol`) are interchangeable via registries (`get_exporter()`, `get_connection()`).
 

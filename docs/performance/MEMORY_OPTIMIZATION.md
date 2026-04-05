@@ -1,5 +1,10 @@
 # 🧠 Memory Optimization Guide for Large-Scale Generation (50GB+)
 
+> **Status de implementação (v4.17):**
+> - ✅ Problem 3 (No Streaming Write) — resolvido: exporters usam `export_batch()` por chunks, sem acumular lista completa em JSONL
+> - ⚠️ Problem 1 (Workers Copy All Indexes) — parcialmente resolvido: CustomerIndex é leve (~80 bytes), mas pickle ainda copia via multiprocessing
+> - ❌ Problem 2 (Batch Accumulation em CSV/Parquet) — **ainda em aberto (P3)**: OOM para >1GB nesses formatos
+
 ## Current Issues Analysis
 
 ### Problem 1: Workers Copy All Indexes

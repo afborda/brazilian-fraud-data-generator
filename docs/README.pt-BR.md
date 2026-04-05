@@ -585,7 +585,7 @@ pytest tests/ --cov=src/fraud_generator --cov-report=html
 
 O benchmark incluído no repositório mostra hoje cerca de 123k a 196k eventos bancários por segundo com 8 a 16 workers, e cerca de 123k a 220k eventos de ride-share por segundo na máquina do benchmark. O throughput real varia por hardware, formato, compressão e número de workers.
 
-Se você quiser os dados brutos, consulte `benchmarks/multiprocessing_results.json` e `docs/performance/MULTIPROCESSING_BENCHMARK.md`.
+Se você quiser os dados brutos, consulte `benchmarks/multiprocessing_results.json` e regenere com `python benchmarks/comprehensive_benchmark.py`.
 
 ## API self-hosted
 

@@ -31,29 +31,23 @@ Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à 
 
 ## 📂 Subdiretórios
 
-### 📊 Análise & Insights (`/analysis`) — 1 doc
+### 📊 Análise & Insights (`/analysis`) — 2 docs
 
 | File | Purpose |
 |------|---------|
 | [ANALISE_PROFUNDA.md](analysis/ANALISE_PROFUNDA.md) | Análise arquitetural profunda |
+| [ESTUDO_QUALIDADE_DADOS.md](analysis/ESTUDO_QUALIDADE_DADOS.md) | Estudo de qualidade: realismo, ML trainability, valor SaaS, score 9.08/10 |
 
-### ⚡ Performance (`/performance`) — 3 docs
+### ⚡ Performance (`/performance`) — 2 docs
 
 | File | Purpose |
 |------|---------|
-| [CAPACITY_PLANNING.md](performance/CAPACITY_PLANNING.md) | VPS capacity planning e otimização RAM |
+| [CAPACITY_PLANNING.md](performance/CAPACITY_PLANNING.md) | VPS capacity planning e otimização RAM (PrecomputeBuffers) |
 | [MEMORY_OPTIMIZATION.md](performance/MEMORY_OPTIMIZATION.md) | Estratégias de memória para datasets 50GB+ |
-| [MULTIPROCESSING_BENCHMARK.md](performance/MULTIPROCESSING_BENCHMARK.md) | Benchmark multiprocessing GIL bypass |
 
-### 🚨 Pesquisa de Fraude (`/fraudes`) — 5 docs
+### 🚨 Pesquisa de Fraude (`/fraudes`) — 0 docs ativos
 
-| File | Purpose |
-|------|---------|
-| [INDICE_EXECUTIVO.md](fraudes/INDICE_EXECUTIVO.md) | Índice executivo: 64+ padrões, TOP 5 ações |
-| [FRAUDES_DESCOBERTAS.md](fraudes/FRAUDES_DESCOBERTAS.md) | Pesquisa profunda: 50+ padrões descobertos |
-| [ANALISE_VALIDACAO_DADOS.md](fraudes/ANALISE_VALIDACAO_DADOS.md) | Validação: sintético vs. realidade |
-| [MATRIZ_FRAUDES.md](fraudes/MATRIZ_FRAUDES.md) | Matriz de fraudes — referência rápida |
-| [TURNOS_IMPLEMENTACAO.md](fraudes/TURNOS_IMPLEMENTACAO.md) | Turnos de implementação: 8 fases |
+Docs de planejamento/pesquisa de fraude foram consolidados no CHANGELOG após conclusão das implementações. Ver [docs/07_CATALOGO_FRAUDES.md](07_CATALOGO_FRAUDES.md) para referência atual dos 25 tipos bancários + 11 ride-share implementados.
 
 ### 📚 Documentos de Estudos (`/documentodeestudos`) — referência
 
@@ -99,9 +93,7 @@ Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à 
 2. Revisar [ANALISE_PROFUNDA.md](analysis/ANALISE_PROFUNDA.md)
 
 ### Para pesquisa de fraude:
-1. Ler [FRAUDES_DESCOBERTAS.md](fraudes/FRAUDES_DESCOBERTAS.md)
-2. Ver [MATRIZ_FRAUDES.md](fraudes/MATRIZ_FRAUDES.md)
-3. Revisar [TURNOS_IMPLEMENTACAO.md](fraudes/TURNOS_IMPLEMENTACAO.md)
+1. Ver [07_CATALOGO_FRAUDES.md](07_CATALOGO_FRAUDES.md) — 25 tipos bancários + 11 ride-share implementados
 
 ---
 
@@ -110,12 +102,12 @@ Série de 8 documentos cobrindo todo o ecossistema — da geração de dados à 
 | Categoria | Quantidade |
 |-----------|-----------|
 | Ecosystem Docs (01–08) | 7 |
-| Analysis & Insights | 1 |
-| Performance | 3 |
-| Fraud Research | 5 |
+| Analysis & Insights | 2 |
+| Performance | 2 |
+| Fraud Research | 0 (consolidado em CHANGELOG + 07_CATALOGO_FRAUDES) |
 | Technical Guides | 2 |
 | Reference (estudos) | 7 (+13 PDFs) |
-| **Total** | **~25 docs + 13 PDFs** |
+| **Total** | **~18 docs + 13 PDFs** |
 
 ---
 

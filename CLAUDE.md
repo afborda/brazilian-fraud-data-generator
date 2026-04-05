@@ -19,10 +19,10 @@ High-performance synthetic data generator for **Brazilian banking & ride-share f
 
 ```
 generate.py          # Batch entry point (→ BatchRunner/MinIORunner/SchemaRunner)
-stream.py            # Streaming entry point (→ stdout/kafka/webhook)
+stream.py            # Streaming entry point (→ stdout/kafka/webhook/redis-stream)
 src/fraud_generator/
 ├── generators/      # Entity creation (customer → device → transaction/ride)
-├── enrichers/       # Fraud signal pipeline (11 enrichers, 17+ signals)
+├── enrichers/       # Fraud signal pipeline (8 enrichers, 17 signals)
 ├── exporters/       # Output formats (Strategy: ExporterProtocol)
 ├── connections/     # Stream targets (Strategy: ConnectionProtocol)
 ├── config/          # Domain configs (*_LIST + *_WEIGHTS + get_*() pattern)

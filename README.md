@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Custom%20Non--Commercial-DC2626" alt="Custom Non-Commercial License" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-1D4ED8" alt="Python 3.10 or newer" />
   <img src="https://img.shields.io/badge/domains-banking%20%7C%20ride--share-0F172A" alt="Banking and ride-share domains" />
-  <img src="https://img.shields.io/badge/streaming-kafka%20%7C%20webhook%20%7C%20stdout-7C3AED" alt="Kafka, webhook and stdout streaming" />
+  <img src="https://img.shields.io/badge/streaming-kafka%20%7C%20webhook%20%7C%20stdout%20%7C%20redis--stream-7C3AED" alt="Kafka, webhook, stdout and Redis Stream streaming" />
 </p>
 
 <p align="center">
@@ -198,7 +198,7 @@ For `--type all`: all five files above.
 | **Profiles** | 7 transaction + 7 ride behavioral profiles, sticky per customer |
 | **Formats** | JSONL, JSON, CSV, TSV, Parquet, Arrow IPC, database (SQLAlchemy), MinIO/S3 |
 | **Compression** | JSONL: gzip/zstd/snappy · Parquet: snappy/zstd/gzip/brotli |
-| **Streaming** | stdout, Kafka, webhook — sync or async mode |
+| **Streaming** | stdout, Kafka, webhook, redis-stream — sync or async mode |
 | **Schema mode** | Declarative JSON schemas with optional AI field correction |
 
 ## CLI Reference
@@ -240,7 +240,7 @@ For `--type all`: all five files above.
 
 | Flag | Default | Description |
 |---|---|---|
-| `--target` | required | `kafka`, `webhook`, or `stdout` |
+| `--target` | required | `kafka`, `webhook`, `stdout`, or `redis-stream` |
 | `--type` | `transactions` | `transactions` or `rides` |
 | `--rate` | `10` | Events per second |
 | `--max-events` | infinite | Stop after N events |
@@ -286,7 +286,7 @@ src/fraud_generator/
 ├── generators/                # Customer → Device → Transaction/Ride
 ├── enrichers/                 # 8-stage fraud signal pipeline (17 signals, 4 rules)
 ├── exporters/                 # JSONL, CSV, Parquet, Arrow, DB, MinIO
-├── connections/               # stdout, Kafka, webhook
+├── connections/               # stdout, Kafka, webhook, redis-stream
 ├── config/                    # 14 config modules (*_LIST + *_WEIGHTS + get_*())
 ├── profiles/                  # Behavioral and device profiles
 ├── models/                    # Data classes
