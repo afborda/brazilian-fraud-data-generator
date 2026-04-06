@@ -8,6 +8,7 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Iterator, Tuple
 
+from ..utils.watermark import make_transaction_id
 from ..config.transactions import (
     TX_TYPES_LIST, TX_TYPES_WEIGHTS,
     CHANNELS_LIST, CHANNELS_WEIGHTS,
@@ -535,7 +536,7 @@ class TransactionGenerator:
         
         # Build base transaction
         tx = {
-            'transaction_id': f'TXN_{tx_id}',
+            'transaction_id': make_transaction_id(tx_id, customer_id, timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)),
             'customer_id': customer_id,
             'session_id': f'SESS_{tx_id}',
             'device_id': device_id,
