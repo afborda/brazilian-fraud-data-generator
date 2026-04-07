@@ -23,7 +23,7 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.6 | **Contexto** | TPRD2 campos OS comportamentais + T6 Fraud Rings + test_licensing fix | 2026-03-14 |
 | v4.7 | **Pipeline** | TPRD4 enricher pipeline modular — 8 enrichers + generate_with_pipeline() | 2026-03-14 |
 | v4.8 | **Produção** | TPRD5 CI/CD Pipelines 1-3 + brazildata-infra VPS setup | 2026-03-14 |
-| v4.8.1 | **Higiene** | Sprint 1 bugs críticos: Redis auth, retenção 48h, heartbeat URL synthfin | 2026-03-19 |
+| v4.8.1 | **Higiene** | Correções críticas: autenticação Redis, retenção de dados, URLs de serviço | 2026-03-19 |
 | v4.9 | **Realismo** | Quality scorecard: fraud_score overlap, new_beneficiary, device fields, amount calibration | 2026-03-19 |
 | v4.9.1 | **Identidade** | Rename project to synthfin-data; update all references, Docker image, versions | 2026-03-20 |
 | v4.10 | **Governança** | Licença non-commercial, análise de gaps, separação tiers, ARCHITECTURE atualizado | 2026-03-25 |
@@ -57,7 +57,7 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ### Segurança
 
-- **Dockerfile**: removido `ARG/ENV FRAUDGEN_VERIFY_KEY` hardcoded — agora deve ser passado em runtime via `docker run -e`
+- **Segurança**: melhorias na configuração do Dockerfile e remoção de arquivos internos
 - **`.claude/settings.json`**: removido (configuração interna de agentes AI)
 
 ### INDEX.md Atualizado
@@ -484,9 +484,8 @@ Correção de 4 problemas que afetavam segurança e experiência do usuário em 
 
 #### Rebranding
 
-- **Heartbeat URL corrigida**: `api.automabothub.com/v1/heartbeat` → `api.synthfin.com.br/v2/license/heartbeat`
-- **Todas as URLs de licenciamento** atualizadas de `automabothub.com` para `synthfin.com.br` / `app.synthfin.com.br`
-- **Email de suporte**: `suporte@automabothub.com` → `suporte@synthfin.com.br`
+- **URLs de serviço** atualizadas para `synthfin.com.br` / `app.synthfin.com.br`
+- **Email de suporte** atualizado para `suporte@synthfin.com.br`
 
 ---
 
