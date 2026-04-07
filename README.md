@@ -331,6 +331,12 @@ Custom non-commercial license. Free for **personal study, academic research, and
 
 A hosted API is available at [synthfin.com.br](https://synthfin.com.br) for managed generation.
 
+## Privacy & Telemetry
+
+This open-source distribution does **not** send any telemetry, analytics, or data to external servers.
+
+The `phone_home` parameter present in `generate.py` and `stream.py` is a **no-op** in this open-source version — the proprietary licensing module (`src/fraud_generator/licensing/`) is not included and is excluded from this repository via `.gitignore`. When that module is absent, no network calls are made.
+
 ## Documentation
 
 | Resource | Link |
