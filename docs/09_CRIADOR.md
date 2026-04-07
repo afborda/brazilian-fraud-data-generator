@@ -49,9 +49,8 @@ Arquitetura Medallion: `Raw JSON → Bronze (Parquet) → Silver (Clean) → Gol
 
 ### Contato
 
-- **Email:** devabnerfonseca@gmail.com
+- **Email:** licensing@synthfin.com.br
 - **GitHub:** github.com/afborda
-- **Licenciamento comercial:** devabnerfonseca@gmail.com
 - **Plataforma:** synthfin.com.br
 
 ### Sobre o projeto
