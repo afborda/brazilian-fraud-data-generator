@@ -37,6 +37,10 @@ RUN pip install --no-cache-dir -r requirements.txt -r requirements-streaming.txt
 COPY src/ ./src/
 COPY stream.py ./
 
+# Non-root user for security
+RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app
+USER appuser
+
 # No data directory needed — streaming writes to Redis, not disk.
 
 # Default env vars (overridden at docker run time)
