@@ -55,6 +55,10 @@ COPY stream.py .
 # Create output directory with proper permissions
 RUN mkdir -p /output && chmod 777 /output
 
+# Non-root user for security
+RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app /output
+USER appuser
+
 # Default environment variables
 ENV OUTPUT_DIR=/output
 ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092
