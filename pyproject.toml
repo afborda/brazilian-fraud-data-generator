@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "synthfin-data"
+name = "fraud-generator"
 version = "4.18.0"
 description = "Synthetic fraud data generator for Brazilian banking, PIX and ride-share systems"
 requires-python = ">=3.10"
