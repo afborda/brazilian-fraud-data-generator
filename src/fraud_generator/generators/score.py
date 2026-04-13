@@ -111,15 +111,15 @@ def _score_sim_swap(ctx: GenerationContext) -> int:
 
 def _score_odd_hours(ctx: GenerationContext) -> int:
     """
-    Transactions generated between midnight and 06:00 are statistically riskier.
-    We proxy this by reading ctx.amount as a surrogate only when ctx has no
-    explicit hour field.  If the generator sets tx['hour'] it should be forwarded
-    to the context; until then this signal checks the accumulated_amount_24h spike
-    as a proxy for late-night behaviour.
+    Transactions generated between midnight (00:00) and 05:59 are statistically
+    riskier for Brazilian banking fraud (BACEN 2023: ATO/PIX peaks at 01h–04h).
+
+    Reads ctx.transaction_hour (0-23). Returns 0 if hour is unknown (-1) to
+    avoid false positives on records without timestamp.
     """
-    # NOTE: A future version of GenerationContext should add `transaction_hour: int`.
-    # For now, skip scoring this signal to avoid false positives.
-    return 0
+    if ctx.transaction_hour < 0:
+        return 0
+    return _W_ODD_HOURS if ctx.transaction_hour < 6 else 0
 
 
 def _score_amount_spike(ctx: GenerationContext) -> int:

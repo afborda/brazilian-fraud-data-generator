@@ -25,4 +25,4 @@ class TemporalEnricher:
         ts = bag.timestamp
         if ts is not None and hasattr(ts, "hour"):
             hour_int = ts.hour
-        tx["unusual_time"] = hour_int < 6 or hour_int > 23
+        tx["unusual_time"] = hour_int < 6 or hour_int >= 22

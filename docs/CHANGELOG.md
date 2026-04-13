@@ -37,6 +37,38 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.16.1 | **Organização** | Reorganização de docs/: subdiretórios analysis/, performance/, cross-refs atualizados | 2026-03-31 |
 | v4.17 | **README** | README reescrito, agent-ia/ removido, tools/ criado, docs/README.md criado | 2026-04-01 |
 | v4.17.1 | **Auditoria** | Remoção de docs sensíveis, workflows privados, fix Dockerfile key | 2026-04-01 |
+| v4.18.0 | **ML Quality Lab** | Pacote ml/ (LightGBM adversarial), tools/analyze_batch.py, tools/train_ml.py, fixes enrichers (odd_hours, dest_account_age_days, log-normal noise), README com pipeline e benchmarks | 2026-04-13 |
+
+---
+
+## v4.18.0 — ML Quality Lab (2026-04-13)
+
+### Novo: Pacote `src/fraud_generator/ml/`
+
+- **`ml/features.py`** — `extract_features()` — 31 features tabulares com encoding ordinal de `ip_type`, defaults para valores ausentes
+- **`ml/trainer.py`** — `train_binary_model()` + `train_multilabel_models()` — LightGBM binário (`is_fraud`) + 25 OvR por tipo
+- **`ml/evaluator.py`** — `load_models()` + `evaluate_batch()` — AUC-ROC/PR geral + por tipo, feature importance, quality flags (`too_easy`/`too_hard`)
+- **`ml/__init__.py`** — exports: `extract_features`, `train_binary_model`, `train_multilabel_models`, `evaluate_batch`, `load_models`
+
+### Novo: Ferramentas CLI
+
+- **`tools/analyze_batch.py`** — análise científica: Cliff's delta, Jensen-Shannon divergence, Cramér's V, KS-test, Cohen's d
+- **`tools/train_ml.py`** — treinamento offline LightGBM com flags `--input`, `--model-dir`, `--version`, `--skip-multilabel`
+
+### Fixes de Enrichers
+
+- **`enrichers/temporal.py`** — fix `odd_hours`: agora lê corretamente `transaction_hour` do `GenerationContext`
+- **`enrichers/fraud.py`** — fix `dest_account_age_days`: campo ausente causava KeyError em alguns fraud types
+- **`generators/session_context.py`** — adição de ruído log-normal em velocity e accumulated amounts para reduzir determinismo
+- **`generators/score.py`** — fix `_score_odd_hours`: restaurados 8 pontos de peso para transações entre 22h–5h
+
+### Dependências adicionadas (`requirements.txt`)
+
+- `lightgbm>=4.3.0`, `joblib>=1.3.0`, `scikit-learn>=1.3.0`, `scipy>=1.11.0`, `ijson>=3.2.0`
+
+### Documentação
+
+- **`README.md`** — reescrito com: badges AUC-ROC/quality, diagrama ASCII do pipeline 8-stage, seção ML Quality Validation, tabela 25 padrões, benchmarks atualizados (114+ campos, 104 municípios)
 
 ---
 
