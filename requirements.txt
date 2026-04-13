@@ -1,4 +1,4 @@
-# synthfin-data v4.9
+# synthfin-data v4.18.0
 Faker>=22.0.0
 pandas>=2.0.0
 pyarrow>=14.0.0
@@ -16,3 +16,10 @@ redis>=5.0.0
 
 # Phase 2.9: Database exports (SQLAlchemy)
 SQLAlchemy>=2.0.0
+
+# ML quality validation (optional — soft dependency, degrades gracefully)
+lightgbm>=4.3.0
+joblib>=1.3.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+ijson>=3.2.0

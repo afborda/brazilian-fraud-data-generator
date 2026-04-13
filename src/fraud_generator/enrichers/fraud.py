@@ -223,9 +223,14 @@ class FraudEnricher:
         characteristics = pattern["characteristics"]
 
         # ── Value anomaly ─────────────────────────────────────────────────
+        # Log-normal noise (σ=0.20) widens amount distributions to reduce
+        # perfect separation while preserving fraud type characteristics.
+        # Floor at 0.65 ensures patterns retain their statistical identity.
         if "amount_override" in characteristics:
             lo, hi = characteristics["amount_override"]
-            tx["amount"] = round(random.uniform(lo, hi), 2)
+            base_amount = random.uniform(lo, hi)
+            noise_mult = max(0.65, random.lognormvariate(0, 0.20))
+            tx["amount"] = round(max(0.01, base_amount * noise_mult), 2)
         elif "amount_multiplier" in characteristics:
             lo_m, hi_m = characteristics["amount_multiplier"]
             base = (
@@ -236,34 +241,59 @@ class FraudEnricher:
             # V6-M13: modulate by victim age group (demographic factor)
             age_group = _PROFILE_AGE_GROUP.get(customer_profile)
             age_mult = _AGE_GROUP_MULTIPLIER.get(age_group, 1.0) if age_group else 1.0
-            tx["amount"] = round(base * random.uniform(lo_m, hi_m) * age_mult, 2)
+            noise_mult = max(0.65, random.lognormvariate(0, 0.20))
+            tx["amount"] = round(base * random.uniform(lo_m, hi_m) * age_mult * noise_mult, 2)
 
-        # ── New beneficiary ───────────────────────────────────────────────
+        # ── New beneficiary & destination account age ─────────────────────
         new_ben_prob = characteristics.get("new_beneficiary_prob")
         if new_ben_prob is not None and random.random() < new_ben_prob:
             tx["new_beneficiary"] = True
             if tx.get("destination_bank"):
                 tx["destination_bank"] = bag.bank_cache.sample()
 
+        # Destination account age: PIX/social fraud goes to brand-new mule accounts.
+        # This field is read by build_context_for_fraud via tx dict — must be set here
+        # so the 17-signal pipeline can evaluate dest_account_new correctly.
+        if not tx.get("dest_account_age_days"):
+            if fraud_type in (
+                "PIX_GOLPE", "ENGENHARIA_SOCIAL", "LAVAGEM_DINHEIRO",
+                "FRAUDE_QR_CODE", "BOLETO_FALSO", "WHATSAPP_CLONE",
+            ):
+                tx["dest_account_age_days"] = random.randint(0, 7)
+            elif fraud_type in (
+                "CONTA_TOMADA", "CARTAO_CLONADO", "FRAUDE_APLICATIVO", "SIM_SWAP",
+            ):
+                tx["dest_account_age_days"] = random.randint(0, 30)
+
         # ── Velocity ──────────────────────────────────────────────────────
+        # Noise rationale: hard-capped ranges produce perfect decision
+        # boundaries that make every fraud type trivially separable (AUC=1.0).
+        # A log-normal multiplicative noise N(0, σ=0.35) widens the velocity
+        # distribution by ~±40% while keeping values positive and right-skewed
+        # (consistent with real transaction data).
         velocity = characteristics.get("velocity", "NONE")
         if velocity == "HIGH":
             burst_min, burst_max = characteristics.get("transaction_burst", (10, 30))
-            tx["velocity_transactions_24h"] = random.randint(burst_min, burst_max)
+            base_vel = random.randint(burst_min, burst_max)
+            noise_mult = max(0.4, random.lognormvariate(0, 0.35))
+            tx["velocity_transactions_24h"] = max(1, int(round(base_vel * noise_mult)))
             tx["accumulated_amount_24h"] = round(
-                tx["amount"] * tx["velocity_transactions_24h"] * random.uniform(0.6, 0.9), 2
+                tx["amount"] * tx["velocity_transactions_24h"] * random.uniform(0.5, 1.1), 2
             )
         elif velocity == "MEDIUM":
-            tx["velocity_transactions_24h"] = random.randint(5, 12)
+            base_vel = random.randint(5, 12)
+            noise_mult = max(0.4, random.lognormvariate(0, 0.35))
+            tx["velocity_transactions_24h"] = max(1, int(round(base_vel * noise_mult)))
             tx["accumulated_amount_24h"] = round(
-                tx["amount"] * tx["velocity_transactions_24h"] * 0.7, 2
+                tx["amount"] * tx["velocity_transactions_24h"] * random.uniform(0.5, 0.9), 2
             )
         elif velocity == "LOW":
-            # Fraud com velocity LOW ainda deve estar levemente acima da linha de base
-            # para não ficar abaixo de clientes legítimos ativos (Bug #5)
-            tx["velocity_transactions_24h"] = random.randint(3, 9)
+            # Fraud with LOW velocity: slightly above baseline but with overlap
+            base_vel = random.randint(3, 9)
+            noise_mult = max(0.3, random.lognormvariate(0, 0.40))
+            tx["velocity_transactions_24h"] = max(1, int(round(base_vel * noise_mult)))
             tx["accumulated_amount_24h"] = round(
-                tx["amount"] * tx["velocity_transactions_24h"] * 0.5, 2
+                tx["amount"] * tx["velocity_transactions_24h"] * random.uniform(0.3, 0.7), 2
             )
 
         # ── Time anomaly ──────────────────────────────────────────────────
@@ -274,7 +304,7 @@ class FraudEnricher:
             if timestamp is not None:
                 new_timestamp = timestamp.replace(hour=new_hour, minute=random.randint(0, 59))
                 tx["timestamp"] = new_timestamp.isoformat()
-            tx["unusual_time"] = new_hour < 6 or new_hour > 22
+            tx["unusual_time"] = new_hour < 6 or new_hour >= 22
 
         # ── Location anomaly ──────────────────────────────────────────────
         location_anomaly = characteristics.get("location_anomaly", "NONE")

@@ -66,6 +66,9 @@ class GenerationContext:
     # ── Push notification ─────────────────────────────────────────────────
     notification_ignored: bool = False   # customer ignored security notification
 
+    # ── Time of day ───────────────────────────────────────────────────────
+    transaction_hour: int = -1           # 0-23 local hour; -1 = unknown
+
     # ── Matched fraud rule (populated by correlations.py) ─────────────────
     matched_rule: Optional[str] = None
 
@@ -198,6 +201,8 @@ class SessionContextGenerator:
             typical_amount=customer_typical_amount,
             # notification
             notification_ignored=notification_ignored,
+            # time of day
+            transaction_hour=current_time.hour,
         )
 
     def enrich_transaction(self, tx: Dict[str, Any], ctx: GenerationContext) -> Dict[str, Any]:
@@ -237,9 +242,12 @@ class SessionContextGenerator:
 
 def _sample_dest_account_age(fraud_type: Optional[str], rng) -> int:
     """Sample destination account age in days."""
-    if fraud_type in ("PIX_GOLPE", "ENGENHARIA_SOCIAL", "LAVAGEM_DINHEIRO", "TRIANGULACAO"):
+    if fraud_type in (
+        "PIX_GOLPE", "ENGENHARIA_SOCIAL", "LAVAGEM_DINHEIRO", "TRIANGULACAO",
+        "FRAUDE_QR_CODE", "BOLETO_FALSO", "WHATSAPP_CLONE",
+    ):
         return rng.randint(0, 7)       # brand-new mule account
-    elif fraud_type in ("CONTA_TOMADA", "CARTAO_CLONADO"):
+    elif fraud_type in ("CONTA_TOMADA", "CARTAO_CLONADO", "FRAUDE_APLICATIVO", "SIM_SWAP"):
         return rng.randint(0, 30)      # recently opened mule account
     else:
         return rng.randint(30, 3650)   # established account
@@ -279,6 +287,15 @@ def build_context_for_fraud(
     notification_ignored = bool(tx.get("notification_ignored", False))
     multiple_accounts = bool(tx.get("multiple_accounts", False))
 
+    # Extract transaction hour from ISO timestamp string
+    tx_hour = -1
+    ts_raw = tx.get("timestamp", "")
+    if ts_raw:
+        try:
+            tx_hour = int(str(ts_raw)[11:13])
+        except (ValueError, TypeError):
+            tx_hour = -1
+
     return GenerationContext(
         # device signals from profile
         touch_pressure=signals["touch_pressure"],
@@ -309,4 +326,6 @@ def build_context_for_fraud(
         typical_amount=customer_typical_amount,
         # notification
         notification_ignored=notification_ignored,
+        # time of day
+        transaction_hour=tx_hour,
     )
