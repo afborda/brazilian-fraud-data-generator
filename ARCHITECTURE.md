@@ -320,14 +320,9 @@ src/fraud_generator/ml/
 
 ### Quality Grade
 
-```python
-penalty = too_easy_count × 0.12 + too_hard_count × 0.05
-effective_auc = auc_roc - penalty
-
-# Thresholds
-≥ 0.97 → A+    ≥ 0.93 → A    ≥ 0.89 → B+
-≥ 0.85 → B     ≥ 0.75 → C    ≥ 0.65 → D    else → F
-```
+Grades range from A+ (excellent) to F (failed), computed from effective AUC-ROC
+with penalties for over-deterministic (`too_easy`) and statistically insufficient
+(`too_hard`) fraud types.
 
 ### Per-Type Flags
 
@@ -512,15 +507,8 @@ generate_cpf_from_state(state_code) -> str  # 3rd digit encodes region
 
 ## 17. Licensing System
 
-HMAC-SHA256 signed licenses with 5 plan tiers for the hosted API. The open-source CLI has no license restrictions.
-
-| Plan | Events/month | Concurrent | Kafka |
-|---|---:|---:|---|
-| FREE | 1M | 2 | No |
-| STARTER | 5M | 3 | No |
-| PRO | 100M | 10 | Yes |
-| TEAM | unlimited | unlimited | Yes |
-| ENTERPRISE | unlimited | unlimited | Yes |
+HMAC-signed licenses with plan tiers for the hosted API. The open-source CLI has no
+license restrictions. See [synthfin.com.br](https://synthfin.com.br) for current plan details.
 
 ---
 
@@ -536,9 +524,8 @@ Batch generation is CPU-bound → `ProcessPoolExecutor`. MinIO JSONL/CSV upload 
 
 ### Deterministic Seed Per Worker
 
-```python
-worker_seed = base_seed + batch_id × 12345   # transactions
-worker_seed = base_seed + batch_id × 54321   # rides
+```
+worker_seed = derive(base_seed, batch_id)   # deterministic, collision-free per batch
 ```
 
 Same base seed + same count always produces the same dataset, regardless of worker count or execution order.
@@ -721,8 +708,6 @@ Python 3.9+ required (3.10+ recommended). Tested on Python 3.10 / 3.11 / 3.12.
 | `MINIO_ENDPOINT` | MinIO endpoint URL |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker list |
 | `REDIS_URL` | Redis URL for streaming / index caching |
-| `MODEL_DIR` | Path to trained LightGBM models (default: `./models/final`) |
-| `MODEL_VERSION` | Model version tag (default: `v4`) |
 | `OPENAI_API_KEY` | OpenAI key for AI schema correction |
 | `ANTHROPIC_API_KEY` | Anthropic key for AI schema correction |
 
@@ -730,57 +715,19 @@ Python 3.9+ required (3.10+ recommended). Tested on Python 3.10 / 3.11 / 3.12.
 
 ## 24. SynthFin Ecosystem
 
-| Component | Role | Stack | Visibility |
-|---|---|---|---|
-| **synthfin-data** (this repo) | Core generation engine + ML quality layer | Python, LightGBM, Faker, PyArrow | Public |
-| **synthfin-api** | REST API wrapping the engine | FastAPI, Redis, SQLite, MinIO, Stripe, Resend | Private (GHCR) |
-| **synthfin-web** | SaaS dashboard + marketing site | Next.js 15, React 19, Tailwind | Private (GHCR) |
-| **synthfin-saas** | Infrastructure orchestration | Docker Compose, Traefik v3, Ubuntu 24.04 | Private |
+**synthfin-data** is the core engine of a larger hosted platform available at
+[synthfin.com.br](https://synthfin.com.br).
 
-### Production Architecture
+| Component | Role |
+|---|---|
+| **synthfin-data** (this repo) | Core generation engine + ML quality layer |
+| **Hosted API** | REST API, job queue, storage, billing |
+| **Dashboard** | Job management, quality reports, usage |
 
-```
-Cloudflare (DNS + WAF + DDoS)
-  │
-  └── Traefik v3 (TLS via Let's Encrypt)
-        │
-        ├── synthfin.com.br        → Landing page (Next.js)
-        ├── app.synthfin.com.br    → Dashboard (Next.js)
-        ├── api.synthfin.com.br    → API (FastAPI)
-        └── deploy.synthfin.com.br → CI/CD webhook
+The hosted platform runs the same generation pipeline as this open-source library,
+with added job orchestration, ML quality analysis, MinIO storage, and email delivery.
 
-Supporting services (internal Docker network):
-  Redis 7    — cache, session, job queue, rate limiting
-  MinIO      — S3-compatible storage for datasets and quality reports
-  Deploy hook — HMAC-authenticated GHCR pull + restart
-```
-
-### API Job Status — Quality Fields (v2)
-
-`GET /v2/jobs/{id}` now includes quality metrics after ML analysis completes:
-
-```json
-{
-  "job_id": "job_abc123",
-  "status": "done",
-  "download_url": "https://...",
-  "quality_auc_roc": 0.9347,
-  "quality_auc_pr": 0.8812,
-  "quality_report_url": "https://minio/.../quality_report.html",
-  "quality_analysis_id": "ana_f3a91c..."
-}
-```
-
-### CI/CD Pipeline
-
-```
-git push (main) → GitHub Actions
-  ├── Build Docker images → push to GHCR
-  └── Trigger deploy webhook on VPS
-        ├── docker pull latest images
-        ├── docker compose up -d
-        └── docker image prune -f
-```
+For API access during the beta phase, contact [devabnerfonseca@gmail.com](mailto:devabnerfonseca@gmail.com).
 
 ---
 

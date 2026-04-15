@@ -293,7 +293,20 @@ docs/SHADOWTRAFFIC_ANALYSIS.md
 docs/ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md
 docs/CHECKLIST_MELHORIAS_DISRUPTIVAS_E_UX.md
 docs/CAPACITY_PLANNING.md
+docs/performance/CAPACITY_PLANNING.md
 docs/analysis/2026-03-19/
+
+# Docs técnicos com parâmetros proprietários (calibrações, pesos, infraestrutura interna)
+docs/performance/
+docs/analysis/ANALISE_PROFUNDA.md
+docs/analysis/ESTUDO_QUALIDADE_DADOS.md
+docs/03_ARQUITETURA_TECNICA.md
+docs/06_STACK_TECNOLOGICO.md
+docs/07_CATALOGO_FRAUDES.md
+docs/09_CRIADOR.md
+
+# Knowledge base interna — contém calibrações, fórmulas e parâmetros proprietários
+.claude/kb/
 
 # Local configuration
 config.local.yml

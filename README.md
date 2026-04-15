@@ -45,13 +45,13 @@ The hosted API at [api.synthfin.com.br](https://api.synthfin.com.br) delivers:
 ```bash
 # Create a batch job via API
 curl -X POST https://api.synthfin.com.br/v2/generate \
-  -H "Authorization: Bearer fgen_sk_..." \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"type":"transactions","count":100000,"format":"parquet","fraud_rate":0.03}'
 
 # Poll for status (includes quality metrics after analysis)
 curl https://api.synthfin.com.br/v2/jobs/{job_id} \
-  -H "Authorization: Bearer fgen_sk_..."
+  -H "Authorization: Bearer YOUR_API_KEY"
 # → {"status":"done","download_url":"...","quality_auc_roc":0.9347,"quality_report_url":"..."}
 ```
 
