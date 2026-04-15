@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.17-0F766E" alt="Version 4.17" /></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-4.18.0-0F766E" alt="Version 4.18.0" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Custom%20Non--Commercial-DC2626" alt="Custom Non-Commercial License" /></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-1D4ED8" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/AUC--ROC-0.9991-0F766E" alt="AUC-ROC 0.9991" />
@@ -25,6 +25,43 @@
 
 ---
 
+## ⚡ SynthFin API — Hosted Platform (Beta)
+
+> **🧪 Beta phase — testing open to everyone.**
+> A hosted version of this generator is available at **[synthfin.com.br](https://synthfin.com.br)** — no infrastructure to run, REST API included, ML quality report delivered by email after every job.
+>
+> **Want to test it?** Send an email to **[devabnerfonseca@gmail.com](mailto:devabnerfonseca@gmail.com)** and we'll get you set up.
+>
+> **Have real fraud data to compare against?** We're actively looking for partners who can share anonymized or aggregated real-world data to validate and improve the quality of our synthetic distributions. If you work in fraud prevention at a bank, fintech, or payment processor and would like to collaborate — even informally — please reach out. Any contribution to improve detection accuracy is very welcome.
+
+The hosted API at [api.synthfin.com.br](https://api.synthfin.com.br) delivers:
+
+- **REST API** — `POST /v2/generate` → async job → download link
+- **ML Quality Report** — automatic LightGBM analysis after every batch job, grade A+→F emailed to you with AUC-ROC, per-fraud-type breakdown, and feature importance
+- **Dashboard** at [app.synthfin.com.br](https://app.synthfin.com.br) — job history, download, quality reports
+- **Streaming** — Server-Sent Events feed via `/v2/streams`
+- **Webhooks** — job completion notifications to your endpoint
+
+```bash
+# Create a batch job via API
+curl -X POST https://api.synthfin.com.br/v2/generate \
+  -H "Authorization: Bearer fgen_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"type":"transactions","count":100000,"format":"parquet","fraud_rate":0.03}'
+
+# Poll for status (includes quality metrics after analysis)
+curl https://api.synthfin.com.br/v2/jobs/{job_id} \
+  -H "Authorization: Bearer fgen_sk_..."
+# → {"status":"done","download_url":"...","quality_auc_roc":0.9347,"quality_report_url":"..."}
+```
+
+After the job completes, you receive an email with:
+- Download link for the dataset (JSONL / CSV / Parquet)
+- Quality report link — HTML report with grade, AUC-ROC per fraud type, and signal importance
+- Automatic quality flags if any fraud type is `too_easy` or `too_hard` to detect
+
+---
+
 ## Why This Project
 
 **synthfin-data** generates realistic Brazilian fraud datasets — not toy random data. It covers PIX-heavy banking, ride-share fraud, behavioral profiles, deterministic seeds, and schema-driven output.
@@ -36,6 +73,77 @@
     <td width="33%"><strong>Fraud-focused labels</strong><br />25 banking + 11 ride-share fraud patterns, 17 risk signals, 4 correlation rules, and <code>fraud_risk_score</code> 0–100 with per-signal breakdown.</td>
   </tr>
 </table>
+
+---
+
+## How It Works — End to End
+
+### Open Source (self-hosted)
+
+```
+python generate.py --size 1GB --format parquet --fraud-rate 0.03 --seed 42 --output ./data
+```
+
+```
+generate.py
+    │
+    ▼
+BatchRunner (multiprocessing, N workers)
+    │
+    ├── CustomerGenerator  →  customers.jsonl
+    ├── DeviceGenerator    →  devices.jsonl
+    └── TransactionGenerator
+            │
+            ▼
+        generate_with_pipeline()
+            │
+            ├── 01 Temporal    (unusual hours, seasonality, time_anomaly)
+            ├── 02 Geo         (IBGE lat/lon, municipality, Censo 2022 weights)
+            ├── 03 Fraud       (inject pattern, velocity, dest_account_age)
+            ├── 04 PIX         (end_to_end_id, ISPB, pacs.008)
+            ├── 05 Device      (emulator, VPN, rooted, device_age_days)
+            ├── 06 Session     (velocity windows 1h/6h/24h/7d, accumulated amounts)
+            ├── 07 Risk        (fraud_risk_score: 17 signals, 4 correlation rules)
+            └── 08 Biometric   (typing speed, touch pressure, scroll behavior)
+                    │
+                    ▼
+            Labeled record (114+ fields)
+            is_fraud · fraud_type · fraud_risk_score · fraud_signals[]
+                    │
+                    ▼
+        Exporter (JSONL / CSV / Parquet / Arrow / DB / MinIO)
+```
+
+### Hosted API (synthfin.com.br)
+
+```
+Your app
+    │
+    ▼  POST /v2/generate
+API (FastAPI + Redis queue)
+    │
+    ▼
+Worker Pool (multiprocessing, same pipeline as above)
+    │
+    ├── Upload dataset  →  MinIO (presigned URL, 48h TTL)
+    │
+    └── ML Quality Analysis
+            │
+            ├── evaluate_batch() via LightGBM
+            ├── Grade A+→F  (AUC-ROC + penalty for too_easy/too_hard types)
+            ├── HTML Quality Report  →  MinIO
+            └── Email → you (dataset link + report link + grade + AUC-ROC)
+    │
+    ▼  GET /v2/jobs/{id}
+{
+  "status": "done",
+  "download_url": "https://...",
+  "quality_auc_roc": 0.9347,
+  "quality_auc_pr": 0.8812,
+  "quality_report_url": "https://...",
+  "quality_analysis_id": "ana_f3a91c..."
+}
+```
 
 ---
 
@@ -65,6 +173,7 @@ pip install -r requirements-streaming.txt
 python stream.py --target stdout  --rate 5  --pretty
 python stream.py --target kafka   --kafka-server localhost:9092 --kafka-topic transactions --rate 100
 python stream.py --target webhook --webhook-url http://api:8080/ingest --rate 50
+python stream.py --target redis-stream --rate 50
 ```
 
 ### Docker
@@ -80,21 +189,6 @@ docker run --rm -v $(pwd)/output:/output \
 ## 8-Stage Enrichment Pipeline
 
 Every transaction passes through a deterministic pipeline that builds realistic fraud context layer by layer:
-
-```
-Customer + Device
-      │
-      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  01 Temporal   →  02 Geo   →  03 Fraud   →  04 PIX   →  05 Device          │
-│                                                                              │
-│  06 Session    →  07 Risk (17 signals)   →  08 Biometric                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-      │
-      ▼
-  Labeled record (114+ fields)
-  is_fraud · fraud_type · fraud_risk_score · fraud_signals[]
-```
 
 | # | Enricher | What it adds |
 |---|----------|--------------|
@@ -113,83 +207,47 @@ Customer + Device
 
 Beyond label accuracy, synthfin-data ships an **adversarial ML quality layer** that measures how detectable the generated fraud is against a held-out LightGBM classifier — giving you an independent signal of data fidelity.
 
-### What it does
+### Quality grades
 
-1. Trains a LightGBM binary classifier (`is_fraud`) on a generated dataset
-2. Trains 25 per-type OvR classifiers (`fraud_type` X vs all legit)
-3. Reports AUC-ROC / AUC-PR overall + per fraud type
-4. Flags quality issues:
-
-| Per-type AUC | Diagnostic | Meaning |
+| Grade | AUC-ROC effective | Meaning |
 |---|---|---|
-| > 0.99 | `too_easy` | Enricher is over-deterministic — signals don't overlap with legit |
-| 0.85–0.99 | Healthy (high signal) | Expected for CONTA_TOMADA, CREDENTIAL_STUFFING |
-| 0.70–0.85 | Healthy (low signal) | Expected for ENGENHARIA_SOCIAL, WHATSAPP_CLONE |
-| < 0.70 | `too_hard` | Enricher not activating enough discriminative signals |
+| **A+** | ≥ 0.97 | Excellent — ready for production training |
+| **A** | ≥ 0.93 | Very good |
+| **B+** | ≥ 0.89 | Good |
+| **B** | ≥ 0.85 | Acceptable |
+| **C** | ≥ 0.75 | Marginal — review fraud patterns |
+| **D** | ≥ 0.65 | Weak — consider regenerating |
+| **F** | < 0.65 | Failed |
 
-### Run it
+> Effective AUC-ROC applies penalties for over-deterministic types (`too_easy`, weight 0.12) and statistically insufficient types (`too_hard`, weight 0.05).
+
+### Per-type flags
+
+| Flag | Meaning |
+|---|---|
+| `healthy_high_signal` | Detectable and well-balanced |
+| `healthy_low_signal` | Detectable with few examples |
+| `too_easy` | Deterministic signals — model memorizes instead of learning |
+| `too_hard` | Too few examples or weak signal — AUC unreliable |
+
+### Run it locally
 
 ```bash
-# 1. Generate a training dataset (5% fraud for per-type coverage)
-python generate.py --size 50MB --fraud-rate 0.05 --seed 42 --output ./data/ml_training
+# 1. Generate training data
+python generate.py --size 50MB --fraud-rate 0.05 --seed 42 --output ./data/train
 
-# 2. Train the quality model
-python tools/train_ml.py \
-  --input ./data/ml_training/*.jsonl \
-  --model-dir ./models \
-  --version v1
+# 2. Train quality model
+python tools/train_ml.py --input ./data/train/*.jsonl --model-dir ./models --version v1
 
-# 3. Analyze a new batch
+# 3. Analyze a batch
 python tools/analyze_batch.py \
-  --input ./data/ml_training/transactions_00000.jsonl \
-  --output ./data/ml_analysis_report.json
+  --input ./data/train/transactions_00000.jsonl \
+  --output ./data/analysis_report.json
 ```
-
-### Analysis report (excerpt)
-
-```json
-{
-  "metadata": { "total_records": 52418, "fraud_count": 2601, "fraud_rate_actual": 0.0496 },
-  "ml_quality": {
-    "overall": { "auc_roc": 0.997, "auc_pr": 0.981, "n_fraud": 2601 },
-    "per_type": {
-      "CONTA_TOMADA":      { "auc_roc": 0.961, "n_examples": 312 },
-      "ENGENHARIA_SOCIAL": { "auc_roc": 0.847, "n_examples": 289 },
-      "PIX_GOLPE":         { "auc_roc": 0.934, "n_examples": 201 },
-      "FRAUDE_QR_CODE":    { "auc_roc": 0.783, "n_examples": 87  }
-    },
-    "feature_importance": {
-      "velocity_transactions_24h": 0.128,
-      "accumulated_amount_24h":    0.123,
-      "amount":                    0.121,
-      "device_age_days":           0.080,
-      "fraud_risk_score":          0.062
-    },
-    "quality_flags": []
-  },
-  "signal_analysis": {
-    "odd_hours_activation": 0.083,
-    "ato_triad_activation": 0.211,
-    "emulator_activation":  0.034
-  }
-}
-```
-
-### Scientific analysis tools
-
-`tools/analyze_batch.py` computes:
-
-- **Cliff's delta** — effect size between fraud and legit for each numeric signal
-- **Jensen-Shannon divergence** — distribution distance per fraud type
-- **Cramér's V** — association between categorical fields and `fraud_type`
-- **KS-test** — separability of `fraud_score` and `fraud_risk_score` distributions
-- **Cohen's d** — velocity signal separability across 1h/6h/24h/7d windows
 
 ---
 
 ## 25 Banking Fraud Patterns
-
-Each pattern has calibrated enricher weights, velocity profiles, device signal activations, and amount multipliers derived from BCB/Febraban/MJSP public reports.
 
 | Pattern | Key signals |
 |---------|-------------|
@@ -224,13 +282,14 @@ For `--type all`: all five files.
 
 ```json
 {
-  "transaction_id": "TXN_1773495125210_0000_000000",
+  "transaction_id": "TXN_DCB02BE69A265CDE9933",
   "customer_id": "CUST_000000002438",
   "timestamp": "2025-04-28T19:15:14.146316",
   "type": "CREDIT_CARD",
   "amount": 127.82,
   "currency": "BRL",
   "channel": "MOBILE_APP",
+  "customer_state": "SP",
   "merchant_name": "Cosi",
   "merchant_category": "Restaurants",
   "mcc_code": "5812",
@@ -248,11 +307,12 @@ For `--type all`: all five files.
 
 ```json
 {
-  "transaction_id": "TXN_1773495125210_0000_000001",
+  "transaction_id": "TXN_A3F2B1C4D5E6F7A8B9C0",
   "customer_id": "CUST_000000001711",
   "timestamp": "2025-11-05T23:45:48.844962",
   "type": "PIX",
   "amount": 1689.28,
+  "customer_state": "AM",
   "pix_key_type": "CPF",
   "end_to_end_id": "E30723886202511052007B0471FE3",
   "ispb_pagador": "30723886",
@@ -265,9 +325,7 @@ For `--type all`: all five files.
   "fraud_risk_score": 43,
   "fraud_signals": ["active_call", "amount_spike"],
   "new_beneficiary": true,
-  "dest_account_age_days": 3,
-  "touch_pressure_avg": 0.62,
-  "typing_speed_avg_ms": 180
+  "dest_account_age_days": 3
 }
 ```
 
@@ -289,129 +347,6 @@ For `--type all`: all five files.
 | **Streaming** | stdout, Kafka, webhook, redis-stream — sync or async |
 | **Schema mode** | Declarative JSON schemas with optional AI field correction |
 | **ML validation** | LightGBM adversarial classifier, per-type AUC, Cliff's delta, JSD |
-
----
-
-## Project Structure
-
-```
-generate.py                     # Batch entry point (→ BatchRunner / MinIORunner / SchemaRunner)
-stream.py                       # Streaming entry point (→ stdout / kafka / webhook / redis-stream)
-src/fraud_generator/
-├── generators/                 # Customer → Device → Transaction / Ride entity chain
-├── enrichers/                  # 8-stage fraud signal pipeline (8 enrichers, 17 signals, 4 rules)
-│   ├── temporal.py             # Timestamps, unusual_time, time_anomaly
-│   ├── geo.py                  # IBGE centroids, CEP ranges, Censo 2022 weights
-│   ├── fraud.py                # Fraud injection, velocity noise, dest_account_age
-│   ├── pix.py                  # end_to_end_id, ISPB, pacs.008
-│   ├── device.py               # Device signals, emulator, VPN, rooted
-│   ├── session.py              # Velocity windows, accumulated amounts
-│   ├── risk.py                 # fraud_risk_score (17-signal weighted sum)
-│   └── biometric.py            # Typing speed, touch pressure, scroll behavior
-├── ml/                         # ML quality validation package (NEW)
-│   ├── features.py             # extract_features() — 31-feature DataFrame
-│   ├── trainer.py              # LightGBM binary + 25 OvR per-type classifiers
-│   └── evaluator.py            # evaluate_batch() — AUC, quality flags, feature importance
-├── exporters/                  # JSONL, CSV, Parquet, Arrow, DB, MinIO
-├── connections/                # Streaming targets (Kafka, webhook, redis-stream, stdout)
-├── config/                     # 14 config modules (*_LIST + *_WEIGHTS + get_*())
-├── profiles/                   # Behavioral profiles (7 TX + 7 ride), device profiles
-├── models/                     # Data classes (Customer, Device, Transaction, Ride)
-├── schema/                     # Declarative JSON schema engine
-├── validators/                 # CPF validation
-├── utils/                      # WeightCache, compression, parallel, streaming state
-├── cli/                        # CLI args, runners, workers (multiprocessing)
-└── licensing/                  # Tier validation (proprietary, excluded from OS release)
-tools/
-├── analyze_batch.py            # Scientific analysis (Cliff's delta, JSD, Cramér's V)
-├── train_ml.py                 # Offline LightGBM training CLI
-├── backtest_rules.py           # Simulate fraud rule changes before regenerating
-├── tstr_benchmark.py           # Train Synthetic Test Real (RF + XGBoost)
-├── privacy_metrics.py          # LGPD privacy metrics (exact match, k-neighbors)
-├── qde_filter.py               # Quality Data Extractor — filter inconsistencies
-└── validate/dashboard.py       # Streamlit validation dashboard
-schemas/                        # Bundled JSON schema examples
-benchmarks/                     # Performance and quality benchmarks
-tests/                          # pytest: unit/ (11 files) + integration/ (2 files)
-docs/                           # Full documentation
-```
-
----
-
-## CLI Reference
-
-<details>
-<summary><strong>generate.py — all flags</strong></summary>
-
-| Flag | Default | Description |
-|---|---|---|
-| `--type` | `transactions` | `transactions`, `rides`, or `all` |
-| `--size` | `1GB` | Target output size: `1GB`, `500MB`, `10GB` |
-| `--output` | `./output` | Output directory or `minio://bucket/prefix` |
-| `--format` | `jsonl` | `jsonl`, `json`, `csv`, `tsv`, `parquet`, `parquet_partitioned`, `arrow`, `ipc`, `db` |
-| `--jsonl-compress` | `none` | `none`, `gzip`, `zstd`, `snappy` |
-| `--fraud-rate` | `0.008` | Fraction of fraud records (0.0–1.0) |
-| `--workers` | CPU count | Parallel worker processes |
-| `--seed` | none | Deterministic seed for reproducibility |
-| `--parallel-mode` | `auto` | `auto`, `thread`, `process` |
-| `--customers` | auto | Fixed customer pool size |
-| `--start-date` | 1 year ago | `YYYY-MM-DD` |
-| `--end-date` | today | `YYYY-MM-DD` |
-| `--no-profiles` | off | Disable behavioral profiles |
-| `--compression` | `zstd` | Parquet: `snappy`, `zstd`, `gzip`, `brotli`, `none` |
-| `--schema` | none | Declarative JSON schema file |
-| `--count` | `1000` | Record count (schema mode) |
-| `--schema-ai-provider` | `openai` | AI correction: `openai`, `anthropic`, `none` |
-| `--db-url` | none | SQLAlchemy URL for `db` format |
-| `--db-table` | `transactions` | Table name for `db` format |
-| `--redis-url` | none | Redis URL for index caching |
-| `--minio-endpoint` | env | MinIO/S3 endpoint |
-| `--minio-access-key` | env | MinIO access key |
-| `--minio-secret-key` | env | MinIO secret key |
-| `--no-date-partition` | off | Disable date partitioning in MinIO |
-
-</details>
-
-<details>
-<summary><strong>stream.py — all flags</strong></summary>
-
-| Flag | Default | Description |
-|---|---|---|
-| `--target` | required | `kafka`, `webhook`, `stdout`, or `redis-stream` |
-| `--type` | `transactions` | `transactions` or `rides` |
-| `--rate` | `10` | Events per second |
-| `--max-events` | infinite | Stop after N events |
-| `--kafka-server` | `localhost:9092` | Kafka bootstrap server |
-| `--kafka-topic` | `transactions` | Kafka topic |
-| `--webhook-url` | none | HTTP endpoint URL |
-| `--webhook-method` | `POST` | `POST`, `PUT`, `PATCH` |
-| `--fraud-rate` | `0.008` | Fraction of fraud events |
-| `--customers` | `1000` | Customer pool size |
-| `--seed` | none | Random seed |
-| `--workers` | `1` | Parallel generators |
-| `--queue-size` | `10000` | Event buffer size |
-| `--async` | off | Async send via thread pool |
-| `--async-concurrency` | `100` | Max concurrent sends |
-| `--pretty` | off | Pretty-print JSON |
-| `--quiet` | off | Suppress progress output |
-
-</details>
-
-<details>
-<summary><strong>tools/train_ml.py — ML quality model</strong></summary>
-
-| Flag | Default | Description |
-|---|---|---|
-| `--input` | required | Glob of JSONL files (e.g. `./data/*.jsonl`) |
-| `--model-dir` | `./models` | Directory to save trained models |
-| `--version` | `v1` | Model version tag (e.g. `v4`) |
-| `--skip-multilabel` | off | Skip per-type OvR classifiers |
-| `--max-records` | unlimited | Cap records loaded into memory |
-| `--min-examples-per-class` | `50` | Skip types with fewer examples |
-
-Output: `{model-dir}/fraud_detector_{version}.pkl` + `train_metrics_{version}.json`
-
-</details>
 
 ---
 
@@ -463,7 +398,74 @@ Peak throughput (18-core Linux, Python 3.12):
 | Rides | 4 | ~67,000 | 77 |
 | All types | 4 | ~55,000 | 119 |
 
-Detail: `benchmarks/comprehensive_results.json` · Regenerate: `python benchmarks/comprehensive_benchmark.py`
+---
+
+## CLI Reference
+
+<details>
+<summary><strong>generate.py — all flags</strong></summary>
+
+| Flag | Default | Description |
+|---|---|---|
+| `--type` | `transactions` | `transactions`, `rides`, or `all` |
+| `--size` | `1GB` | Target output size: `1GB`, `500MB`, `10GB` |
+| `--output` | `./output` | Output directory or `minio://bucket/prefix` |
+| `--format` | `jsonl` | `jsonl`, `json`, `csv`, `tsv`, `parquet`, `parquet_partitioned`, `arrow`, `ipc`, `db` |
+| `--fraud-rate` | `0.008` | Fraction of fraud records (0.0–1.0) |
+| `--workers` | CPU count | Parallel worker processes |
+| `--seed` | none | Deterministic seed for reproducibility |
+| `--customers` | auto | Fixed customer pool size |
+| `--start-date` | 1 year ago | `YYYY-MM-DD` |
+| `--end-date` | today | `YYYY-MM-DD` |
+| `--compression` | `zstd` | Parquet: `snappy`, `zstd`, `gzip`, `brotli`, `none` |
+| `--schema` | none | Declarative JSON schema file |
+| `--db-url` | none | SQLAlchemy URL for `db` format |
+| `--minio-endpoint` | env | MinIO/S3 endpoint |
+
+</details>
+
+<details>
+<summary><strong>stream.py — all flags</strong></summary>
+
+| Flag | Default | Description |
+|---|---|---|
+| `--target` | required | `kafka`, `webhook`, `stdout`, or `redis-stream` |
+| `--type` | `transactions` | `transactions` or `rides` |
+| `--rate` | `10` | Events per second |
+| `--max-events` | infinite | Stop after N events |
+| `--fraud-rate` | `0.008` | Fraction of fraud events |
+| `--seed` | none | Random seed |
+| `--workers` | `1` | Parallel generators |
+| `--pretty` | off | Pretty-print JSON (stdout only) |
+
+</details>
+
+---
+
+## Project Structure
+
+```
+generate.py                     # Batch entry point
+stream.py                       # Streaming entry point
+src/fraud_generator/
+├── generators/                 # Customer → Device → Transaction / Ride
+├── enrichers/                  # 8-stage pipeline (17 signals, 4 rules)
+├── ml/                         # LightGBM quality validation
+│   ├── features.py             # extract_features() — 31-feature DataFrame
+│   ├── trainer.py              # Binary + 25 OvR per-type classifiers
+│   └── evaluator.py            # evaluate_batch() — AUC, flags, importance
+├── exporters/                  # JSONL, CSV, Parquet, Arrow, DB, MinIO
+├── connections/                # Kafka, webhook, redis-stream, stdout
+├── config/                     # 14 config modules (*_LIST + *_WEIGHTS)
+├── profiles/                   # 7 TX + 7 ride behavioral profiles
+├── utils/                      # WeightCache, watermark, compression
+└── validators/                 # CPF validation
+tools/
+├── analyze_batch.py            # Cliff's delta, JSD, Cramér's V, KS-test
+├── train_ml.py                 # Offline LightGBM training CLI
+├── tstr_benchmark.py           # Train Synthetic Test Real benchmark
+└── privacy_metrics.py          # LGPD privacy metrics
+```
 
 ---
 
@@ -471,7 +473,7 @@ Detail: `benchmarks/comprehensive_results.json` · Regenerate: `python benchmark
 
 Custom non-commercial license. Free for **personal study, academic research, and educational purposes**. Commercial use requires a paid license — see [LICENSE](LICENSE).
 
-A hosted API is available at [synthfin.com.br](https://synthfin.com.br) for managed generation with BACEN/IBGE real reference data, streaming, webhooks, and ML Quality Lab.
+A hosted API is available at **[synthfin.com.br](https://synthfin.com.br)** (currently in beta — contact [devabnerfonseca@gmail.com](mailto:devabnerfonseca@gmail.com) to get access).
 
 ## Privacy & Telemetry
 
@@ -487,6 +489,5 @@ This open-source distribution does **not** send any telemetry, analytics, or dat
 | Portuguese docs | [docs/README.pt-BR.md](docs/README.pt-BR.md) |
 | Architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Changelog | [docs/CHANGELOG.md](docs/CHANGELOG.md) |
-| Fraud catalog (25 types) | [docs/07_CATALOGO_FRAUDES.md](docs/07_CATALOGO_FRAUDES.md) |
-| AI Agents (9 specialists) | [AGENTS.md](AGENTS.md) |
-| Docker publishing | [docs/DOCKER_HUB_PUBLISHING.md](docs/DOCKER_HUB_PUBLISHING.md) |
+| Fraud catalog (36 types) | [docs/07_CATALOGO_FRAUDES.md](docs/07_CATALOGO_FRAUDES.md) |
+| Docker Hub | [afborda/synthfin-data](https://hub.docker.com/r/afborda/synthfin-data) |
