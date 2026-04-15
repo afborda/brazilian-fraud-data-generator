@@ -12,7 +12,7 @@ Provides realistic temporal weights for:
 import random
 from datetime import date, timedelta
 from functools import lru_cache
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 # ─── Hourly weights — trimodal realista (Brasil 2024, fonte: BCB PIX) ─────────
@@ -228,7 +228,7 @@ def _nth_weekday_of_month(year: int, month: int, weekday: int, n: int) -> date:
             return date(year, month, 1)  # fallback
 
 
-def _carnaval_monday(year: int) -> date | None:
+def _carnaval_monday(year: int) -> Optional[date]:
     """Calcula a segunda de carnaval (48 dias antes da Páscoa)."""
     easter = _easter(year)
     if easter is None:
@@ -236,7 +236,7 @@ def _carnaval_monday(year: int) -> date | None:
     return easter - timedelta(days=48)
 
 
-def _easter(year: int) -> date | None:
+def _easter(year: int) -> Optional[date]:
     """Algoritmo de Butcher para Páscoa."""
     try:
         a = year % 19

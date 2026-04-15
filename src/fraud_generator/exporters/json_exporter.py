@@ -196,6 +196,14 @@ class JSONArrayExporter(ExporterProtocol):
         clean_data = [self._clean_record(record) for record in data]
         
         if append and os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            if file_size > 100 * 1024 * 1024:  # 100MB
+                import logging
+                logging.warning(
+                    f"[JSONArrayExporter] append mode on large file ({file_size // (1024 * 1024)}MB) "
+                    f"at {output_path} — loading entire file into memory. "
+                    "Consider using JSONL format for large datasets."
+                )
             # Load existing data and extend
             with open(output_path, 'r', encoding='utf-8') as f:
                 existing = json.load(f)
@@ -217,7 +225,19 @@ class JSONArrayExporter(ExporterProtocol):
         output_path: str,
         batch_size: int = 10000
     ) -> int:
-        """Export iterator data as JSON array."""
-        # Collect all data (not memory efficient for large datasets)
-        all_data = list(data_iterator)
-        return self.export_batch(all_data, output_path)
+        """Stream records to a JSON array file without loading all data into memory."""
+        from pathlib import Path
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        count = 0
+        first = True
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write('[\n')
+            for record in data_iterator:
+                clean = self._clean_record(record)
+                if not first:
+                    f.write(',\n')
+                f.write('  ' + json.dumps(clean, ensure_ascii=self.ensure_ascii, default=str))
+                first = False
+                count += 1
+            f.write('\n]')
+        return count

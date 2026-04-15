@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Iterator, Tuple
 
 from ..utils.watermark import make_transaction_id
+from ..enrichers.session import (  # canonical velocity baselines (BCB 2024 calibrated)
+    _PROFILE_VELOCITY_BASELINE,
+    _PROFILE_VELOCITY_DEFAULT,
+)
 from ..config.transactions import (
     TX_TYPES_LIST, TX_TYPES_WEIGHTS,
     CHANNELS_LIST, CHANNELS_WEIGHTS,
@@ -83,22 +87,6 @@ def _profile_to_classe_social(profile: Optional[str]) -> Optional[str]:
     return _PROFILE_CLASSE.get(profile) if profile else None
 
 
-# T4: velocity baseline (mean txns/24h, std) per behavioral profile
-# Used to compute customer_velocity_z_score; ATO fraud deviates 5-10× from baseline
-_PROFILE_VELOCITY_BASELINE: dict = {
-    'high_spender':         (15, 5.0),
-    'business_owner':       (20, 7.0),
-    'subscription_heavy':    (8, 3.0),
-    'young_digital':        (10, 4.0),
-    'traditional_senior':    (5, 2.0),
-    'family_provider':       (7, 2.5),
-    'ato_victim':            (8, 3.5),
-    'falsa_central_victim':  (6, 2.5),
-    'malware_ats_victim':    (9, 3.5),
-}
-_PROFILE_VELOCITY_DEFAULT = (8, 3.0)  # fallback when profile unknown
-
-
 # T6: Fraud ring registry — maps customer_id → (ring_id, ring_role)
 # Up to ~5% of fraud customers are assigned to rings at first encounter.
 # Rings have 3–15 members; roles: orchestrator (1), mule (2-6), recruiter (0-1),
@@ -150,6 +138,12 @@ class _RingRegistry:
         self._members[customer_id] = (ring_id, role)
         return (ring_id, role)
 
+    def clear(self) -> None:
+        """Reset registry state — call between independent generation runs."""
+        self._members.clear()
+        self._rings.clear()
+        self._ring_counter = 0
+
     @staticmethod
     def _pick_role(roles: list, rng: random.Random) -> str:
         if 'orchestrator' not in roles:
@@ -163,6 +157,11 @@ class _RingRegistry:
 
 
 _ring_registry = _RingRegistry()   # module-level singleton (one per process)
+
+
+def reset_ring_registry() -> None:
+    """Reset the module-level ring registry between independent generation runs."""
+    _ring_registry.clear()
 
 
 class TransactionGenerator:
@@ -195,10 +194,13 @@ class TransactionGenerator:
         self.fraud_rate = fraud_rate
         self.use_profiles = use_profiles
         self._license = license
-        
+
+        # Reset module-level ring registry so each new generator instance starts clean
+        reset_ring_registry()
+
         if seed is not None:
             random.seed(seed)
-        
+
         # OTIMIZAÇÃO 1.1: Pre-compute weight caches (created once, reused for all transactions)
         self._tx_type_cache = WeightCache(TX_TYPES_LIST, TX_TYPES_WEIGHTS)
         self._fraud_type_cache = WeightCache(FRAUD_TYPES_LIST, FRAUD_TYPES_WEIGHTS)
@@ -373,7 +375,7 @@ class TransactionGenerator:
 
         # ── Build base transaction dict ───────────────────────────────────
         tx: Dict[str, Any] = {
-            "transaction_id": f"TXN_{tx_id}",
+            "transaction_id": make_transaction_id(tx_id, customer_id, timestamp.isoformat()),
             "customer_id": customer_id,
             "session_id": f"SESS_{tx_id}",
             "device_id": device_id,
@@ -392,6 +394,7 @@ class TransactionGenerator:
             "mcc_risk_level": mcc_info["risk"],
             "cliente_perfil": customer_profile,
             "classe_social": _profile_to_classe_social(customer_profile),
+            "customer_state": customer_state,
             # T3 velocity fields (set by FraudEnricher)
             "card_test_phase": None,
             "velocity_burst_id": None,

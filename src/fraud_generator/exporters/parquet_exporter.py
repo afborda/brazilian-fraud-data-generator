@@ -146,6 +146,15 @@ class ParquetExporter(ExporterProtocol):
         if append:
             # For append, we need to read existing and concatenate
             try:
+                import os
+                import logging
+                file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+                if file_size > 100 * 1024 * 1024:  # 100MB
+                    logging.warning(
+                        f"[ParquetExporter] append mode on large file ({file_size // (1024 * 1024)}MB) "
+                        f"at {output_path} — loading entire file into memory. "
+                        "Consider using export_stream() or ParquetPartitionedExporter for large datasets."
+                    )
                 existing_table = pq.read_table(output_path)
                 table = pa.concat_tables([existing_table, table])
             except FileNotFoundError:

@@ -17,7 +17,7 @@ LABEL org.opencontainers.image.licenses="Custom-Non-Commercial"
 LABEL org.opencontainers.image.vendor="Abner Fonseca"
 
 # Dynamic labels (set during build via --build-arg)
-ARG VERSION=4.16
+ARG VERSION=4.18.0
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL org.opencontainers.image.version="${VERSION}"
