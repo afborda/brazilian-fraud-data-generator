@@ -64,8 +64,8 @@ docker-compose*.yml
 Dockerfile*
 .dockerignore
 
-# License (not strictly needed in image)
-LICENSE
+# License must remain in build context (required by license terms)
+# LICENSE
 
 # Examples (optional - uncomment to exclude)
 # examples/

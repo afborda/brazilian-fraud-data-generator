@@ -63,11 +63,13 @@ jobs:
           pip install -r requirements-streaming.txt
 
       - name: Run basic tests
+        env:
+          PYTHONPATH: ./src
         run: |
           # Test imports
-          python -c "from src.fraud_generator import TransactionGenerator, CustomerGenerator"
-          python -c "from src.fraud_generator.generators.ride import RideGenerator"
-          python -c "from src.fraud_generator.exporters import MinIOExporter"
+          python -c "from fraud_generator import TransactionGenerator, CustomerGenerator"
+          python -c "from fraud_generator.generators.ride import RideGenerator"
+          python -c "from fraud_generator.exporters import MinIOExporter"
           
           # Test basic generation (uses --size, not --num-transactions)
           python generate.py \
@@ -153,7 +155,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
+            VERSION=${{ steps.meta.outputs.version != '' && steps.meta.outputs.version || '4.18.0' }}
             BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
           cache-from: type=gha
@@ -181,9 +183,9 @@ jobs:
     if: github.event_name != 'pull_request'
     steps:
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: '${{ env.IMAGE_NAME }}:latest'
+          image-ref: '${{ env.IMAGE_NAME }}:${{ github.ref_type == ''tag'' && github.ref_name || ''latest'' }}'
           format: 'table'
           exit-code: '0'  # Don't fail on vulnerabilities (just report)
           ignore-unfixed: true

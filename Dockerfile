@@ -9,7 +9,7 @@ FROM python:3.11-slim AS base
 # OCI Image Labels (standardized)
 LABEL org.opencontainers.image.title="synthfin-data"
 LABEL org.opencontainers.image.description="Generate synthetic Brazilian financial transaction and rideshare data with configurable fraud patterns"
-LABEL org.opencontainers.image.authors="Abner Fonseca <afborda@gmail.com>"
+LABEL org.opencontainers.image.authors="Abner Fonseca <licensing@synthfin.com.br>"
 LABEL org.opencontainers.image.url="https://github.com/afborda/synthfin-data"
 LABEL org.opencontainers.image.source="https://github.com/afborda/synthfin-data"
 LABEL org.opencontainers.image.documentation="https://github.com/afborda/synthfin-data#readme"
@@ -66,7 +66,7 @@ ENV KAFKA_TOPIC=transactions
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import src.fraud_generator; print('OK')" || exit 1
+    CMD python -c "import fraud_generator; print('OK')" || exit 1
 
 # Expose for potential metrics endpoint (future)
 EXPOSE 9400
