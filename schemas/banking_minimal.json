@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "profile": "banking",
+  "fraud_rate": 0.05,
+  "seed": 42,
+  "description": "Schema mínimo: só campos essenciais de uma transação",
+
+  "output": {
+    "id":          "transaction.transaction_id",
+    "valor":       "transaction.amount",
+    "tipo":        "transaction.type",
+    "canal":       "transaction.channel",
+    "is_fraude":   "transaction.is_fraud",
+    "score_fraude": "transaction.fraud_score",
+    "data":        "transaction.timestamp",
+    "status":      "transaction.status"
+  }
+}

@@ -1,5 +1,5 @@
 """
-Behavioral profiles for Brazilian Fraud Data Generator.
+Behavioral profiles for synthfin-data.
 
 Profiles define realistic spending patterns for different customer archetypes.
 Each profile influences:
@@ -11,6 +11,7 @@ Each profile influences:
 - Channel preferences
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import random
@@ -74,221 +75,410 @@ class BehavioralProfile:
 PROFILES: Dict[str, BehavioralProfile] = {
     ProfileType.YOUNG_DIGITAL.value: BehavioralProfile(
         name="young_digital",
-        description="Jovem digital: 18-30 anos, muito ativo em apps, streaming, delivery",
+        description="Young digital native: 18-30 years, very active on apps, streaming, delivery",
         age_range=(18, 30),
         income_multiplier=(0.5, 1.5),
         transaction_types={
             'PIX': 60,
-            'CARTAO_CREDITO': 25,
-            'CARTAO_DEBITO': 10,
-            'DEBITO_AUTOMATICO': 5,
+            'CREDIT_CARD': 25,
+            'DEBIT_CARD': 10,
+            'AUTO_DEBIT': 5,
         },
         preferred_mccs={
-            '5812': 20,       # Restaurantes/Delivery
-            '5812_delivery': 25,  # Apps de delivery
+            '5812': 20,       # Restaurants/Delivery
+            '5812_delivery': 25,  # Delivery apps
             '5815': 20,       # Streaming/Digital
-            '7941': 10,       # Academias
+            '7941': 10,       # Gyms
             '4121': 15,       # Uber/99
             '5814': 10,       # Fast Food
         },
         channel_preferences={
-            'APP_MOBILE': 85,
+            'MOBILE_APP': 85,
             'WEB_BANKING': 10,
             'WHATSAPP_PAY': 5,
         },
         monthly_tx_frequency=(40, 100),
         typical_value_range=(15, 300),
-        preferred_hours=[10, 11, 12, 13, 14, 18, 19, 20, 21, 22, 23],
+        # T1: janela estreita (3-5h) → picos mais nítidos + menor entropia
+        preferred_hours=[12, 13, 19, 21, 22],
         weekend_multiplier=1.3,
         fraud_susceptibility=1.2,  # More susceptible to phishing/social engineering
     ),
     
     ProfileType.TRADITIONAL_SENIOR.value: BehavioralProfile(
         name="traditional_senior",
-        description="Sênior tradicional: 55+ anos, prefere agência/ATM, cauteloso",
+        description="Traditional senior: 55+ years, prefers branch/ATM, cautious",
         age_range=(55, 80),
         income_multiplier=(1.0, 3.0),  # Often retired with savings
         transaction_types={
             'PIX': 25,
-            'CARTAO_CREDITO': 15,
-            'CARTAO_DEBITO': 25,
+            'CREDIT_CARD': 15,
+            'DEBIT_CARD': 25,
             'BOLETO': 15,
-            'SAQUE': 10,
+            'WITHDRAWAL': 10,
             'TED': 10,
         },
         preferred_mccs={
-            '5411': 25,       # Supermercados
-            '5912': 15,       # Farmácias
-            '8011': 10,       # Médicos
-            '4900': 15,       # Utilidades
+            '5411': 25,       # Supermarkets
+            '5912': 15,       # Pharmacies
+            '8011': 10,       # Doctors
+            '4900': 15,       # Utilities
             '4814': 10,       # Telecom
-            '5499': 10,       # Conveniência
-            '6011': 15,       # Saque/ATM
+            '5499': 10,       # Convenience
+            '6011': 15,       # Cash/ATM
         },
         channel_preferences={
-            'APP_MOBILE': 30,
+            'MOBILE_APP': 30,
             'WEB_BANKING': 20,
             'ATM': 30,
-            'AGENCIA': 20,
+            'BRANCH': 20,
         },
         monthly_tx_frequency=(15, 40),
         typical_value_range=(50, 800),
-        preferred_hours=[8, 9, 10, 11, 14, 15, 16, 17],
+        # T1: matinal e pós-almoço (sênior não usa noite)
+        preferred_hours=[9, 10, 15, 16],
         weekend_multiplier=0.6,  # Less active on weekends
         fraud_susceptibility=1.5,  # More susceptible to phone scams
     ),
     
     ProfileType.BUSINESS_OWNER.value: BehavioralProfile(
         name="business_owner",
-        description="Empreendedor: 30-55 anos, alto volume, fornecedores e serviços",
+        description="Business owner: 30-55 years, high volume, suppliers and services",
         age_range=(30, 55),
         income_multiplier=(2.0, 8.0),
         transaction_types={
             'PIX': 45,
             'TED': 20,
             'BOLETO': 15,
-            'CARTAO_CREDITO': 15,
-            'CARTAO_DEBITO': 5,
+            'CREDIT_CARD': 15,
+            'DEBIT_CARD': 5,
         },
         preferred_mccs={
-            '5411': 10,       # Supermercados
-            '5541': 15,       # Combustível
-            '7011': 8,        # Hotéis
-            '4511': 8,        # Aéreo
-            '5732': 10,       # Eletrônicos
+            '5411': 10,       # Supermarkets
+            '5541': 15,       # Gas
+            '7011': 8,        # Hotels
+            '4511': 8,        # Airlines
+            '5732': 10,       # Electronics
             '4814': 10,       # Telecom
-            '8299': 10,       # Educação/Cursos
-            '5812': 15,       # Restaurantes
-            '4121': 14,       # Transporte
+            '8299': 10,       # Education/Courses
+            '5812': 15,       # Restaurants
+            '4121': 14,       # Transport
         },
         channel_preferences={
-            'APP_MOBILE': 60,
+            'MOBILE_APP': 60,
             'WEB_BANKING': 35,
             'ATM': 3,
-            'AGENCIA': 2,
+            'BRANCH': 2,
         },
         monthly_tx_frequency=(50, 150),
         typical_value_range=(100, 5000),
-        preferred_hours=[8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20],
+        # T1: almoço comercial + fim do expediente
+        preferred_hours=[12, 13, 18, 19],
         weekend_multiplier=0.4,  # Less business activity on weekends
         fraud_susceptibility=1.3,  # Targeted by business fraud
     ),
     
     ProfileType.HIGH_SPENDER.value: BehavioralProfile(
         name="high_spender",
-        description="Alto poder aquisitivo: 30-60 anos, luxo, viagens, alto ticket médio",
+        description="High net worth: 30-60 years, luxury, travel, high average ticket",
         age_range=(30, 60),
         income_multiplier=(5.0, 15.0),
         transaction_types={
-            'CARTAO_CREDITO': 50,
+            'CREDIT_CARD': 50,
             'PIX': 30,
-            'CARTAO_DEBITO': 10,
+            'DEBIT_CARD': 10,
             'TED': 10,
         },
         preferred_mccs={
-            '5944': 10,       # Joalherias
-            '5651': 15,       # Vestuário luxo
-            '7011': 15,       # Hotéis
-            '4511': 15,       # Aéreo
-            '5812': 15,       # Restaurantes
-            '5977': 10,       # Cosméticos
-            '5732': 10,       # Eletrônicos
-            '5311': 10,       # Lojas
+            '5944': 10,       # Jewelry
+            '5651': 15,       # Luxury clothing
+            '7011': 15,       # Hotels
+            '4511': 15,       # Airlines
+            '5812': 15,       # Restaurants
+            '5977': 10,       # Cosmetics
+            '5732': 10,       # Electronics
+            '5311': 10,       # Stores
         },
         channel_preferences={
-            'APP_MOBILE': 70,
+            'MOBILE_APP': 70,
             'WEB_BANKING': 25,
             'ATM': 3,
-            'AGENCIA': 2,
+            'BRANCH': 2,
         },
         monthly_tx_frequency=(30, 80),
         typical_value_range=(200, 10000),
-        preferred_hours=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        # T1: tarde/noite — compras de luxo e lazer
+        preferred_hours=[15, 19, 20, 21],
         weekend_multiplier=1.5,  # More leisure spending on weekends
         fraud_susceptibility=1.4,  # High value target
     ),
     
     ProfileType.SUBSCRIPTION_HEAVY.value: BehavioralProfile(
         name="subscription_heavy",
-        description="Assinante digital: 22-45 anos, muitas assinaturas recorrentes",
+        description="Digital subscriber: 22-45 years, many recurring subscriptions",
         age_range=(22, 45),
         income_multiplier=(1.0, 3.0),
         transaction_types={
-            'DEBITO_AUTOMATICO': 35,
+            'AUTO_DEBIT': 35,
             'PIX': 35,
-            'CARTAO_CREDITO': 25,
-            'CARTAO_DEBITO': 5,
+            'CREDIT_CARD': 25,
+            'DEBIT_CARD': 5,
         },
         preferred_mccs={
             '5815': 35,       # Streaming/Digital
-            '7941': 15,       # Academia
+            '7941': 15,       # Gym
             '4814': 15,       # Telecom
             '5812': 15,       # Delivery
-            '8299': 10,       # Cursos online
-            '5411': 10,       # Supermercados
+            '8299': 10,       # Online courses
+            '5411': 10,       # Supermarkets
         },
         channel_preferences={
-            'APP_MOBILE': 75,
+            'MOBILE_APP': 75,
             'WEB_BANKING': 20,
             'WHATSAPP_PAY': 5,
         },
         monthly_tx_frequency=(35, 70),
         typical_value_range=(10, 500),
-        preferred_hours=[6, 7, 8, 18, 19, 20, 21, 22, 23],
+        # T1: noite — streaming e assinaturas digitais
+        preferred_hours=[20, 21, 22],
         weekend_multiplier=1.2,
         fraud_susceptibility=1.1,
     ),
     
     ProfileType.FAMILY_PROVIDER.value: BehavioralProfile(
         name="family_provider",
-        description="Provedor familiar: 30-55 anos, supermercado, farmácia, educação",
+        description="Family provider: 30-55 years, supermarket, pharmacy, education",
         age_range=(30, 55),
         income_multiplier=(1.5, 4.0),
         transaction_types={
             'PIX': 40,
-            'CARTAO_CREDITO': 30,
-            'CARTAO_DEBITO': 15,
+            'CREDIT_CARD': 30,
+            'DEBIT_CARD': 15,
             'BOLETO': 10,
-            'DEBITO_AUTOMATICO': 5,
+            'AUTO_DEBIT': 5,
         },
         preferred_mccs={
-            '5411': 25,       # Supermercados
-            '5912': 10,       # Farmácias
+            '5411': 25,       # Supermarkets
+            '5912': 10,       # Pharmacies
             '5995': 5,        # Pet Shop
-            '8299': 10,       # Educação
-            '4900': 10,       # Utilidades
-            '5541': 10,       # Combustível
-            '5651': 10,       # Vestuário
+            '8299': 10,       # Education
+            '4900': 10,       # Utilities
+            '5541': 10,       # Gas
+            '5651': 10,       # Clothing
             '5814': 10,       # Fast Food
-            '5499': 10,       # Conveniência
+            '5499': 10,       # Convenience
         },
         channel_preferences={
-            'APP_MOBILE': 65,
+            'MOBILE_APP': 65,
             'WEB_BANKING': 25,
             'ATM': 7,
-            'AGENCIA': 3,
+            'BRANCH': 3,
         },
         monthly_tx_frequency=(60, 120),
         typical_value_range=(30, 1500),
-        preferred_hours=[7, 8, 9, 12, 13, 17, 18, 19, 20, 21],
+        # T1: almoço em família + jantar/noite
+        preferred_hours=[12, 18, 19, 20],
         weekend_multiplier=1.4,  # More family activity on weekends
         fraud_susceptibility=1.0,
+    ),
+
+    # ── Fraud victim archetypes (used by correlations/score pipeline) ──────
+
+    "ato_victim": BehavioralProfile(
+        name="ato_victim",
+        description=(
+            "Account Takeover victim: 35-65 years, light mobile users with dormant "
+            "periods, passwords reused across services, account inactive for 1+ weeks"
+        ),
+        age_range=(35, 65),
+        income_multiplier=(1.0, 3.0),
+        transaction_types={
+            'PIX': 35,
+            'DEBIT_CARD': 30,
+            'CREDIT_CARD': 20,
+            'BOLETO': 10,
+            'WITHDRAWAL': 5,
+        },
+        preferred_mccs={
+            '5411': 30,   # Supermarkets
+            '5912': 15,   # Pharmacies
+            '4900': 15,   # Utilities
+            '5814': 10,   # Fast Food
+            '5541': 10,   # Gas
+            '8011': 10,   # Health/doctors
+            '6011': 10,   # ATM/withdrawals
+        },
+        channel_preferences={
+            'MOBILE_APP': 40,
+            'WEB_BANKING': 25,
+            'ATM': 20,
+            'BRANCH': 15,
+        },
+        monthly_tx_frequency=(10, 30),   # low frequency → dormant account pattern
+        typical_value_range=(30, 600),
+        preferred_hours=[9, 10, 15, 16, 18],
+        weekend_multiplier=0.7,
+        fraud_susceptibility=2.0,        # prime ATO target
+    ),
+
+    "falsa_central_victim": BehavioralProfile(
+        name="falsa_central_victim",
+        description=(
+            "Golpe da falsa central victim: 55+ years, low digital literacy, "
+            "trusts phone calls from 'bank employees', high susceptibility to social engineering"
+        ),
+        age_range=(55, 85),
+        income_multiplier=(1.0, 4.0),   # often retirees with savings
+        transaction_types={
+            'PIX': 20,
+            'TED': 15,
+            'DEBIT_CARD': 30,
+            'BOLETO': 15,
+            'WITHDRAWAL': 15,
+            'CREDIT_CARD': 5,
+        },
+        preferred_mccs={
+            '5411': 30,   # Supermarkets
+            '5912': 20,   # Pharmacies
+            '8011': 15,   # Doctors
+            '4900': 15,   # Utilities
+            '6011': 15,   # ATM
+            '5499': 5,    # Convenience
+        },
+        channel_preferences={
+            'MOBILE_APP': 20,
+            'WEB_BANKING': 15,
+            'ATM': 35,
+            'BRANCH': 30,
+        },
+        monthly_tx_frequency=(8, 25),
+        typical_value_range=(50, 1000),
+        preferred_hours=[9, 10, 11, 14, 15, 16],
+        weekend_multiplier=0.5,
+        fraud_susceptibility=2.5,        # highest susceptibility — prime falsa central target
+    ),
+
+    "malware_ats_victim": BehavioralProfile(
+        name="malware_ats_victim",
+        description=(
+            "Malware/ATS victim: 18-45 years, high-risk app installer, "
+            "rooted Android device, APK from untrusted sources, high digital activity"
+        ),
+        age_range=(18, 45),
+        income_multiplier=(0.5, 2.5),
+        transaction_types={
+            'PIX': 65,
+            'CREDIT_CARD': 20,
+            'DEBIT_CARD': 10,
+            'AUTO_DEBIT': 5,
+        },
+        preferred_mccs={
+            '5812': 15,       # Delivery
+            '5815': 20,       # Streaming
+            '4121': 15,       # Rideshare
+            '5814': 10,       # Fast food
+            '7941': 10,       # Gyms
+            '5732': 15,       # Electronics/apps
+            '8299': 15,       # Online courses
+        },
+        channel_preferences={
+            'MOBILE_APP': 95,   # exclusively mobile — device compromise is effective
+            'WEB_BANKING': 4,
+            'WHATSAPP_PAY': 1,
+        },
+        monthly_tx_frequency=(50, 120),  # high digital activity = more exposure
+        typical_value_range=(10, 500),
+        preferred_hours=[19, 20, 21, 22, 23],  # evening sideload sessions
+        weekend_multiplier=1.4,
+        fraud_susceptibility=1.8,
+    ),
+
+    "micro_empreendedor": BehavioralProfile(
+        name="micro_empreendedor",
+        description=(
+            "Microempreendedor Individual (MEI): 25-55 years, high PIX volume, "
+            "mixes personal and business accounts, delivery/food/services, "
+            "vulnerable to boleto and PIX fraud"
+        ),
+        age_range=(25, 55),
+        income_multiplier=(0.8, 3.0),
+        transaction_types={
+            'PIX': 65,
+            'BOLETO': 15,
+            'CREDIT_CARD': 10,
+            'DEBIT_CARD': 5,
+            'TED': 5,
+        },
+        preferred_mccs={
+            '5812': 20,       # Restaurants/Food
+            '5411': 15,       # Supermarkets (supplies)
+            '5541': 10,       # Gas
+            '4121': 10,       # Transport/delivery
+            '4814': 10,       # Telecom
+            '5131': 10,       # Wholesale
+            '5999': 15,       # Misc retail
+            '8299': 10,       # Services
+        },
+        channel_preferences={
+            'MOBILE_APP': 80,
+            'WEB_BANKING': 15,
+            'ATM': 3,
+            'BRANCH': 2,
+        },
+        monthly_tx_frequency=(60, 200),  # high volume, many small PIX
+        typical_value_range=(10, 2000),
+        preferred_hours=[8, 9, 10, 11, 12, 14, 15, 16, 17, 18],  # commercial hours
+        weekend_multiplier=0.8,
+        fraud_susceptibility=1.6,  # mixes accounts, high PIX volume, boleto target
     ),
 }
 
 
 # Profile distribution weights for automatic assignment
+# Fraud victim archetypes receive low weights — they exist for targeted fraud injection,
+# not for the general population baseline.
 PROFILE_DISTRIBUTION = {
-    ProfileType.YOUNG_DIGITAL.value: 25,
-    ProfileType.TRADITIONAL_SENIOR.value: 15,
-    ProfileType.BUSINESS_OWNER.value: 10,
-    ProfileType.HIGH_SPENDER.value: 8,
-    ProfileType.SUBSCRIPTION_HEAVY.value: 20,
-    ProfileType.FAMILY_PROVIDER.value: 22,
+    ProfileType.YOUNG_DIGITAL.value: 22,
+    ProfileType.TRADITIONAL_SENIOR.value: 13,
+    ProfileType.BUSINESS_OWNER.value: 8,
+    ProfileType.HIGH_SPENDER.value: 6,
+    ProfileType.SUBSCRIPTION_HEAVY.value: 18,
+    ProfileType.FAMILY_PROVIDER.value: 20,
+    # Fraud victim archetypes (low base weight; boosted by fraud injection logic)
+    "ato_victim": 0,
+    "falsa_central_victim": 0,
+    "malware_ats_victim": 0,
+    # MEI — 15 milhões de CNPJs ativos (SEBRAE 2024)
+    "micro_empreendedor": 13,
 }
 
 PROFILE_LIST = list(PROFILE_DISTRIBUTION.keys())
 PROFILE_WEIGHTS = list(PROFILE_DISTRIBUTION.values())
+
+
+# ── Pre-built WeightCaches for profile distributions ────────────
+# Eliminates repeated list() + random.choices() overhead per call.
+from ..utils.weight_cache import WeightCache
+
+_profile_tx_type_caches: Dict[str, WeightCache] = {}
+_profile_mcc_caches: Dict[str, WeightCache] = {}
+_profile_channel_caches: Dict[str, WeightCache] = {}
+
+for _pname, _prof in PROFILES.items():
+    _profile_tx_type_caches[_pname] = WeightCache(
+        list(_prof.transaction_types.keys()),
+        list(_prof.transaction_types.values()),
+    )
+    _profile_mcc_caches[_pname] = WeightCache(
+        list(_prof.preferred_mccs.keys()),
+        list(_prof.preferred_mccs.values()),
+    )
+    _profile_channel_caches[_pname] = WeightCache(
+        list(_prof.channel_preferences.keys()),
+        list(_prof.channel_preferences.values()),
+    )
+
+_profile_assign_cache = WeightCache(PROFILE_LIST, PROFILE_WEIGHTS)
 
 
 def get_profile(profile_name: str) -> Optional[BehavioralProfile]:
@@ -298,73 +488,63 @@ def get_profile(profile_name: str) -> Optional[BehavioralProfile]:
 
 def assign_random_profile() -> str:
     """Assign a random profile based on distribution weights."""
-    return random.choices(PROFILE_LIST, weights=PROFILE_WEIGHTS)[0]
+    return _profile_assign_cache.sample()
 
 
 def get_transaction_type_for_profile(profile_name: str) -> str:
     """Get a weighted random transaction type for a profile."""
-    profile = PROFILES.get(profile_name)
-    if not profile:
-        # Fallback to default distribution
-        from ..config.transactions import TX_TYPES_LIST, TX_TYPES_WEIGHTS
-        return random.choices(TX_TYPES_LIST, weights=TX_TYPES_WEIGHTS)[0]
-    
-    types = list(profile.transaction_types.keys())
-    weights = list(profile.transaction_types.values())
-    return random.choices(types, weights=weights)[0]
+    cache = _profile_tx_type_caches.get(profile_name)
+    if cache:
+        return cache.sample()
+    # Fallback to default distribution
+    from ..config.transactions import TX_TYPES_LIST, TX_TYPES_WEIGHTS
+    return random.choices(TX_TYPES_LIST, weights=TX_TYPES_WEIGHTS)[0]
 
 
 def get_mcc_for_profile(profile_name: str) -> str:
     """Get a weighted random MCC for a profile."""
-    profile = PROFILES.get(profile_name)
-    if not profile:
-        # Fallback to default distribution
-        from ..config.merchants import MCC_LIST, MCC_WEIGHTS
-        return random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
-    
-    mccs = list(profile.preferred_mccs.keys())
-    weights = list(profile.preferred_mccs.values())
-    return random.choices(mccs, weights=weights)[0]
+    cache = _profile_mcc_caches.get(profile_name)
+    if cache:
+        return cache.sample()
+    # Fallback to default distribution
+    from ..config.merchants import MCC_LIST, MCC_WEIGHTS
+    return random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
 
 
 def get_channel_for_profile(profile_name: str) -> str:
     """Get a weighted random channel for a profile."""
-    profile = PROFILES.get(profile_name)
-    if not profile:
-        from ..config.transactions import CHANNELS_LIST, CHANNELS_WEIGHTS
-        return random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
-    
-    channels = list(profile.channel_preferences.keys())
-    weights = list(profile.channel_preferences.values())
-    return random.choices(channels, weights=weights)[0]
+    cache = _profile_channel_caches.get(profile_name)
+    if cache:
+        return cache.sample()
+    from ..config.transactions import CHANNELS_LIST, CHANNELS_WEIGHTS
+    return random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
 
 
 def get_transaction_hour_for_profile(profile_name: str, is_weekend: bool = False) -> int:
-    """Get a realistic transaction hour for a profile."""
+    """Get a realistic transaction hour for a profile.
+
+    T1: fallback usa distribui\u00e7\u00e3o trimodal (picos 12h, 18h, 21h) em vez de uniforme.
+    """
+    from ..config.seasonality import pick_hour, HORA_WEIGHTS_PADRAO
+
     profile = PROFILES.get(profile_name)
-    
+
     if not profile:
-        # Default hour distribution
-        hour_weights = {
-            0: 2, 1: 1, 2: 1, 3: 1, 4: 1, 5: 2,
-            6: 4, 7: 6, 8: 10, 9: 12, 10: 14, 11: 14,
-            12: 15, 13: 14, 14: 13, 15: 12, 16: 12, 17: 13,
-            18: 14, 19: 15, 20: 14, 21: 12, 22: 8, 23: 4
-        }
-        hours = list(hour_weights.keys())
-        weights = list(hour_weights.values())
-        return random.choices(hours, weights=weights)[0]
-    
-    # Prefer profile's preferred hours
+        # T1: distribui\u00e7\u00e3o trimodal realista (Br 2024)
+        return pick_hour(HORA_WEIGHTS_PADRAO)
+
+    # T1: usa HORA_WEIGHTS_PADRAO para ponderar mesmo dentro das horas preferenciais
+    # (antes: random.choice(preferred) distribuía uniformemente → alta entropia)
     preferred = profile.preferred_hours
-    other_hours = [h for h in range(24) if h not in preferred]
-    
-    # 70% chance of preferred hour, 30% other
+    w_preferred = [HORA_WEIGHTS_PADRAO[h] for h in preferred]
+
+    # 70% dentro das horas preferenciais (ponderadas por trimodal), 30% trimodal livre
     if random.random() < 0.7 and preferred:
-        hour = random.choice(preferred)
+        hour = random.choices(preferred, weights=w_preferred, k=1)[0]
     else:
-        hour = random.choice(other_hours) if other_hours else random.choice(preferred)
-    
+        # T1: sempre usa distribuição trimodal mesmo fora do horário preferido
+        hour = pick_hour(HORA_WEIGHTS_PADRAO)
+
     return hour
 
 
@@ -380,26 +560,28 @@ def get_transaction_value_for_profile(
     profile = PROFILES.get(profile_name)
     
     if not profile:
-        # Use MCC range directly
+        # Log-normal calibrado pelo range MCC (sem pile-up nos limites)
         valor_min, valor_max = mcc_value_range
-        mean = (valor_min + valor_max) / 3
-        return round(min(max(random.gauss(mean, mean/2), valor_min), valor_max), 2)
-    
+        mu = (math.log(max(valor_min, 0.01)) + math.log(valor_max)) / 2
+        sigma = max((math.log(valor_max) - math.log(max(valor_min, 0.01))) / 4, 0.30)
+        value = math.exp(random.gauss(mu, sigma))
+        return round(max(valor_min, min(value, valor_max * 2.0)), 2)
+
     # Blend profile and MCC ranges
     profile_min, profile_max = profile.typical_value_range
     mcc_min, mcc_max = mcc_value_range
-    
-    # Use overlapping range or profile range
+
     final_min = max(profile_min, mcc_min * 0.5)
     final_max = min(profile_max, mcc_max * 1.5)
-    
+
     if final_min >= final_max:
         final_min, final_max = mcc_value_range
-    
-    # Log-normal distribution for more realistic values
-    mean = (final_min + final_max) / 3
-    value = random.gauss(mean, mean / 2)
-    return round(min(max(value, final_min), final_max), 2)
+
+    # Log-normal calibrado pelo range combinado perfil × MCC
+    mu = (math.log(max(final_min, 0.01)) + math.log(final_max)) / 2
+    sigma = max((math.log(final_max) - math.log(max(final_min, 0.01))) / 4, 0.30)
+    value = math.exp(random.gauss(mu, sigma))
+    return round(max(final_min, min(value, final_max * 2.0)), 2)
 
 
 def get_monthly_transactions_for_profile(profile_name: str) -> int:

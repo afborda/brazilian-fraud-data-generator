@@ -1,10 +1,10 @@
 """
-CSV exporter for Brazilian Fraud Data Generator.
+CSV exporter for synthfin-data.
 """
 
 import csv
 import os
-from typing import List, Dict, Any, Iterator, Optional, Set
+from typing import List, Dict, Any, Iterator, Optional, Set, Tuple
 from .base import ExporterProtocol
 
 
@@ -34,6 +34,9 @@ class CSVExporter(ExporterProtocol):
         self.quoting = quoting
         self.flatten_nested = flatten_nested
         self._fieldnames: Optional[List[str]] = None
+        # OTIMIZAÇÃO 2.5: Larger write buffer for fewer syscalls
+        self._buffer_size = 262144  # 256KB
+        self._chunk_size = 5000
     
     @property
     def extension(self) -> str:
@@ -75,13 +78,53 @@ class CSVExporter(ExporterProtocol):
         # Sort for consistent column order
         return sorted(all_keys)
     
+    def _get_fieldnames_from_iterator(
+        self,
+        data_iterator: Iterator[Dict[str, Any]],
+        sample_size: int = 100
+    ) -> Tuple[List[str], List[Dict[str, Any]]]:
+        """
+        OTIMIZAÇÃO 1.6: Extract fieldnames from iterator without loading all data.
+        
+        Samples first N records to determine schema, which is much more
+        memory-efficient than scanning the entire dataset.
+        
+        Args:
+            data_iterator: Iterator of records
+            sample_size: Number of records to sample for schema detection
+        
+        Returns:
+            Sorted list of field names
+        """
+        all_keys: Set[str] = set()
+        sample = []
+        
+        # Sample first records to determine schema
+        for i, record in enumerate(data_iterator):
+            sample.append(record)
+            
+            if self.flatten_nested:
+                flat = self._flatten_dict(record)
+            else:
+                flat = record
+            all_keys.update(flat.keys())
+            
+            if i >= sample_size - 1:
+                break
+        
+        return sorted(all_keys), sample
+    
     def export_batch(
         self,
         data: List[Dict[str, Any]],
         output_path: str,
         append: bool = False
     ) -> int:
-        """Export records to CSV file."""
+        """
+        Export records to CSV file.
+        
+        OTIMIZAÇÃO 1.6: Writes directly to disk without accumulating in memory.
+        """
         self.ensure_directory(output_path)
         
         if not data:
@@ -97,7 +140,8 @@ class CSVExporter(ExporterProtocol):
         mode = 'a' if append else 'w'
         newline = '' if os.name == 'nt' else None
         
-        with open(output_path, mode, newline='', encoding='utf-8') as f:
+        # OTIMIZAÇÃO 1.6: Use buffering for better I/O performance
+        with open(output_path, mode, newline='', encoding='utf-8', buffering=self._buffer_size) as f:
             writer = csv.DictWriter(
                 f,
                 fieldnames=self._fieldnames,
@@ -110,14 +154,21 @@ class CSVExporter(ExporterProtocol):
             if not (append and file_exists):
                 writer.writeheader()
             
+            # OTIMIZAÇÃO 1.6: Write in chunks to reduce memory pressure
             count = 0
-            for record in data:
-                if self.flatten_nested:
-                    flat_record = self._flatten_dict(record)
-                else:
-                    flat_record = record
-                writer.writerow(flat_record)
-                count += 1
+            for i in range(0, len(data), self._chunk_size):
+                chunk = data[i:i + self._chunk_size]
+                for record in chunk:
+                    if self.flatten_nested:
+                        flat_record = self._flatten_dict(record)
+                    else:
+                        flat_record = record
+                    writer.writerow(flat_record)
+                    count += 1
+                
+                # Flush periodically to reduce memory buffer
+                if count % 20000 == 0:
+                    f.flush()
         
         return count
     
@@ -125,34 +176,64 @@ class CSVExporter(ExporterProtocol):
         self,
         data_iterator: Iterator[Dict[str, Any]],
         output_path: str,
-        batch_size: int = 10000
+        batch_size: int = 5000
     ) -> int:
-        """Export iterator data to CSV file."""
+        """
+        Export iterator data to CSV file.
+        
+        OTIMIZAÇÃO 1.6: True streaming implementation - processes data in
+        small chunks without loading entire dataset into memory.
+        
+        Reduced default batch_size from 10000 to 5000 for better memory efficiency.
+        """
         self.ensure_directory(output_path)
         
         total_count = 0
-        first_batch = True
-        batch = []
+        newline = '' if os.name == 'nt' else None
         
-        for record in data_iterator:
-            batch.append(record)
+        # OTIMIZAÇÃO 1.6: Sample first records to infer schema without full buffering
+        if self._fieldnames is None:
+            self._fieldnames, sample = self._get_fieldnames_from_iterator(
+                data_iterator,
+                sample_size=100
+            )
+        else:
+            sample = []
+        
+        if not self._fieldnames and not sample:
+            return 0
+        
+        with open(output_path, 'w', newline='', encoding='utf-8', buffering=self._buffer_size) as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=self._fieldnames,
+                delimiter=self.delimiter,
+                quoting=self.quoting,
+                extrasaction='ignore'
+            )
+            writer.writeheader()
             
-            if len(batch) >= batch_size:
-                # On first batch, determine fieldnames
-                if first_batch:
-                    self._fieldnames = self._get_fieldnames(batch)
+            # Write sampled records first
+            for record in sample:
+                if self.flatten_nested:
+                    flat_record = self._flatten_dict(record)
+                else:
+                    flat_record = record
+                writer.writerow(flat_record)
+                total_count += 1
+            
+            # Continue streaming remaining records
+            for record in data_iterator:
+                if self.flatten_nested:
+                    flat_record = self._flatten_dict(record)
+                else:
+                    flat_record = record
+                writer.writerow(flat_record)
+                total_count += 1
                 
-                self.export_batch(batch, output_path, append=not first_batch)
-                total_count += len(batch)
-                batch = []
-                first_batch = False
-        
-        # Write remaining records
-        if batch:
-            if first_batch:
-                self._fieldnames = self._get_fieldnames(batch)
-            self.export_batch(batch, output_path, append=not first_batch)
-            total_count += len(batch)
+                # Flush periodically to reduce memory buffer
+                if total_count % batch_size == 0:
+                    f.flush()
         
         return total_count
 

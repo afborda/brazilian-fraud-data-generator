@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "profile": "banking",
+  "fraud_rate": 0.05,
+  "description": "Schema personalizado: estrutura completamente diferente do padrão interno. Usa campos renomeados, campos Faker adicionais e campos estáticos de contexto de empresa.",
+
+  "output": {
+    "record_uuid":        "faker:uuid4",
+    "transaction_ref":    "transaction.transaction_id",
+    "payment_value":      "transaction.amount",
+    "payment_method":     "transaction.type",
+    "payment_channel":    "transaction.channel",
+    "transaction_at":     "transaction.timestamp",
+    "is_suspicious":      "transaction.is_fraud",
+    "risk_level_score":   "transaction.fraud_score",
+    "fraud_pattern":      "transaction.fraud_type",
+
+    "payer": {
+      "full_name":         "customer.name",
+      "tax_id":            "customer.cpf",
+      "contact_email":     "customer.email",
+      "mobile":            "customer.phone",
+      "monthly_income_brl": "customer.monthly_income",
+      "credit_profile":    "customer.credit_score",
+      "home_city":         "customer.address.city",
+      "home_state":        "customer.address.state"
+    },
+
+    "merchant": {
+      "store_id":          "transaction.merchant_id",
+      "store_name":        "transaction.merchant_name",
+      "industry":          "transaction.merchant_category",
+      "mcc":               "transaction.mcc_code"
+    },
+
+    "device_info": {
+      "device_id":         "device.device_id",
+      "platform":          "device.operating_system",
+      "is_mobile":         "device.is_mobile",
+      "remote_ip":         "transaction.ip_address"
+    },
+
+    "velocity": {
+      "txns_24h":          "transaction.transactions_last_24h",
+      "amount_24h_brl":    "transaction.accumulated_amount_24h",
+      "km_from_last":      "transaction.distance_from_last_txn_km",
+      "min_since_last":    "transaction.time_since_last_txn_min",
+      "off_hours":         "transaction.unusual_time",
+      "new_recipient":     "transaction.new_beneficiary"
+    },
+
+    "internal": {
+      "generated_by":      "static:synthfin-data",
+      "schema_name":       "static:custom_empresa_xpto",
+      "environment":       "static:test",
+      "batch_id":          "faker:uuid4",
+      "analyst_email":     "faker:email"
+    }
+  }
+}

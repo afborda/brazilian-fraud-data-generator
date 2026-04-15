@@ -1,5 +1,5 @@
 """
-Utility functions for Brazilian Fraud Data Generator.
+Utility functions for synthfin-data.
 """
 
 import random

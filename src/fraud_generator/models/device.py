@@ -18,39 +18,47 @@ class Device:
     Attributes:
         device_id: Unique identifier for the device
         customer_id: Associated customer ID
-        tipo: Device type (SMARTPHONE, DESKTOP, TABLET)
-        fabricante: Device manufacturer
-        modelo: Device model
-        sistema_operacional: Operating system
+        type: Device type (SMARTPHONE, DESKTOP, TABLET)
+        manufacturer: Device manufacturer
+        model: Device model
+        operating_system: Operating system
         fingerprint: Device fingerprint hash
-        primeiro_uso: First use date
+        first_use: First use date
         is_trusted: Whether device is trusted
-        is_rooted_jailbroken: Whether device is rooted/jailbroken
+        rooted_or_jailbreak: Whether device is rooted/jailbroken
     """
     device_id: str
     customer_id: str
-    tipo: str
-    fabricante: str
-    modelo: str
-    sistema_operacional: str
+    type: str  # tipo
+    manufacturer: str  # fabricante
+    model: str  # modelo
+    operating_system: str  # sistema_operacional
     fingerprint: str
-    primeiro_uso: date
+    first_use: date  # primeiro_uso
     is_trusted: bool = True
-    is_rooted_jailbroken: bool = False
+    rooted_or_jailbreak: bool = False
+    device_age_days: Optional[int] = None    # age since first_use
+    emulator_detected: bool = False          # Android/iOS emulator
+    vpn_active: bool = False
+    ip_type: Optional[str] = None            # RESIDENTIAL | DATACENTER | VPN | TOR
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
         return {
             'device_id': self.device_id,
             'customer_id': self.customer_id,
-            'tipo': self.tipo,
-            'fabricante': self.fabricante,
-            'modelo': self.modelo,
-            'sistema_operacional': self.sistema_operacional,
+            'type': self.type,
+            'manufacturer': self.manufacturer,
+            'model': self.model,
+            'operating_system': self.operating_system,
             'fingerprint': self.fingerprint,
-            'primeiro_uso': self.primeiro_uso.isoformat() if isinstance(self.primeiro_uso, date) else self.primeiro_uso,
+            'first_use': self.first_use.isoformat() if isinstance(self.first_use, date) else self.first_use,
             'is_trusted': self.is_trusted,
-            'is_rooted_jailbroken': self.is_rooted_jailbroken,
+            'rooted_or_jailbreak': self.rooted_or_jailbreak,
+            'device_age_days': self.device_age_days,
+            'emulator_detected': self.emulator_detected,
+            'vpn_active': self.vpn_active,
+            'ip_type': self.ip_type,
         }
     
     def to_json(self) -> str:
@@ -60,21 +68,21 @@ class Device:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Device':
         """Create Device from dictionary."""
-        primeiro_uso = data.get('primeiro_uso')
-        if isinstance(primeiro_uso, str):
-            primeiro_uso = date.fromisoformat(primeiro_uso)
+        first_use = data.get('first_use')
+        if isinstance(first_use, str):
+            first_use = date.fromisoformat(first_use)
         
         return cls(
             device_id=data['device_id'],
             customer_id=data['customer_id'],
-            tipo=data['tipo'],
-            fabricante=data['fabricante'],
-            modelo=data['modelo'],
-            sistema_operacional=data['sistema_operacional'],
+            type=data['type'],
+            manufacturer=data['manufacturer'],
+            model=data['model'],
+            operating_system=data['operating_system'],
             fingerprint=data['fingerprint'],
-            primeiro_uso=primeiro_uso,
+            first_use=first_use,
             is_trusted=data.get('is_trusted', True),
-            is_rooted_jailbroken=data.get('is_rooted_jailbroken', False),
+            rooted_or_jailbreak=data.get('rooted_or_jailbreak', data.get('is_rooted_jailbroken', False)),
         )
 
 
@@ -85,5 +93,5 @@ class DeviceIndex:
     """
     device_id: str
     customer_id: str
-    tipo: str
+    type: str  # tipo
     is_trusted: bool = True

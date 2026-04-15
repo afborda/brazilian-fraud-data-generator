@@ -2,17 +2,21 @@
 Configuration module for transaction types, fraud types, and payment methods.
 """
 
-# Transaction types (PIX weighted higher - realistic for Brazil 2024)
+# Transaction types — calibrated against BCB payment statistics 2024
+# PIX: 65% of all digital transactions (BCB Nota Imprensa Q4 2024)
+# Cards: ~22% combined (Relatório de Sistemas de Pagamento BCB 2024)
+# TED: ~7% (declining but still significant for high-value B2B)
+# Boleto: ~5% (declining with PIX growth)
 TRANSACTION_TYPES = {
-    'PIX': 42,            # 42% - PIX dominates Brazil
-    'CARTAO_CREDITO': 22, # 22% - Credit card
-    'CARTAO_DEBITO': 13,  # 13% - Debit card
-    'BOLETO': 7,          # 7%  - Bank slip
-    'TED': 3,             # 3%  - Wire transfer
-    'SAQUE': 3,           # 3%  - Cash withdrawal (decreasing)
-    'DOC': 1,             # 1%  - DOC transfer (being phased out)
-    'DEBITO_AUTOMATICO': 5, # 5% - Automatic debit (bills, subscriptions)
-    'RECARGA_CELULAR': 4, # 4%  - Mobile phone top-up
+    'PIX': 65,            # 65% - Dominant channel (BCB 2024: 4B+ tx/month)
+    'CREDIT_CARD': 14,    # 14% - Reduced: cards losing share to PIX
+    'DEBIT_CARD': 8,      # 8%  - Reduced: contactless PIX replacing debit
+    'BOLETO': 5,          # 5%  - BCB 2024: declining with PIX growth
+    'TED': 5,             # 5%  - BCB 2024: ~7% (high-value B2B transfers)
+    'AUTO_DEBIT': 1,      # 1%  - Recurring bills
+    'WITHDRAWAL': 1,      # 1%  - ATM cash (sharply declining)
+    'MOBILE_TOPUP': 1,    # 1%  - Mobile phone recharge
+    # DOC removed — BCB discontinued in 2024
 }
 
 TX_TYPES_LIST = list(TRANSACTION_TYPES.keys())
@@ -20,10 +24,10 @@ TX_TYPES_WEIGHTS = list(TRANSACTION_TYPES.values())
 
 # Channels with realistic weights
 CHANNELS = {
-    'APP_MOBILE': 60,    # 60% - Mobile dominates
+    'MOBILE_APP': 60,    # 60% - Mobile dominates
     'WEB_BANKING': 25,   # 25% - Desktop banking
     'ATM': 8,            # 8%  - ATM (decreasing)
-    'AGENCIA': 5,        # 5%  - Branch (rare)
+    'BRANCH': 5,         # 5%  - Branch (rare)
     'WHATSAPP_PAY': 2,   # 2%  - WhatsApp payments
 }
 
@@ -31,7 +35,9 @@ CHANNELS_LIST = list(CHANNELS.keys())
 CHANNELS_WEIGHTS = list(CHANNELS.values())
 
 # Fraud types with realistic distribution
-FRAUD_TYPES = {
+# DEPRECATED: Use fraud_patterns.py for contextualized fraud patterns
+# Kept for backward compatibility only
+FRAUD_TYPES_LEGACY = {
     'ENGENHARIA_SOCIAL': 20,    # Social engineering - most common
     'CONTA_TOMADA': 15,         # Account takeover
     'CARTAO_CLONADO': 14,       # Cloned card
@@ -47,8 +53,18 @@ FRAUD_TYPES = {
     'QR_CODE_FALSO': 2,         # Fake PIX QR codes
 }
 
-FRAUD_TYPES_LIST = list(FRAUD_TYPES.keys())
-FRAUD_TYPES_WEIGHTS = list(FRAUD_TYPES.values())
+# NEW: Import from fraud_patterns (OTIMIZAÇÃO 2: Fraud Contextualization)
+try:
+    from .fraud_patterns import FRAUD_PATTERNS, FRAUD_TYPES_LIST as FP_LIST, FRAUD_TYPES_WEIGHTS as FP_WEIGHTS
+    FRAUD_TYPES_LIST = FP_LIST
+    FRAUD_TYPES_WEIGHTS = FP_WEIGHTS
+    # Create FRAUD_TYPES dict for backward compatibility
+    FRAUD_TYPES = {k: int(v * 100) for k, v in zip(FP_LIST, FP_WEIGHTS)}
+except ImportError:
+    # Fallback to legacy if fraud_patterns not available
+    FRAUD_TYPES = FRAUD_TYPES_LEGACY
+    FRAUD_TYPES_LIST = list(FRAUD_TYPES_LEGACY.keys())
+    FRAUD_TYPES_WEIGHTS = list(FRAUD_TYPES_LEGACY.values())
 
 # PIX key types with realistic distribution
 PIX_KEY_TYPES = {
@@ -76,32 +92,32 @@ BRANDS_WEIGHTS = list(CARD_BRANDS.values())
 
 # Transaction status codes
 TRANSACTION_STATUS = {
-    'APROVADA': 'Transaction approved',
-    'RECUSADA': 'Transaction declined',
-    'PENDENTE': 'Transaction pending',
-    'BLOQUEADA': 'Transaction blocked',
-    'CANCELADA': 'Transaction cancelled',
-    'ESTORNADA': 'Transaction reversed',
+    'APPROVED': 'Transaction approved',
+    'DECLINED': 'Transaction declined',
+    'PENDING': 'Transaction pending',
+    'BLOCKED': 'Transaction blocked',
+    'CANCELLED': 'Transaction cancelled',
+    'REVERSED': 'Transaction reversed',
 }
 
 # Refusal reasons
 REFUSAL_REASONS = [
-    'SALDO_INSUFICIENTE',
-    'SUSPEITA_FRAUDE',
-    'LIMITE_EXCEDIDO',
-    'CARTAO_BLOQUEADO',
-    'ERRO_CVV',
-    'CARTAO_VENCIDO',
-    'SENHA_INVALIDA',
-    'CONTA_BLOQUEADA',
+    'INSUFFICIENT_BALANCE',
+    'FRAUD_SUSPECT',
+    'LIMIT_EXCEEDED',
+    'CARD_BLOCKED',
+    'CVV_ERROR',
+    'CARD_EXPIRED',
+    'INVALID_PIN',
+    'ACCOUNT_BLOCKED',
 ]
 
 # Card entry methods
 CARD_ENTRY_METHODS = {
     'CHIP': 40,
     'CONTACTLESS': 35,
-    'DIGITADO': 20,
-    'MAGNETICO': 5,
+    'MANUAL': 20,
+    'MAGNETIC': 5,
 }
 
 CARD_ENTRY_LIST = list(CARD_ENTRY_METHODS.keys())

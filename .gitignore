@@ -1,15 +1,74 @@
-# 🚫 Dados Gerados - Não comitar!
-# Os arquivos de dados são grandes e devem ser ignorados
+# ============================================================
+# synthfin-data .gitignore
+# ============================================================
 
-# Output directory
+# ── Secrets & Credentials ──────────────────────────────────
+# NEVER commit secrets. Only .example files are allowed.
+.env
+.env.*
+!.env.*.example
+!.env.server.example
+license.env
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+*.secret
+**/credentials/
+**/secrets/
+*.token
+api_key*
+
+# ── Generated Data & Output ────────────────────────────────
 output/
+test_output/
+test_jsonl_*/
+test_csv_*/
+test_parquet_*/
+baseline_before/
+baseline_after/
+baseline_seed42/
+after_t1/
+analysis_output/
+output_test/
+benchmark_quality_output/
 data/
+datasets/
+tmp/
+temp/
 
-# Large data files
-*.json
-!package.json
+# Data files (anywhere in tree)
+*.jsonl
+*.jsonl.gz
+*.csv
+*.parquet
+*.arrow
+*.ipc
+*.feather
+*.avro
+*.orc
+*.db
+*.sqlite
+*.sqlite3
 
-# Python
+# ── Generated Root-Level Files ─────────────────────────────
+REALISM_METRICS.json
+CALIBRATION_PROCESS.md
+IMPROVEMENT_ANALYSIS.md
+
+# ── Documents (generated/temporary) ───────────────────────
+docs/benchmarks/benchmark_results/
+docs/benchmarks/*.log
+docs/*.txt
+docs/ORGANIZATION_*.md
+docs/STATUS_*.md
+docs/PHASE_*_INTEGRATION_*.md
+docs/REPOSITORY_*.md
+doc/
+
+# ── Python ─────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -27,26 +86,257 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
+# ── Virtual Environments ──────────────────────────────────
 venv/
-ENV/
 env/
+ENV/
+env.bak/
+venv.bak/
 .venv/
+.conda/
+conda-env/
 
-# IDE
-.idea/
+# ── IDE & Editors ─────────────────────────────────────────
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.vim/
+.emacs.d/
+*.iml
+.gradle/
 
-# OS
+# ── Testing & Coverage ────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+test-results.xml
+.nox/
+coverage.xml
+junit.xml
+
+# ── Benchmarks & Profiling ────────────────────────────────
+*.prof
+*.cProfile
+*.pstats
+prof_data/
+benchmarks/results/
+perf_results/
+benchmark_output.log
+benchmark_results/
+
+# ── ML Models & Artifacts ─────────────────────────────────
+*.pickle
+*.pkl
+*.h5
+*.hdf5
+*.model
+*.onnx
+*.pt
+*.pth
+*.weights
+*.joblib
+mlruns/
+wandb/
+
+# ── OS Files ──────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+*.lnk
+Desktop.ini
+ehthumbs.db
 
-# Logs
+# ── Temporary & Backup Files ─────────────────────────────
+*.tmp
+*.bak
+*.swp
+*.~
+.temp/
+.tmp/
+
+# ── Logs ──────────────────────────────────────────────────
 *.log
+logs/
+*.out
+
+# ── Docker ────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Documentation Build ───────────────────────────────────
+site/
+docs/_build/
+docs/.sphinx/
+*.pdf
+*.html
+
+# ── Cache Files ───────────────────────────────────────────
+.cache/
+*.cache
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# ── Jupyter ───────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# MinIO/S3 Credentials (NEVER commit!)
+.aws/
+.minio/
+minio_credentials.json
+aws_credentials.json
+
+# ============================================================
+# SaaS / Produto Pago — NUNCA no repo público
+# Esses diretórios vivem apenas no repo privado synthfin-saas
+# ============================================================
+src/fraud_generator/licensing/
+src/fraud_generator/api/
+src/fraud_generator/email/
+admin_tools/
+license.env.example
+.env.server.example
+.env.server
+tests/unit/test_licensing.py
+tests/unit/test_api*.py
+
+# API - planejamento e código da API hospedada (repo privado)
+api/
+
+# Documentos confidenciais — estratégia interna, PDFs, pricing, monetização
+docs/documentodeestudos/
+"docs/Analise e comparacao com estudos das ferias/"
+docs/Analise*/
+docs/PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md
+docs/PRICING_ANALYSIS_COMPLETO.md
+docs/SHADOWTRAFFIC_ANALYSIS.md
+docs/ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md/
+
+# Landing page do produto (repo separado: synthfin-site)
+landpage/
+
+# Docker Compose do servidor SaaS
+docker-compose.server.yml
+Dockerfile.server
+
+# Outputs de teste temporários (não versionar dados gerados)
+after_t1/
+baseline_seed42/
+baseline_before/
+baseline_after/
+output_test/
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+jupyter_data/
+
+# Package Files
+*.tar.gz
+*.zip
+*.rar
+
+# Node (if used for docs)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Backup Files
+*.bak
+*.backup
+*.swp
+*.orig
+
+# Version Control
+.git/
+.gitattributes
+
+# Keep directories but not their contents
+!.gitkeep
+output/.gitkeep
+tests/.gitkeep
+docs/.gitkeep
+benchmarks/.gitkeep
+
+# Keep documentation but exclude generated
+!*.md
+docs/*.html
+docs/_build/
+
+# Documentação confidencial — re-ignorados DEPOIS do !*.md (última regra vence)
+# Estes arquivos contêm dados de pricing, estratégia e análise competitiva interna
+docs/PLANO_MONETIZACAO_EXECUTIVO_90DIAS.md
+docs/PRICING_ANALYSIS_COMPLETO.md
+docs/SHADOWTRAFFIC_ANALYSIS.md
+docs/ANALISE_SHADOWTRAFFIC_VS_SEU_PROJETO.md
+docs/CHECKLIST_MELHORIAS_DISRUPTIVAS_E_UX.md
+docs/CAPACITY_PLANNING.md
+docs/performance/CAPACITY_PLANNING.md
+docs/analysis/2026-03-19/
+
+# Docs técnicos com parâmetros proprietários (calibrações, pesos, infraestrutura interna)
+docs/performance/
+docs/analysis/ANALISE_PROFUNDA.md
+docs/analysis/ESTUDO_QUALIDADE_DADOS.md
+docs/03_ARQUITETURA_TECNICA.md
+docs/06_STACK_TECNOLOGICO.md
+docs/07_CATALOGO_FRAUDES.md
+docs/09_CRIADOR.md
+
+# Knowledge base interna — contém calibrações, fórmulas e parâmetros proprietários
+.claude/kb/
+
+# Local configuration
+config.local.yml
+settings.local.json
+
+# Large test files (keep structure, ignore content)
+tests/fixtures/*.jsonl
+tests/fixtures/*.csv
+tests/fixtures/*.parquet
+
+# Generated test data
+tests/test_data/
+tests/output/
+
+# Performance profiling
+*.prof
+*.pprof
+perf/
+
+# Editor backups
+*.backup
+.bak
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
+
+# License & secrets (never commit)
+license.env
+.env.server
+*.secret
+admin_tools/__pycache__/

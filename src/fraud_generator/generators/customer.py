@@ -1,5 +1,5 @@
 """
-Customer generator for Brazilian Fraud Data Generator.
+Customer generator for synthfin-data.
 """
 
 import random
@@ -11,6 +11,7 @@ from ..models.customer import Customer, Address, CustomerIndex
 from ..validators.cpf import generate_valid_cpf, generate_cpf_from_state
 from ..config.banks import BANKS, BANK_CODES, BANK_WEIGHTS
 from ..config.geography import ESTADOS_LIST, ESTADOS_WEIGHTS, ESTADOS_BR
+from ..config.municipios import pick_municipio, cep_for_municipio
 from ..profiles.behavioral import (
     assign_random_profile,
     get_profile,
@@ -79,9 +80,10 @@ class CustomerGenerator:
             maximum_age=idade
         )
         
-        # State selection weighted by population
-        estado = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
-        
+        # State selection weighted by population; municipality within it
+        estado    = random.choices(ESTADOS_LIST, weights=ESTADOS_WEIGHTS)[0]
+        municipio = pick_municipio(estado, random)
+
         # Generate valid CPF for the state
         cpf = generate_cpf_from_state(estado, formatted=True)
         
@@ -93,10 +95,10 @@ class CustomerGenerator:
         
         # Risk profile based on account age and profile
         account_age_days = (datetime.now() - created_date).days
-        nivel_risco = self._calculate_risk_level(account_age_days, perfil)
+        risk_level = self._calculate_risk_level(account_age_days, perfil)
         
-        # Income based on profile
-        renda = self._calculate_income(profile_config)
+        # Income based on profile and state (V6-M9: conditional on UF)
+        renda = self._calculate_income(profile_config, estado)
         
         # Credit score correlates with income and account age
         score = self._calculate_credit_score(renda, account_age_days)
@@ -106,49 +108,101 @@ class CustomerGenerator:
         
         # Account type based on profile
         if profile_config and perfil in ['young_digital', 'subscription_heavy']:
-            tipo_conta = random.choices(
-                ['DIGITAL', 'CORRENTE', 'POUPANCA'],
+            account_type = random.choices(
+                ['DIGITAL', 'CHECKING', 'SAVINGS'],
                 weights=[70, 25, 5]
             )[0]
         else:
-            tipo_conta = random.choices(
-                ['CORRENTE', 'POUPANCA', 'DIGITAL'],
+            account_type = random.choices(
+                ['CHECKING', 'SAVINGS', 'DIGITAL'],
                 weights=[40, 20, 40]
             )[0]
         
         customer_data = {
             'customer_id': customer_id,
-            'nome': self.fake.name(),
+            'name': self.fake.name(),
             'cpf': cpf,
             'email': self.fake.email(),
-            'telefone': self.fake.phone_number(),
-            'data_nascimento': data_nascimento.isoformat(),
-            'endereco': {
-                'logradouro': self.fake.street_address(),
-                'bairro': self.fake.bairro(),
-                'cidade': self.fake.city(),
-                'estado': estado,
-                'cep': self.fake.postcode(),
+            'phone': self.fake.phone_number(),
+            'birth_date': data_nascimento.isoformat(),
+            'address': {
+                'street':       self.fake.street_address(),
+                'neighborhood': self.fake.bairro(),
+                'city':         municipio.name,
+                'state':        estado,
+                'postal_code':  cep_for_municipio(municipio, random),
+                'codigo_ibge':  municipio.ibge,
             },
-            'renda_mensal': renda,
-            'profissao': self.fake.job(),
-            'conta_criada_em': created_date.isoformat(),
-            'tipo_conta': tipo_conta,
-            'status_conta': random.choices(
-                ['ATIVA', 'BLOQUEADA', 'INATIVA'],
+            'monthly_income': renda,
+            'profession': self.fake.job(),
+            'account_created_at': created_date.isoformat(),
+            'account_type': account_type,
+            'account_status': random.choices(
+                ['ACTIVE', 'BLOCKED', 'INACTIVE'],
                 weights=[95, 3, 2]
             )[0],
-            'limite_credito': round(renda * random.uniform(2, 8), 2),
-            'score_credito': score,
-            'nivel_risco': nivel_risco,
-            'banco_codigo': banco_codigo,
-            'banco_nome': BANKS[banco_codigo]['nome'],
-            'agencia': f'{random.randint(1, 9999):04d}',
-            'numero_conta': f'{random.randint(10000, 999999)}-{random.randint(0, 9)}',
+            'credit_limit': round(renda * random.uniform(2, 8), 2),
+            'credit_score': score,
+            'risk_level': risk_level,
+            'bank_code': banco_codigo,
+            'bank_name': BANKS[banco_codigo]['name'],
+            'branch': f'{random.randint(1, 9999):04d}',
+            'account_number': f'{random.randint(10000, 999999)}-{random.randint(0, 9)}',
         }
         
         if self.use_profiles and perfil:
-            customer_data['perfil_comportamental'] = perfil
+            customer_data['behavioral_profile'] = perfil
+
+        # ── V6-M5: Cadastral stability (Pacheco FGV 2019) ────────────────
+        # Correlated with risk_level: HIGH → recent/unstable, LOW → stable
+        if risk_level == 'HIGH':
+            customer_data['address_age_days'] = random.randint(5, 120)
+            customer_data['phone_age_days'] = random.randint(3, 90)
+            customer_data['address_change_count_1y'] = random.choices([2, 3, 4, 5], weights=[30, 40, 20, 10])[0]
+            customer_data['phone_change_count_1y'] = random.choices([2, 3, 4, 5, 6], weights=[20, 30, 30, 15, 5])[0]
+        elif risk_level == 'MEDIUM':
+            customer_data['address_age_days'] = random.randint(60, 730)
+            customer_data['phone_age_days'] = random.randint(30, 365)
+            customer_data['address_change_count_1y'] = random.choices([0, 1, 2], weights=[40, 40, 20])[0]
+            customer_data['phone_change_count_1y'] = random.choices([0, 1, 2], weights=[30, 50, 20])[0]
+        else:  # LOW
+            customer_data['address_age_days'] = random.randint(365, 3650)
+            customer_data['phone_age_days'] = random.randint(180, 2555)
+            customer_data['address_change_count_1y'] = random.choices([0, 1], weights=[80, 20])[0]
+            customer_data['phone_change_count_1y'] = random.choices([0, 1], weights=[70, 30])[0]
+
+        # ── V6-M6: Bureau queries (Pacheco FGV 2019 — top predictor) ─────
+        # VQt_ConsTOD_10d highest beta (0.206) in fraud models
+        if risk_level == 'HIGH':
+            customer_data['credit_bureau_queries_10d'] = random.choices(range(0, 12), weights=[5, 5, 10, 15, 20, 15, 10, 8, 5, 3, 2, 2])[0]
+            customer_data['credit_bureau_queries_30d'] = customer_data['credit_bureau_queries_10d'] + random.randint(2, 15)
+            customer_data['credit_bureau_queries_180d'] = customer_data['credit_bureau_queries_30d'] + random.randint(5, 40)
+            customer_data['active_restrictions_count'] = random.choices([0, 1, 2, 3, 4, 5], weights=[20, 25, 25, 15, 10, 5])[0]
+            customer_data['restrictions_resolved_1y'] = random.randint(0, 3)
+        elif risk_level == 'MEDIUM':
+            customer_data['credit_bureau_queries_10d'] = random.choices(range(0, 6), weights=[30, 30, 20, 10, 7, 3])[0]
+            customer_data['credit_bureau_queries_30d'] = customer_data['credit_bureau_queries_10d'] + random.randint(0, 5)
+            customer_data['credit_bureau_queries_180d'] = customer_data['credit_bureau_queries_30d'] + random.randint(1, 15)
+            customer_data['active_restrictions_count'] = random.choices([0, 1, 2], weights=[60, 30, 10])[0]
+            customer_data['restrictions_resolved_1y'] = random.choices([0, 1], weights=[70, 30])[0]
+        else:  # LOW
+            customer_data['credit_bureau_queries_10d'] = random.choices([0, 1, 2], weights=[60, 30, 10])[0]
+            customer_data['credit_bureau_queries_30d'] = customer_data['credit_bureau_queries_10d'] + random.randint(0, 2)
+            customer_data['credit_bureau_queries_180d'] = customer_data['credit_bureau_queries_30d'] + random.randint(0, 5)
+            customer_data['active_restrictions_count'] = random.choices([0, 1], weights=[90, 10])[0]
+            customer_data['restrictions_resolved_1y'] = 0
+
+        # Credit score category (A-E)
+        if score >= 750:
+            customer_data['credit_score_category'] = 'A'
+        elif score >= 600:
+            customer_data['credit_score_category'] = 'B'
+        elif score >= 450:
+            customer_data['credit_score_category'] = 'C'
+        elif score >= 350:
+            customer_data['credit_score_category'] = 'D'
+        else:
+            customer_data['credit_score_category'] = 'E'
         
         return customer_data
     
@@ -175,10 +229,10 @@ class CustomerGenerator:
         """Create a lightweight index from customer data."""
         return CustomerIndex(
             customer_id=customer_data['customer_id'],
-            estado=customer_data['endereco']['estado'],
-            perfil=customer_data.get('perfil_comportamental'),
-            banco_codigo=customer_data.get('banco_codigo'),
-            nivel_risco=customer_data.get('nivel_risco'),
+            state=customer_data['address']['state'],
+            behavioral_profile=customer_data.get('behavioral_profile'),
+            bank_code=customer_data.get('bank_code'),
+            risk_level=customer_data.get('risk_level'),
         )
     
     def _calculate_risk_level(
@@ -200,10 +254,19 @@ class CustomerGenerator:
         elif perfil == 'traditional_senior':
             weights = [20, 40, 40]  # More susceptible to scams
         
-        return random.choices(['ALTO', 'MEDIO', 'BAIXO'], weights=weights)[0]
+        return random.choices(['HIGH', 'MEDIUM', 'LOW'], weights=weights)[0]
     
-    def _calculate_income(self, profile_config) -> float:
-        """Calculate monthly income based on profile."""
+    def _calculate_income(self, profile_config, estado: str = 'SP') -> float:
+        """Calculate monthly income based on profile and state (V6-M9)."""
+        # IBGE PNAD 2023 — renda média por UF relative to national average
+        _STATE_INCOME_MULT = {
+            'DF': 1.75, 'SP': 1.25, 'RJ': 1.15, 'SC': 1.12, 'PR': 1.08,
+            'RS': 1.05, 'ES': 0.95, 'MG': 0.95, 'GO': 0.92, 'MT': 1.00,
+            'MS': 0.98, 'RO': 0.85, 'TO': 0.80, 'AC': 0.78, 'AM': 0.82,
+            'RR': 0.80, 'AP': 0.78, 'PA': 0.75, 'MA': 0.62, 'PI': 0.65,
+            'CE': 0.72, 'RN': 0.73, 'PB': 0.68, 'PE': 0.75, 'AL': 0.65,
+            'SE': 0.72, 'BA': 0.73,
+        }
         # Base income distribution (realistic for Brazil)
         base_ranges = [
             (1500, 3000, 40),
@@ -222,6 +285,10 @@ class CustomerGenerator:
             min_mult, max_mult = profile_config.income_multiplier
             multiplier = random.uniform(min_mult, max_mult)
             base_income *= multiplier
+        
+        # V6-M9: Modulate by state median income
+        state_mult = _STATE_INCOME_MULT.get(estado, 1.0)
+        base_income *= state_mult
         
         return round(base_income, 2)
     

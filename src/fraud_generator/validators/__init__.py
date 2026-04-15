@@ -1,5 +1,5 @@
 """
-Validators package for Brazilian Fraud Data Generator.
+Validators package for synthfin-data.
 """
 
 from .cpf import (

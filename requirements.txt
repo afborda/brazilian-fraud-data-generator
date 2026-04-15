@@ -1,17 +1,25 @@
-# Brazilian Fraud Data Generator v3.0
-# =====================================
-
-# Core dependencies (required)
+# synthfin-data v4.18.0
 Faker>=22.0.0
+pandas>=2.0.0
+pyarrow>=14.0.0
+boto3>=1.28.0
 
-# Optional: For Parquet and CSV export
-# Uncomment these if you need Parquet/CSV export
-# pandas>=2.0.0
-# pyarrow>=14.0.0
+# Phase 2.4: Optional Numba JIT
+numba>=0.59.0
 
-# Development dependencies (optional)
-# pytest>=7.0.0
-# pytest-cov>=4.0.0
-# black>=23.0.0
-# isort>=5.0.0
-# mypy>=1.0.0
+# Phase 2.1: Native Compression (optional, with fallback to gzip)
+zstandard>=0.21.0
+python-snappy>=0.6.1
+
+# Phase 2.8: Redis cache (optional)
+redis>=5.0.0
+
+# Phase 2.9: Database exports (SQLAlchemy)
+SQLAlchemy>=2.0.0
+
+# ML quality validation (optional — soft dependency, degrades gracefully)
+lightgbm>=4.3.0
+joblib>=1.3.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+ijson>=3.2.0

@@ -1,0 +1,6 @@
+# API server dependencies (Dockerfile.server)
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic[email]>=2.0.0
+resend>=0.7.0
+requests>=2.31.0

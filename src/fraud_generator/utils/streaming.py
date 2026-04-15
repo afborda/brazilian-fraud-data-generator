@@ -2,8 +2,10 @@
 Streaming utilities for memory-efficient data generation.
 """
 
-from typing import NamedTuple, List, Iterator, Optional, Dict, Any, Callable
-from collections import namedtuple
+from typing import NamedTuple, List, Iterator, Optional, Dict, Any, Callable, Tuple
+from collections import namedtuple, deque
+from datetime import datetime, timedelta
+import math
 import random
 
 
@@ -12,28 +14,300 @@ class CustomerIndex(NamedTuple):
     Lightweight customer reference for memory-efficient processing.
     
     Memory usage: ~50-80 bytes vs ~800+ bytes for full Customer object.
+    
+    location_cluster: tuple of (lat, lon, weight) for 3-5 habitual locations
+    generated at customer creation time. Used by _get_geolocation to produce
+    realistic clustered coordinates instead of a random state-level spread.
+    Format: ((lat1, lon1, w1), (lat2, lon2, w2), ...)
     """
     customer_id: str
-    estado: str
-    perfil: Optional[str]
-    banco_codigo: Optional[str] = None
-    nivel_risco: Optional[str] = None
+    state: str
+    profile: Optional[str]
+    bank_code: Optional[str] = None
+    risk_level: Optional[str] = None
+    location_cluster: Optional[tuple] = None
 
 
 class DeviceIndex(NamedTuple):
     """Lightweight device reference."""
     device_id: str
     customer_id: str
+    device_age_days: int = 365
+    emulator_detected: bool = False
+    vpn_active: bool = False
+    ip_type: str = "RESIDENTIAL"
+
+
+class DriverIndex(NamedTuple):
+    """
+    Lightweight driver reference for memory-efficient processing.
+    
+    Memory usage: ~60-90 bytes vs ~500+ bytes for full Driver object.
+    """
+    driver_id: str
+    operating_state: str
+    operating_city: str
+    active_apps: tuple  # Tuple of app names
+
+
+class RideIndex(NamedTuple):
+    """Lightweight ride reference."""
+    ride_id: str
+    driver_id: str
+    passenger_id: str
+    app: str
+    city: str
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the great-circle distance between two points on Earth.
+    Uses the Haversine formula.
+    """
+    # Earth's radius in kilometers
+    R = 6371.0
+
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lon = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_lat / 2) ** 2 + \
+        math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
+
+
+class CustomerSessionState:
+    """
+    Track customer activity in a session for correlated transactions.
+
+    Maintains a rolling 24h window for velocity/novelty checks and a
+    separate 30d window for extended Pro+ velocity features (1h/6h/7d/30d).
+    """
+
+    def __init__(self, customer_id: str):
+        self.customer_id = customer_id
+        # 24h window — (timestamp, amount, merchant_id, lat, lon, device_id)
+        self._transactions = deque()
+        self._merchant_counts: Dict[str, int] = {}
+        self._device_counts: Dict[str, int] = {}
+        self._accumulated_amount = 0.0
+        # T4: favorite merchants — first _FAVORITE_MAX distinct merchants seen become favorites
+        self._favorite_merchants: List[tuple] = []   # (merchant_id, merchant_name, mcc_code)
+        self._favorite_ids: set = set()
+        self._FAVORITE_MAX = 8
+        # T4: device consistency — first 2 devices seen become "primary"; others are anomalies
+        self._primary_devices: set = set()
+        self._PRIMARY_MAX = 2
+        # Pro+: 30d extended window — (timestamp, amount, device_id, merchant_id)
+        self._transactions_30d: deque = deque()
+
+    def _prune_old(self, current_time: datetime) -> None:
+        """Remove transactions older than 24h (24h window) and 30d (extended window)."""
+        cutoff_24h = current_time - timedelta(hours=24)
+        while self._transactions and self._transactions[0][0] < cutoff_24h:
+            ts, amount, merchant_id, _lat, _lon, device_id = self._transactions.popleft()
+            self._accumulated_amount -= amount
+
+            if merchant_id in self._merchant_counts:
+                self._merchant_counts[merchant_id] -= 1
+                if self._merchant_counts[merchant_id] <= 0:
+                    del self._merchant_counts[merchant_id]
+
+            if device_id in self._device_counts:
+                self._device_counts[device_id] -= 1
+                if self._device_counts[device_id] <= 0:
+                    del self._device_counts[device_id]
+
+        cutoff_30d = current_time - timedelta(days=30)
+        while self._transactions_30d and self._transactions_30d[0][0] < cutoff_30d:
+            self._transactions_30d.popleft()
+
+    def add_transaction(self, tx: Dict[str, Any], timestamp: datetime) -> None:
+        """Add transaction to session state."""
+        self._prune_old(timestamp)
+
+        merchant_id = tx.get('merchant_id')
+        device_id = tx.get('device_id')
+        lat = tx.get('geolocation_lat')
+        lon = tx.get('geolocation_lon')
+        amount = float(tx.get('amount', 0.0))
+
+        # 24h window
+        self._transactions.append((timestamp, amount, merchant_id, lat, lon, device_id))
+        self._accumulated_amount += amount
+        # 30d extended window
+        self._transactions_30d.append((timestamp, amount, device_id, merchant_id))
+
+        if merchant_id:
+            self._merchant_counts[merchant_id] = self._merchant_counts.get(merchant_id, 0) + 1
+            # T4: accumulate favorites from first _FAVORITE_MAX distinct merchants
+            if (
+                merchant_id not in self._favorite_ids
+                and len(self._favorite_merchants) < self._FAVORITE_MAX
+            ):
+                merchant_name = tx.get('merchant_name', '')
+                mcc_code = tx.get('mcc_code', '')
+                self._favorite_merchants.append((merchant_id, merchant_name, mcc_code))
+                self._favorite_ids.add(merchant_id)
+        if device_id:
+            self._device_counts[device_id] = self._device_counts.get(device_id, 0) + 1
+            # T4: first _PRIMARY_MAX distinct devices become "primary"
+            if len(self._primary_devices) < self._PRIMARY_MAX:
+                self._primary_devices.add(device_id)
+
+    def get_velocity_window(self, current_time: datetime, hours: float) -> int:
+        """Count transactions in the last `hours` window (Pro+ extended velocity)."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return sum(1 for ts, *_ in self._transactions if ts >= cutoff)
+        else:
+            return sum(1 for ts, *_ in self._transactions_30d if ts >= cutoff)
+
+    def get_accumulated_window(self, current_time: datetime, hours: float) -> float:
+        """Total amount in the last `hours` window."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return round(sum(amt for ts, amt, *_ in self._transactions if ts >= cutoff), 2)
+        else:
+            return round(sum(amt for ts, amt, *_ in self._transactions_30d if ts >= cutoff), 2)
+
+    def get_unique_merchants_window(self, current_time: datetime, hours: float) -> int:
+        """Unique merchant count in the last `hours` window."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return len({m for ts, amt, m, *_ in self._transactions if ts >= cutoff and m})
+        else:
+            # _transactions_30d: (ts, amount, device_id, merchant_id)
+            return len({m for ts, amt, d, m in self._transactions_30d if ts >= cutoff and m})
+
+    def get_unique_devices_window(self, current_time: datetime, hours: float) -> int:
+        """Unique device count in the last `hours` window."""
+        cutoff = current_time - timedelta(hours=hours)
+        if hours <= 24.0:
+            return len({d for ts, amt, m, lat, lon, d in self._transactions if ts >= cutoff and d})
+        else:
+            # _transactions_30d: (ts, amount, device_id, merchant_id)
+            return len({d for ts, amt, d, m in self._transactions_30d if ts >= cutoff and d})
+
+    def get_favorite_merchant(self) -> Optional[tuple]:
+        """Return a random (merchant_id, merchant_name, mcc_code) from favorites.
+
+        Returns None when fewer than 3 favorites have been accumulated, so that
+        early transactions are still diversified before a stable pattern forms.
+        """
+        if len(self._favorite_merchants) < 3:
+            return None
+        import random as _random
+        return _random.choice(self._favorite_merchants)
+
+    def is_new_device(self, device_id: Optional[str]) -> bool:
+        """T4: True when device_id is not one of the customer's primary devices.
+
+        Returns False (not anomalous) when fewer than 2 primaries have been
+        accumulated, so first-time customers don't trigger a false signal.
+        """
+        if not device_id or len(self._primary_devices) < 1:
+            return False
+        return device_id not in self._primary_devices
+
+    def get_velocity(self, current_time: datetime) -> int:
+        """Transactions in last 24h."""
+        self._prune_old(current_time)
+        return len(self._transactions)
+
+    def get_accumulated_24h(self, current_time: datetime) -> float:
+        """Total amount in last 24h."""
+        self._prune_old(current_time)
+        return round(self._accumulated_amount, 2)
+
+    def is_new_merchant(self, merchant_id: Optional[str]) -> bool:
+        """Is this a new merchant for customer within 24h window?"""
+        if not merchant_id:
+            return False
+        return merchant_id not in self._merchant_counts
+
+    def get_last_transaction_minutes_ago(self, current_time: datetime) -> Optional[int]:
+        """Minutes since last transaction."""
+        if not self._transactions:
+            return None
+        last_ts = self._transactions[-1][0]
+        delta = current_time - last_ts
+        return int(delta.total_seconds() / 60) if delta.total_seconds() >= 0 else None
+
+    def get_distance_from_last_txn_km(self, lat: Optional[float], lon: Optional[float]) -> Optional[float]:
+        """Distance from last transaction (km)."""
+        if not self._transactions or lat is None or lon is None:
+            return None
+        _last_ts, _amount, _merchant_id, last_lat, last_lon, _device_id = self._transactions[-1]
+        if last_lat is None or last_lon is None:
+            return None
+        return round(haversine_distance(last_lat, last_lon, lat, lon), 2)
+
+    def check_impossible_travel(
+        self,
+        lat: Optional[float],
+        lon: Optional[float],
+        current_time: datetime,
+        speed_km_h: float = 900.0,
+        min_dist_km: float = 400.0,
+        min_elapsed_min: float = 5.0,
+    ) -> tuple:
+        """Check if a new location is physically impossible given the last transaction.
+
+        Only flags genuinely inter-state impossible moves (>400 km) when the
+        elapsed time is at least 5 minutes and the distance exceeds what a
+        commercial flight could cover.  Returns (is_impossible: bool, distance_km: float).
+        """
+        if not self._transactions or lat is None or lon is None:
+            return False, 0.0
+        last_ts, _amt, _mid, last_lat, last_lon, _did = self._transactions[-1]
+        if last_lat is None or last_lon is None:
+            return False, 0.0
+        dist_km = haversine_distance(last_lat, last_lon, lat, lon)
+        elapsed_min = (current_time - last_ts).total_seconds() / 60.0
+        # Ignore backward timestamps and very short windows
+        if elapsed_min < min_elapsed_min:
+            return False, round(dist_km, 2)
+        # Only flag if distance exceeds min_dist_km threshold (inter-state)
+        if dist_km < min_dist_km:
+            return False, round(dist_km, 2)
+        elapsed_h = elapsed_min / 60.0
+        reachable_km = speed_km_h * elapsed_h
+        return dist_km > reachable_km, round(dist_km, 2)
 
 
 def create_customer_index(customer_dict: Dict[str, Any]) -> CustomerIndex:
     """Create a CustomerIndex from a customer dictionary."""
+    from ..config.geography import ESTADOS_BR
+    import random as _r
+
+    state = customer_dict.get('address', {}).get('state', 'SP')
+    info = ESTADOS_BR.get(state, ESTADOS_BR['SP'])
+    base_lat, base_lon = info['lat'], info['lon']
+    home_lat  = base_lat + _r.uniform(-0.25, 0.25)
+    home_lon  = base_lon + _r.uniform(-0.25, 0.25)
+    work_lat  = home_lat + _r.uniform(-0.20, 0.20)
+    work_lon  = home_lon + _r.uniform(-0.20, 0.20)
+    shop_lat  = home_lat + _r.uniform(-0.30, 0.30)
+    shop_lon  = home_lon + _r.uniform(-0.30, 0.30)
+    other_lat = base_lat + _r.uniform(-0.40, 0.40)
+    other_lon = base_lon + _r.uniform(-0.40, 0.40)
+    cluster = (
+        (round(home_lat, 6),  round(home_lon, 6),  0.55),
+        (round(work_lat, 6),  round(work_lon, 6),  0.20),
+        (round(shop_lat, 6),  round(shop_lon, 6),  0.15),
+        (round(other_lat, 6), round(other_lon, 6), 0.10),
+    )
     return CustomerIndex(
         customer_id=customer_dict['customer_id'],
-        estado=customer_dict.get('endereco', {}).get('estado', 'SP'),
-        perfil=customer_dict.get('perfil_comportamental'),
-        banco_codigo=customer_dict.get('banco_codigo'),
-        nivel_risco=customer_dict.get('nivel_risco'),
+        state=state,
+        profile=customer_dict.get('behavioral_profile'),
+        bank_code=customer_dict.get('bank_code'),
+        risk_level=customer_dict.get('risk_level'),
+        location_cluster=cluster,
     )
 
 
@@ -42,6 +316,39 @@ def create_device_index(device_dict: Dict[str, Any]) -> DeviceIndex:
     return DeviceIndex(
         device_id=device_dict['device_id'],
         customer_id=device_dict['customer_id'],
+        device_age_days=device_dict.get('device_age_days', 365),
+        emulator_detected=device_dict.get('emulator_detected', False),
+        vpn_active=device_dict.get('vpn_active', False),
+        ip_type=device_dict.get('ip_type', 'RESIDENTIAL'),
+    )
+
+
+def create_driver_index(driver_dict: Dict[str, Any]) -> DriverIndex:
+    """Create a DriverIndex from a driver dictionary."""
+    active_apps = driver_dict.get('active_apps', [])
+    if isinstance(active_apps, list):
+        active_apps = tuple(active_apps)
+    
+    return DriverIndex(
+        driver_id=driver_dict['driver_id'],
+        operating_state=driver_dict.get('operating_state', 'SP'),
+        operating_city=driver_dict.get('operating_city', 'São Paulo'),
+        active_apps=active_apps,
+    )
+
+
+def create_ride_index(ride_dict: Dict[str, Any]) -> RideIndex:
+    """Create a RideIndex from a ride dictionary."""
+    # Handle nested pickup_location
+    pickup_location = ride_dict.get('pickup_location', {})
+    city = pickup_location.get('city', '') if isinstance(pickup_location, dict) else ''
+    
+    return RideIndex(
+        ride_id=ride_dict['ride_id'],
+        driver_id=ride_dict.get('driver_id', ''),
+        passenger_id=ride_dict.get('passenger_id', ''),
+        app=ride_dict.get('app', ''),
+        city=city,
     )
 
 
@@ -50,7 +357,7 @@ class BatchGenerator:
     Memory-efficient batch generator for large datasets.
     
     Generates data in batches, keeping only lightweight indexes
-    in memory for customer/device references.
+    in memory for customer/device/driver references.
     """
     
     def __init__(
@@ -69,6 +376,7 @@ class BatchGenerator:
         self.max_memory_items = max_memory_items
         self.customer_index: List[CustomerIndex] = []
         self.device_index: List[DeviceIndex] = []
+        self.driver_index: List[DriverIndex] = []
     
     def add_customer_index(self, index: CustomerIndex) -> None:
         """Add a customer index to the reference list."""
@@ -91,6 +399,16 @@ class BatchGenerator:
                 self.max_memory_items // 2
             )
     
+    def add_driver_index(self, index: DriverIndex) -> None:
+        """Add a driver index to the reference list."""
+        self.driver_index.append(index)
+        
+        if len(self.driver_index) > self.max_memory_items:
+            self.driver_index = random.sample(
+                self.driver_index,
+                self.max_memory_items // 2
+            )
+    
     def get_random_customer(self) -> Optional[CustomerIndex]:
         """Get a random customer from the index."""
         if not self.customer_index:
@@ -109,18 +427,61 @@ class BatchGenerator:
         
         return random.choice(self.device_index)
     
-    def get_customers_by_state(self, estado: str) -> List[CustomerIndex]:
+    def get_random_driver(
+        self,
+        state: Optional[str] = None,
+        city: Optional[str] = None
+    ) -> Optional[DriverIndex]:
+        """
+        Get a random driver, optionally filtered by state and/or city.
+        
+        Args:
+            state: Filter by operating state
+            city: Filter by operating city
+        
+        Returns:
+            DriverIndex or None if no drivers match
+        """
+        if not self.driver_index:
+            return None
+        
+        candidates = self.driver_index
+        
+        if state:
+            candidates = [d for d in candidates if d.operating_state == state]
+        
+        if city and candidates:
+            city_candidates = [d for d in candidates if d.operating_city == city]
+            if city_candidates:
+                candidates = city_candidates
+        
+        if not candidates:
+            # Fallback to any driver
+            return random.choice(self.driver_index)
+        
+        return random.choice(candidates)
+    
+    def get_drivers_by_state(self, state: str) -> List[DriverIndex]:
+        """Get drivers from a specific state."""
+        return [d for d in self.driver_index if d.operating_state == state]
+    
+    def get_drivers_by_app(self, app: str) -> List[DriverIndex]:
+        """Get drivers who use a specific app."""
+        return [d for d in self.driver_index if app in d.active_apps]
+    
+    def get_customers_by_state(self, state: str) -> List[CustomerIndex]:
         """Get customers from a specific state."""
-        return [c for c in self.customer_index if c.estado == estado]
+        return [c for c in self.customer_index if c.state == state]
     
     def get_customers_by_profile(self, profile: str) -> List[CustomerIndex]:
         """Get customers with a specific profile."""
-        return [c for c in self.customer_index if c.perfil == profile]
+        return [c for c in self.customer_index if c.profile == profile]
     
     def clear(self) -> None:
         """Clear all indexes to free memory."""
         self.customer_index.clear()
         self.device_index.clear()
+        self.driver_index.clear()
 
 
 def batch_iterator(
@@ -205,16 +566,150 @@ def estimate_memory_usage(num_customers: int, num_devices_per_customer: float = 
 
 
 class ProgressTracker:
-    """Track progress for long-running operations."""
+    """
+    Track and display progress for batch data generation.
+    Shows percentage, speed, ETA, and output location.
+    """
     
-    def __init__(self, total: int, description: str = "Processing"):
+    def __init__(
+        self,
+        total: int,
+        description: str = "Processing",
+        unit: str = "items",
+        output_path: str = None,
+        show_bar: bool = True,
+    ):
+        """
+        Initialize progress tracker.
+        
+        Args:
+            total: Total number of items to process
+            description: Description of the task
+            unit: Unit name (e.g., "files", "records", "transactions")
+            output_path: Path where data is being saved
+            show_bar: Whether to show the progress bar
+        """
+        import time
         self.total = total
-        self.current = 0
         self.description = description
+        self.unit = unit
+        self.output_path = output_path
+        self.show_bar = show_bar
+        self.current = 0
+        self.start_time = None
+        self._last_print_len = 0
+        self._started = False
+    
+    def start(self):
+        """Start the progress tracker."""
+        import time
+        self.start_time = time.time()
+        self.current = 0
+        self._started = True
+        self._print_header()
+    
+    def _print_header(self):
+        """Print the initial header."""
+        print(f"\n   📊 {self.description}")
+        if self.output_path:
+            print(f"   📂 Salvando em: {self.output_path}")
+        print(f"   🎯 Total: {self.total:,} {self.unit}")
+        print()
     
     def update(self, n: int = 1) -> None:
-        """Update progress by n items."""
+        """
+        Update progress by n items.
+        
+        Args:
+            n: Number of items completed
+        """
+        import time
+        if not self._started:
+            self.start()
         self.current += n
+        if self.show_bar:
+            self._print_progress()
+    
+    def _format_duration(self, seconds: float) -> str:
+        """Format seconds to human-readable duration."""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.1f}m"
+        else:
+            hours = seconds / 3600
+            return f"{hours:.1f}h"
+    
+    def _print_progress(self):
+        """Print current progress with ETA."""
+        import time
+        import sys
+        
+        if self.total == 0:
+            return
+        
+        elapsed = time.time() - self.start_time if self.start_time else 0
+        percentage = (self.current / self.total) * 100
+        
+        # Calculate speed and ETA
+        if elapsed > 0 and self.current > 0:
+            speed = self.current / elapsed
+            remaining = self.total - self.current
+            eta_seconds = remaining / speed if speed > 0 else 0
+            eta_str = self._format_duration(eta_seconds)
+            speed_str = f"{speed:.1f}"
+        else:
+            eta_str = "calculando..."
+            speed_str = "-"
+        
+        # Build progress bar
+        bar_width = 25
+        filled = int(bar_width * self.current / self.total)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        
+        # Build status line
+        status = (
+            f"\r   [{bar}] {percentage:5.1f}% | "
+            f"{self.current:,}/{self.total:,} {self.unit} | "
+            f"⚡ {speed_str}/s | "
+            f"ETA: {eta_str}"
+        )
+        
+        # Clear previous line and print new status
+        padding = " " * max(0, self._last_print_len - len(status))
+        print(status + padding, end='', flush=True)
+        self._last_print_len = len(status)
+    
+    def finish(self, show_summary: bool = True):
+        """
+        Complete the progress and optionally print final summary.
+        
+        Args:
+            show_summary: Whether to print the completion summary
+        """
+        import time
+        
+        if not self._started:
+            return
+        
+        elapsed = time.time() - self.start_time if self.start_time else 0
+        
+        # Move to new line
+        print()
+        
+        if show_summary:
+            # Calculate final stats
+            if elapsed > 0 and self.current > 0:
+                speed = self.current / elapsed
+                speed_str = f"{speed:.1f}"
+            else:
+                speed_str = "-"
+            
+            print(f"   ✅ Concluído: {self.current:,} {self.unit} em {self._format_duration(elapsed)}")
+            print(f"   ⚡ Velocidade média: {speed_str} {self.unit}/s")
+            if self.output_path:
+                print(f"   💾 Dados salvos em: {self.output_path}")
     
     @property
     def progress(self) -> float:
@@ -222,6 +717,25 @@ class ProgressTracker:
         if self.total == 0:
             return 100.0
         return (self.current / self.total) * 100
+    
+    @property
+    def elapsed_time(self) -> float:
+        """Get elapsed time in seconds."""
+        import time
+        if self.start_time is None:
+            return 0.0
+        return time.time() - self.start_time
+    
+    @property
+    def eta(self) -> float:
+        """Get estimated time remaining in seconds."""
+        if self.current == 0 or self.start_time is None:
+            return 0.0
+        import time
+        elapsed = time.time() - self.start_time
+        speed = self.current / elapsed
+        remaining = self.total - self.current
+        return remaining / speed if speed > 0 else 0.0
     
     def __str__(self) -> str:
         return f"{self.description}: {self.current:,}/{self.total:,} ({self.progress:.1f}%)"

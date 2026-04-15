@@ -1,0 +1,76 @@
+# ==============================================================================
+# synthfin-data
+# ==============================================================================
+# Multi-platform Docker image for generating synthetic Brazilian financial data
+# Supports: transactions, customers, rides, devices with fraud patterns
+# ==============================================================================
+FROM python:3.11-slim AS base
+
+# OCI Image Labels (standardized)
+LABEL org.opencontainers.image.title="synthfin-data"
+LABEL org.opencontainers.image.description="Generate synthetic Brazilian financial transaction and rideshare data with configurable fraud patterns"
+LABEL org.opencontainers.image.authors="Abner Fonseca <licensing@synthfin.com.br>"
+LABEL org.opencontainers.image.url="https://github.com/afborda/synthfin-data"
+LABEL org.opencontainers.image.source="https://github.com/afborda/synthfin-data"
+LABEL org.opencontainers.image.documentation="https://github.com/afborda/synthfin-data#readme"
+LABEL org.opencontainers.image.licenses="Custom-Non-Commercial"
+LABEL org.opencontainers.image.vendor="Abner Fonseca"
+
+# Dynamic labels (set during build via --build-arg)
+ARG VERSION=4.18.0
+ARG BUILD_DATE
+ARG VCS_REF
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV FRAUD_GENERATOR_VERSION=${VERSION}
+# Pass FRAUDGEN_VERIFY_KEY at runtime: docker run -e FRAUDGEN_VERIFY_KEY=...
+
+WORKDIR /app
+
+# Install system dependencies (minimal)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+COPY requirements-streaming.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements-streaming.txt
+
+# Copy source code
+COPY src/ ./src/
+COPY generate.py .
+COPY stream.py .
+
+# Create output directory with proper permissions
+RUN mkdir -p /output && chmod 777 /output
+
+# Non-root user for security
+RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app /output
+USER appuser
+
+# Default environment variables
+ENV OUTPUT_DIR=/output
+ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+ENV KAFKA_TOPIC=transactions
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import fraud_generator; print('OK')" || exit 1
+
+# Expose for potential metrics endpoint (future)
+EXPOSE 9400
+
+# Default command shows help
+ENTRYPOINT ["python"]
+CMD ["generate.py", "--help"]
