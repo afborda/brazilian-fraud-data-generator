@@ -14,6 +14,8 @@ from datetime import date, timedelta
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple
 
+from ..utils.weight_cache import WeightCache
+
 
 # ─── Hourly weights — trimodal realista (Brasil 2024, fonte: BCB PIX) ─────────
 # Pico 1 → 10h-11h  (abertura do comércio / inicio de pagamentos)
@@ -293,9 +295,16 @@ def _date_weight(d: date) -> float:
     return DOW_WEIGHTS[d.weekday()] * get_day_multiplier(d) * get_monthly_multiplier(d.month)
 
 
+_HOUR_CACHES: Dict[int, WeightCache] = {}
+
+
 def pick_hour(weights: List[int] = HORA_WEIGHTS_PADRAO) -> int:
     """Sorteia hora do dia usando os pesos fornecidos."""
-    return random.choices(HORA_LIST_PADRAO, weights=weights, k=1)[0]
+    cache = _HOUR_CACHES.get(id(weights))
+    if cache is None:
+        cache = WeightCache(HORA_LIST_PADRAO, weights)
+        _HOUR_CACHES[id(weights)] = cache
+    return cache.sample()
 
 
 # ─── V6-M11: Seasonal fraud type weight boosts ───────────────────────────────

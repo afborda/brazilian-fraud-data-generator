@@ -31,16 +31,18 @@ def generate_random_hash(length: int = 32) -> str:
 def weighted_choice(options: dict) -> str:
     """
     Select from options with weights.
-    
+
     Args:
         options: Dictionary of {option: weight}
-    
+
     Returns:
         Selected option
     """
-    keys = list(options.keys())
-    weights = list(options.values())
-    return random.choices(keys, weights=weights)[0]
+    from .weight_cache import get_weight_cache
+
+    cache_key = id(options)
+    cache = get_weight_cache(f"wc_{cache_key}", list(options.keys()), list(options.values()))
+    return cache.sample()
 
 
 def parse_size(size_str: str) -> int:

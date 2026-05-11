@@ -1,115 +1,136 @@
-# synthfin-data
+# CLAUDE.md
 
-## WHAT — Project Context
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-High-performance synthetic data generator for **Brazilian banking & ride-share fraud detection**. Generates realistic labeled datasets (JSONL, CSV, Parquet, MinIO/S3) at MB–TB scale for ML training, system testing, and fraud research. Current score: 9.70/10 (A+), AUC-ROC 0.9991.
+## Project
 
-## WHAT — Stack
+High-performance synthetic data generator for Brazilian banking & ride-share fraud detection. Generates labeled datasets (JSONL, CSV, Parquet) at MB–TB scale. Published on PyPI as `fraud-generator`. Current metrics: quality 9.70/10 (A+), AUC-ROC 0.9991.
 
-| Layer | Technology |
-|-------|-----------|
-| Language | Python 3.10+ |
-| Data | Faker, pandas, pyarrow, numpy |
-| Streaming | kafka-python, requests (webhook) |
-| Storage | boto3 (MinIO/S3), SQLAlchemy |
-| Testing | pytest (unit + integration) |
-| Deploy | Docker, GitHub Actions |
-
-## WHAT — Project Map
-
-```
-generate.py          # Batch entry point (→ BatchRunner/MinIORunner/SchemaRunner)
-stream.py            # Streaming entry point (→ stdout/kafka/webhook/redis-stream)
-src/fraud_generator/
-├── generators/      # Entity creation (customer → device → transaction/ride)
-├── enrichers/       # Fraud signal pipeline (8 enrichers, 17 signals)
-├── exporters/       # Output formats (Strategy: ExporterProtocol)
-├── connections/     # Stream targets (Strategy: ConnectionProtocol)
-├── config/          # Domain configs (*_LIST + *_WEIGHTS + get_*() pattern)
-├── profiles/        # Behavioral profiles (7 TX types, ride preferences)
-├── models/          # Data classes (Customer, Device, Transaction, Ride)
-├── schema/          # Declarative JSON schema system
-├── validators/      # CPF validation (Brazilian ID)
-├── utils/           # WeightCache, compression, parallel, streaming
-├── cli/             # CLI args, runners, workers (multiprocessing)
-└── licensing/       # Tier validation
-benchmarks/          # Quality (9.70/10), format, streaming, multiprocessing
-tests/               # pytest: unit/ (11 files) + integration/ (2 files)
-schemas/             # JSON schema definitions
-```
-
-## WHY — Key Decisions
-
-- **Entity chain pattern**: Customer → Device → Transaction (never generate TX without parent entities)
-- **Profile stickiness**: Once assigned, a customer's behavioral profile is fixed for all transactions
-- **Fraud injection**: Fraud is field combinations on normal records, NOT separate record types
-- **Config convention**: Every config exports `*_LIST`, `*_WEIGHTS`, `get_*()` — never hardcode values
-- **CPF always valid**: Use `validators/cpf.py` — store as string, validate on generation
-- **Batch ≠ Stream**: Generators initialized in one mode cannot be reused in the other
-- **Random seed order**: Set `random.seed()` early, before any generator construction
-
-## HOW — Commands
+## Commands
 
 ```bash
-# Generate batch
+# Generate batch data
 python generate.py --size 100MB --format jsonl --output ./data --seed 42
 python generate.py --size 1GB --type rides --format parquet --output ./data
 
-# Stream
+# Stream to targets
 python stream.py --target stdout --rate 5
 python stream.py --target kafka --kafka-topic transactions --rate 100
 
-# Validate schema
+# Schema validation
 python check_schema.py output/transactions_00000.jsonl
 
-# Run quality benchmark
+# Quality benchmark (runs ~2min, outputs JSON grades A+→F)
 python benchmarks/data_quality_benchmark.py
 
-# Tests
-pytest tests/ -v
-```
+# ML model training
+python tools/train_ml.py --input ./data/*.jsonl --model-dir ./models
 
-## HOW — Verification
-
-IMPORTANT: Always run after changes:
-```bash
+# Tests (always run after changes)
 pytest tests/ -v --tb=short
+
+# Single test file
+pytest tests/unit/test_output_schema.py -v
+
+# With coverage
+pytest tests/ --cov=src/fraud_generator --cov-report=term-missing
+
+# Lint
+ruff check src/ tests/
+ruff format --check src/ tests/
 ```
 
-## HOW — Configuration
+## Architecture
 
-See `.github/instructions/` for scoped coding rules per domain.
-See `.claude/kb/` for knowledge base (Brazilian banking, synthetic data patterns).
+### Two execution modes
 
-## Scoped Rules
+Both share `--seed`, `--fraud-rate`, `--type`:
 
-| Rule File | Scope | Content |
-|-----------|-------|---------|
-| `generators.md` | `src/**/generators/**` | Entity chain, fraud injection, profiles, WeightCache |
-| `exporters.md` | `src/**/exporters/**` | ExporterProtocol, batching, streaming writes |
-| `config.md` | `src/**/config/**` | *_LIST + *_WEIGHTS + get_*() convention |
-| `testing.md` | `tests/**` | pytest, fixtures, CPF handling, seed management |
-| `cicd.md` | `.github/workflows/**` | Workflows, triggers, secrets, Docker |
-| `performance.md` | `benchmarks/**` | WeightCache, streaming IO, profiling |
-| `documentation.md` | `docs/**` | Governance rules, CHANGELOG, versioning |
+- **Batch** (`generate.py`): Parses args → `BatchRunner` / `MinIORunner` / `SchemaRunner` → Generator pipeline → Exporter → disk/S3
+- **Stream** (`stream.py`): Parses args → creates customer/device pool → `get_connection(target)` → continuous generation loop → network
 
-## Agent Routing
+Generators initialized for one mode cannot be reused in the other.
 
-The **orchestrator** is the default entry point. See `AGENTS.md` for full registry.
+### Entity chain (invariant)
 
-| Keywords | → Agent |
-|----------|---------|
-| fraud, pattern, enricher, PIX, risk | fraud-pattern-engineer |
-| quality, benchmark, AUC-ROC, distribution | data-quality-analyst |
-| explore, architecture, impact, health | synthfin-explorer |
-| test, pytest, coverage, fixture | test-generator |
-| workflow, CI/CD, pipeline, lint, gate | ci-cd-specialist |
-| slow, memory, OOM, optimize, profile | performance-optimizer |
-| config, bank, merchant, *_LIST, weight | config-architect |
-| changelog, version, bump, docs, INDEX | documentation-keeper |
+Customer → Device → Transaction/Ride. Never generate transactions without parent entities. Indexes are built BEFORE generation: `CustomerIndex`, `DeviceIndex`, `DriverIndex`.
 
-## Active Work
+### Enricher pipeline — 8 stages, order matters
 
-- P1: Evolving fraud patterns (enricher pipeline approach, 25 banking + 11 ride-share)
-- P3: CSV/Parquet streaming export (OOM on >1GB needs fix)
-- Agent architecture: 9 dual-platform agents (VS Code + Claude Code) with orchestrator
+Defined in `enrichers/pipeline_factory.py`. Each enricher implements `EnricherProtocol.enrich(tx, bag)` — mutates `tx` dict in-place.
+
+```
+1. TemporalEnricher    — unusual_time flag (must run before Fraud)
+2. GeoEnricher         — lat/lon from IBGE (must run before Fraud)
+3. FraudEnricher       — pattern injection, velocity, dest_account_age
+4. PIXEnricher         — BACEN pacs.008 fields (needs channel from Fraud)
+5. DeviceEnricher      — emulator, VPN, rooted signals
+6. SessionEnricher     — velocity windows 1h/6h/24h/7d (needs device_id)
+7. RiskEnricher        — aggregates 17 signals into fraud_risk_score [0-100]
+8. BiometricEnricher   — typing speed, touch pressure (Pro+ gated)
+```
+
+The ordering has data dependencies — don't reorder without understanding why each position exists.
+
+`GeneratorBag` carries shared state (caches, profile, fraud info) through the pipeline.
+
+### Strategy patterns
+
+- **Exporters** (`exporters/__init__.py`): Registry `EXPORTERS` maps format names → classes implementing `ExporterProtocol`. Use `get_exporter(format_name)`. Conditional: Parquet/Arrow/DB only if deps available.
+- **Connections** (`connections/__init__.py`): Registry `CONNECTIONS` maps target names → classes implementing `ConnectionProtocol`. Use `get_connection(target)`.
+
+### Config convention (enforced in all 14 config modules)
+
+Every config module in `config/` exports: `THING_LIST`, `THING_WEIGHTS`, `get_thing()`. Never hardcode domain values in generators — always go through config. Weights must be proportional and close to sum ≈ 1.0. Mismatched list/weights lengths crash at runtime.
+
+### Fraud patterns
+
+25 banking + 11 ride-share patterns in `config/fraud_patterns.py`. Each has `characteristics` dict (anomaly levels, velocity, channel/type preferences, amount multiplier), `prevalence` weight, and `fraud_score_base`. Fraud injection works by: normal TX → `random() < fraud_rate` → select pattern by prevalence weights → apply characteristic overrides → run enricher pipeline.
+
+### Risk scoring — 17 signals
+
+`generators/score.py` computes `fraud_risk_score` [0-100] by summing weighted boolean signals (emulator=35, rooted=30, ATO triad=25, etc.) plus 4 correlation rules. The score must remain meaningful after optimization — guard with AUC-ROC ≥ 0.9991.
+
+### ML quality validation
+
+`ml/` module: extracts 31 features → trains LightGBM binary + multilabel models → evaluates AUC-ROC/AUC-PR. Used by `benchmarks/data_quality_benchmark.py` which scores 9 quality dimensions and assigns letter grades. The quality pipeline is optional (graceful degradation if LightGBM unavailable).
+
+### Profile stickiness
+
+Once a customer is assigned a behavioral profile, it's fixed across all their transactions. Use `get_*_for_profile()` functions, never reassign.
+
+## Testing
+
+- **Fixtures** (in `conftest.py`): `temp_output_dir`, `test_seed` (42), `small_batch_size` (100), `sample_customer_data`, `sample_transaction_data`, `sample_ride_data`
+- **Seed**: Always `random.seed(42)` BEFORE generator construction
+- **CPF**: Never mock — use `generate_valid_cpf()` from `validators/cpf.py`
+- **Naming**: `test_{behavior}_when_{condition}`
+- **Unit tests** (9 files): enricher pipeline, scoring, session context, fraud patterns, correlations, compression, optimizations, output schema
+- **Integration tests** (2 files): full batch workflow, compression+streaming end-to-end
+- Run `pytest tests/unit/test_output_schema.py -v` after any config weight changes
+
+## Versioning
+
+Three files must stay in sync (atomic updates): `VERSION`, `pyproject.toml [project.version]`, `docs/CHANGELOG.md`. The `__init__.py` version may lag — canonical version is `VERSION` file.
+
+## Documentation governance
+
+- CHANGELOG mandatory for every behavioral change (Portuguese, `## v{X.Y} — {Name} ({date})` format)
+- Check `docs/INDEX.md` before creating new docs — no duplicates
+- Planning docs are ephemeral: deliver → CHANGELOG → delete → update INDEX
+- Permanent docs (never delete): CHANGELOG.md, INDEX.md, ARCHITECTURE.md, README.md
+
+## Performance
+
+- Use `WeightCache` for repeated `random.choices()` — init in `__init__`, prefer `choose_batch(n)`
+- Never accumulate full dataset in memory — stream via `export_batch()`
+- Known P3: CSV/Parquet OOM on >1GB (streaming rewrite needed)
+- Always benchmark before/after: `python benchmarks/data_quality_benchmark.py`
+
+## Scoped rules
+
+Detailed per-domain rules in `.github/instructions/` are loaded by IDE agents when editing scoped paths. Key files: `generators.md`, `exporters.md`, `config.md`, `testing.md`, `cicd.md`, `performance.md`, `documentation.md`.
+
+## Agent routing
+
+See `AGENTS.md` for the full 9-agent registry. Keywords route to specialists (fraud patterns, quality analysis, testing, CI/CD, performance, config, documentation).

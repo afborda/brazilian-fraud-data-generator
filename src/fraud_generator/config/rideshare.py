@@ -6,6 +6,8 @@ Contains apps, POIs, vehicles, rates, and fraud types for ride-sharing services.
 import random
 from typing import Dict, List, Any, Optional
 
+from ..utils.weight_cache import WeightCache
+
 # =============================================================================
 # RIDESHARE APPS
 # =============================================================================
@@ -286,6 +288,12 @@ PAYMENT_METHODS = {
 PAYMENT_METHODS_LIST = list(PAYMENT_METHODS.keys())
 PAYMENT_METHODS_WEIGHTS = list(PAYMENT_METHODS.values())
 
+# Pre-computed weighted samplers (bisect-based, O(log n) per call)
+_app_sampler = WeightCache(APPS_LIST, APPS_WEIGHTS)
+_payment_sampler = WeightCache(PAYMENT_METHODS_LIST, PAYMENT_METHODS_WEIGHTS)
+_fraud_type_sampler = WeightCache(FRAUD_TYPES_LIST, FRAUD_TYPES_WEIGHTS)
+_final_status_sampler = WeightCache(FINAL_STATUS_LIST, FINAL_STATUS_WEIGHTS)
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -397,7 +405,7 @@ def get_random_cancellation_reason(cancelled_by: str) -> str:
 
 def get_random_app() -> str:
     """Get a random rideshare app weighted by popularity."""
-    return random.choices(APPS_LIST, weights=APPS_WEIGHTS, k=1)[0]
+    return _app_sampler.sample()
 
 
 def get_random_category_for_app(app: str) -> str:
@@ -408,17 +416,17 @@ def get_random_category_for_app(app: str) -> str:
 
 def get_random_payment_method() -> str:
     """Get a random payment method weighted by popularity."""
-    return random.choices(PAYMENT_METHODS_LIST, weights=PAYMENT_METHODS_WEIGHTS, k=1)[0]
+    return _payment_sampler.sample()
 
 
 def get_random_fraud_type() -> str:
     """Get a random fraud type weighted by occurrence."""
-    return random.choices(FRAUD_TYPES_LIST, weights=FRAUD_TYPES_WEIGHTS, k=1)[0]
+    return _fraud_type_sampler.sample()
 
 
 def get_random_final_status() -> str:
     """Get a random final ride status weighted by occurrence."""
-    return random.choices(FINAL_STATUS_LIST, weights=FINAL_STATUS_WEIGHTS, k=1)[0]
+    return _final_status_sampler.sample()
 
 
 def get_available_states() -> List[str]:
