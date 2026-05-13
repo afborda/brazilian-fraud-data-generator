@@ -1,9 +1,29 @@
 """
 Redis cache utilities for generator state.
+
+Uses msgpack for serialization — safe against arbitrary code execution
+(unlike unsafe alternatives that can be exploited if Redis is compromised).
 """
 
 from typing import Optional, Tuple, List, Any
-import pickle
+
+try:
+    import msgpack
+    _HAS_MSGPACK = True
+except ImportError:
+    _HAS_MSGPACK = False
+
+
+def _serialize(obj: Any) -> bytes:
+    if not _HAS_MSGPACK:
+        raise ImportError("msgpack is required for Redis caching: pip install msgpack")
+    return msgpack.packb(obj, use_bin_type=True)
+
+
+def _deserialize(data: bytes) -> Any:
+    if not _HAS_MSGPACK:
+        raise ImportError("msgpack is required for Redis caching: pip install msgpack")
+    return msgpack.unpackb(data, raw=False)
 
 
 def is_redis_available() -> bool:
@@ -48,12 +68,12 @@ def load_cached_indexes(
     if customers is None or devices is None:
         return None, None, None, None, None, None
 
-    customer_indexes = pickle.loads(customers)
-    device_indexes = pickle.loads(devices)
-    customer_data = pickle.loads(customers_data) if customers_data is not None else None
-    device_data = pickle.loads(devices_data) if devices_data is not None else None
-    driver_indexes = pickle.loads(drivers) if drivers is not None else None
-    driver_data = pickle.loads(drivers_data) if drivers_data is not None else None
+    customer_indexes = _deserialize(customers)
+    device_indexes = _deserialize(devices)
+    customer_data = _deserialize(customers_data) if customers_data is not None else None
+    device_data = _deserialize(devices_data) if devices_data is not None else None
+    driver_indexes = _deserialize(drivers) if drivers is not None else None
+    driver_data = _deserialize(drivers_data) if drivers_data is not None else None
 
     return customer_indexes, device_indexes, customer_data, device_data, driver_indexes, driver_data
 
@@ -72,20 +92,20 @@ def save_cached_indexes(
     """Save customer/device/driver indexes to Redis."""
     customer_key = _get_key(prefix, "customers")
     device_key = _get_key(prefix, "devices")
-    client.set(customer_key, pickle.dumps(customer_indexes))
-    client.set(device_key, pickle.dumps(device_indexes))
+    client.set(customer_key, _serialize(customer_indexes))
+    client.set(device_key, _serialize(device_indexes))
 
     if customer_data is not None:
-        client.set(_get_key(prefix, "customers_data"), pickle.dumps(customer_data))
+        client.set(_get_key(prefix, "customers_data"), _serialize(customer_data))
     if device_data is not None:
-        client.set(_get_key(prefix, "devices_data"), pickle.dumps(device_data))
+        client.set(_get_key(prefix, "devices_data"), _serialize(device_data))
 
     if driver_indexes is not None:
         driver_key = _get_key(prefix, "drivers")
-        client.set(driver_key, pickle.dumps(driver_indexes))
+        client.set(driver_key, _serialize(driver_indexes))
     if driver_data is not None:
         driver_data_key = _get_key(prefix, "drivers_data")
-        client.set(driver_data_key, pickle.dumps(driver_data))
+        client.set(driver_data_key, _serialize(driver_data))
 
     if ttl_seconds:
         client.expire(customer_key, ttl_seconds)

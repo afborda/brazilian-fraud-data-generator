@@ -13,6 +13,7 @@ python-snappy>=0.6.1
 
 # Phase 2.8: Redis cache (optional)
 redis>=5.0.0
+msgpack>=1.0.0
 
 # Phase 2.9: Database exports (SQLAlchemy)
 SQLAlchemy>=2.0.0

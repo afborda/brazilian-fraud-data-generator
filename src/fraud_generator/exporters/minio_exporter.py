@@ -184,8 +184,13 @@ class MinIOExporter(ExporterProtocol):
         # OTIMIZAÇÃO 2.1: Initialize compression handler for JSONL
         self._compressor = CompressionHandler(jsonl_compress, verbose=False) if jsonl_compress != 'none' else None
         self.endpoint_url = endpoint_url or os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
-        self.access_key = access_key or os.getenv("MINIO_ROOT_USER") or os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-        self.secret_key = secret_key or os.getenv("MINIO_ROOT_PASSWORD") or os.getenv("MINIO_SECRET_KEY", "minioadmin")
+        self.access_key = access_key or os.getenv("MINIO_ROOT_USER") or os.getenv("MINIO_ACCESS_KEY", "")
+        self.secret_key = secret_key or os.getenv("MINIO_ROOT_PASSWORD") or os.getenv("MINIO_SECRET_KEY", "")
+        if not self.access_key or not self.secret_key:
+            raise EnvironmentError(
+                "MinIO credentials required. Set MINIO_ACCESS_KEY and MINIO_SECRET_KEY "
+                "environment variables, or pass access_key/secret_key parameters."
+            )
         self.bucket = bucket
         self.prefix = prefix.strip('/')
         self.partition_by_date = partition_by_date

@@ -96,6 +96,11 @@ class TestSkipNone(unittest.TestCase):
 class TestMinIOGzip(unittest.TestCase):
     """Test MinIO gzip compression (1.7)."""
 
+    def setUp(self):
+        import os
+        os.environ.setdefault("MINIO_ACCESS_KEY", "testkey")
+        os.environ.setdefault("MINIO_SECRET_KEY", "testsecret")
+
     def test_gzip_extension(self):
         """Test gzip sets .jsonl.gz extension."""
         exporter = MinIOExporter(bucket='test', jsonl_compress='gzip')
