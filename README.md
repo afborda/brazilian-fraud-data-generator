@@ -1,6 +1,10 @@
 # synthfin-data
 
 <p align="center">
+  <img src="docs/assets/synthfin-logo.png" alt="SynthFin" width="180">
+</p>
+
+<p align="center">
   <img src="docs/assets/Hero%20do%20README.png" alt="synthfin-data — synthetic fraud data for Brazilian banking, PIX, ride-share, fraud signals and exports." width="100%" />
 </p>
 
