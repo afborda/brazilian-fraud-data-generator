@@ -1,0 +1,200 @@
+{
+  "binary": {
+    "model_path": "models/final/fraud_detector_v4.pkl",
+    "n_total": 268435,
+    "n_fraud": 14731,
+    "n_legit": 253704,
+    "fraud_rate": 0.0549,
+    "auc_roc": 1.0,
+    "auc_pr": 1.0,
+    "feature_importance": {
+      "velocity_transactions_24h": 0.1317,
+      "accumulated_amount_24h": 0.1034,
+      "fraud_score": 0.0997,
+      "amount": 0.097,
+      "bot_confidence_score": 0.0882,
+      "device_age_days": 0.0803,
+      "velocity_transactions_1h": 0.072,
+      "fraud_risk_score": 0.0634,
+      "dest_account_age_days": 0.053,
+      "accumulated_amount_7d": 0.0499,
+      "unusual_time": 0.0377,
+      "hours_inactive": 0.0312,
+      "new_beneficiary": 0.0252,
+      "velocity_transactions_30d": 0.0176,
+      "velocity_transactions_6h": 0.0167,
+      "velocity_transactions_7d": 0.0137,
+      "ip_type_ord": 0.0129,
+      "sim_swap_recent": 0.0064,
+      "is_emulator": 0.0,
+      "rooted_or_jailbreak": 0.0,
+      "is_vpn": 0.0,
+      "active_call": 0.0,
+      "nav_anomaly": 0.0,
+      "multiple_accounts": 0.0,
+      "new_device": 0.0,
+      "ip_mismatch": 0.0,
+      "notification_ignored": 0.0,
+      "touch_pressure": 0.0,
+      "typing_interval_ms": 0.0,
+      "session_duration_s": 0.0,
+      "confirm_latency_s": 0.0
+    }
+  },
+  "multilabel": {
+    "per_type": {
+      "BOLETO_FALSO": {
+        "skipped": false,
+        "n_examples": 615,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_BOLETO_FALSO_v4.pkl"
+      },
+      "CARD_TESTING": {
+        "skipped": false,
+        "n_examples": 568,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_CARD_TESTING_v4.pkl"
+      },
+      "CARTAO_CLONADO": {
+        "skipped": false,
+        "n_examples": 1197,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_CARTAO_CLONADO_v4.pkl"
+      },
+      "COMPRA_TESTE": {
+        "skipped": false,
+        "n_examples": 632,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_COMPRA_TESTE_v4.pkl"
+      },
+      "CONTA_TOMADA": {
+        "skipped": false,
+        "n_examples": 1175,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_CONTA_TOMADA_v4.pkl"
+      },
+      "CREDENTIAL_STUFFING": {
+        "skipped": false,
+        "n_examples": 243,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_CREDENTIAL_STUFFING_v4.pkl"
+      },
+      "DEEP_FAKE_BIOMETRIA": {
+        "skipped": false,
+        "n_examples": 182,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_DEEP_FAKE_BIOMETRIA_v4.pkl"
+      },
+      "DISTRIBUTED_VELOCITY": {
+        "skipped": false,
+        "n_examples": 292,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_DISTRIBUTED_VELOCITY_v4.pkl"
+      },
+      "EMPRESTIMO_FRAUDULENTO": {
+        "skipped": false,
+        "n_examples": 241,
+        "auc_roc": 0.8755,
+        "model_path": "models/final/fraud_type_EMPRESTIMO_FRAUDULENTO_v4.pkl"
+      },
+      "ENGENHARIA_SOCIAL": {
+        "skipped": false,
+        "n_examples": 2220,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_ENGENHARIA_SOCIAL_v4.pkl"
+      },
+      "FALSA_CENTRAL_TELEFONICA": {
+        "skipped": false,
+        "n_examples": 746,
+        "auc_roc": 0.9619,
+        "model_path": "models/final/fraud_type_FALSA_CENTRAL_TELEFONICA_v4.pkl"
+      },
+      "FRAUDE_APLICATIVO": {
+        "skipped": false,
+        "n_examples": 1007,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_FRAUDE_APLICATIVO_v4.pkl"
+      },
+      "FRAUDE_DELIVERY_APP": {
+        "skipped": false,
+        "n_examples": 272,
+        "auc_roc": 0.9186,
+        "model_path": "models/final/fraud_type_FRAUDE_DELIVERY_APP_v4.pkl"
+      },
+      "FRAUDE_QR_CODE": {
+        "skipped": false,
+        "n_examples": 305,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_FRAUDE_QR_CODE_v4.pkl"
+      },
+      "GOLPE_INVESTIMENTO": {
+        "skipped": false,
+        "n_examples": 267,
+        "auc_roc": 0.9473,
+        "model_path": "models/final/fraud_type_GOLPE_INVESTIMENTO_v4.pkl"
+      },
+      "MAO_FANTASMA": {
+        "skipped": false,
+        "n_examples": 294,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_MAO_FANTASMA_v4.pkl"
+      },
+      "MICRO_BURST_VELOCITY": {
+        "skipped": false,
+        "n_examples": 393,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_MICRO_BURST_VELOCITY_v4.pkl"
+      },
+      "MULA_FINANCEIRA": {
+        "skipped": false,
+        "n_examples": 477,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_MULA_FINANCEIRA_v4.pkl"
+      },
+      "PHISHING_BANCARIO": {
+        "skipped": false,
+        "n_examples": 399,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_PHISHING_BANCARIO_v4.pkl"
+      },
+      "PIX_AGENDADO_FRAUDE": {
+        "skipped": false,
+        "n_examples": 252,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_PIX_AGENDADO_FRAUDE_v4.pkl"
+      },
+      "PIX_GOLPE": {
+        "skipped": false,
+        "n_examples": 1978,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_PIX_GOLPE_v4.pkl"
+      },
+      "SEQUESTRO_RELAMPAGO": {
+        "skipped": false,
+        "n_examples": 238,
+        "auc_roc": 0.8712,
+        "model_path": "models/final/fraud_type_SEQUESTRO_RELAMPAGO_v4.pkl"
+      },
+      "SIM_SWAP": {
+        "skipped": false,
+        "n_examples": 202,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_SIM_SWAP_v4.pkl"
+      },
+      "SYNTHETIC_IDENTITY": {
+        "skipped": false,
+        "n_examples": 137,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_SYNTHETIC_IDENTITY_v4.pkl"
+      },
+      "WHATSAPP_CLONE": {
+        "skipped": false,
+        "n_examples": 399,
+        "auc_roc": 1.0,
+        "model_path": "models/final/fraud_type_WHATSAPP_CLONE_v4.pkl"
+      }
+    },
+    "trained_count": 25,
+    "skipped_count": 0
+  }
+}

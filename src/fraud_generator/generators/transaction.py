@@ -419,6 +419,11 @@ class TransactionGenerator:
         for enricher in self._pipeline:
             enricher.enrich(tx, bag)
 
+        # Escreve o veredito de fraude no tx — o bag carrega esses valores
+        # internamente mas nenhum enricher os propaga para o dict de saída.
+        tx["is_fraud"] = bag.is_fraud
+        tx["fraud_type"] = bag.fraud_type
+
         return tx
 
     def generate(
