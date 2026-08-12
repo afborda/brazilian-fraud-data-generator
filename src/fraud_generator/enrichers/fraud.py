@@ -8,7 +8,7 @@ Only runs when bag.is_fraud is True and bag.fraud_type is set.
 import random
 import hashlib as _hl
 import uuid as _uuid
-from datetime import timedelta as _td
+from datetime import datetime as _dt, timedelta as _td
 from typing import Any, Dict, Optional
 
 from .base import EnricherProtocol, GeneratorBag, is_plan
@@ -177,6 +177,67 @@ def _get_bot_signature(fraud_type: str, buf) -> tuple:
 # velocity their session actually produced ("low and slow" fraud).
 _LOW_AND_SLOW_SHARE = 0.32
 
+# Share of legitimate records generated as decoys — see _apply_decoy_profile.
+# Sized so decoys outnumber real fraud roughly 2:1, which is the regime a
+# production antifraud team actually works in: most alerts are false.
+_DECOY_SHARE = 0.032
+
+
+def _apply_decoy_profile(tx: Dict[str, Any]) -> None:
+    """Give a legitimate record several suspicious traits at once.
+
+    Each decoy picks a random subset of the fraud silhouette rather than the
+    whole thing, so decoys do not become their own separable cluster. The
+    record stays is_fraud=False and carries no fraud_type: ground truth is
+    unaffected, only the difficulty is.
+
+    Values are written directly; every downstream enricher fills these fields
+    with `setdefault` / `is None` guards, so the decoy's choices survive.
+    """
+    traits = [
+        # Recently acquired device — someone who just replaced their phone.
+        lambda: tx.__setitem__("device_age_days", lognormal_days(median=25, sigma=0.9, hi=2555)),
+        # Paying a counterparty whose account is new — a freshly-opened digital
+        # account or a supplier that just migrated banks.
+        lambda: tx.__setitem__("dest_account_age_days", lognormal_days(median=20, sigma=0.9, hi=7300)),
+        lambda: tx.__setitem__("destination_account_age_days", lognormal_days(median=25, sigma=1.0, hi=7300)),
+        # A newly registered company (Brazil opens MEIs by the million).
+        lambda: tx.__setitem__("destination_company_age_days", lognormal_days(median=50, sigma=0.9, hi=14600)),
+        # Detector noise: accessibility tooling, corporate RPA, a rushed user.
+        lambda: tx.__setitem__("bot_confidence_score", round(beta_score(3.0, 3.5), 3)),
+        # First payment to this counterparty.
+        lambda: tx.__setitem__("new_beneficiary", True),
+        # Late-night activity: shift workers, insomniacs, other time zones.
+        lambda: _shift_to_night(tx),
+        # A burst: paying several suppliers, splitting a bill, month-end runs.
+        lambda: tx.__setitem__("velocity_transactions_24h", random.randint(9, 26)),
+    ]
+    # Between three and six traits — enough to look alarming, varied enough
+    # that "decoy" is not itself a pattern.
+    for trait in random.sample(traits, random.randint(3, min(6, len(traits)))):
+        trait()
+
+
+def _shift_to_night(tx: Dict[str, Any]) -> None:
+    """Move a record into the small hours and keep unusual_time consistent.
+
+    TemporalEnricher runs before this one, so the flag it already wrote has to
+    be corrected rather than left stale.
+    """
+    ts = tx.get("timestamp")
+    hour = random.choice([0, 1, 2, 3, 4, 23])
+    if isinstance(ts, str):
+        try:
+            parsed = _dt.fromisoformat(ts)
+            tx["timestamp"] = parsed.replace(hour=hour).isoformat()
+        except ValueError:
+            return
+    elif hasattr(ts, "replace"):
+        tx["timestamp"] = ts.replace(hour=hour)
+    else:
+        return
+    tx["unusual_time"] = hour < 6 or hour >= 22
+
 
 # ── Two-class samplers with overlap ──────────────────────────────────────────
 # Every function below is called for BOTH classes. See utils/overlap.py for why
@@ -299,6 +360,20 @@ class FraudEnricher:
 
     def enrich(self, tx: Dict[str, Any], bag: GeneratorBag) -> None:
         if not bag.is_fraud or not bag.fraud_type:
+            # Decoy: a legitimate record carrying the whole fraud silhouette.
+            #
+            # Contaminating each field independently is not enough — a model can
+            # still separate on the *combination*, because no legitimate record
+            # ever shows several suspicious values at once. Real traffic does:
+            # someone travelling, on a phone bought that week, paying a new
+            # supplier at 1am, from an account opened last month.
+            #
+            # Decoys are labelled is_fraud=False and never appear in
+            # fraud_type/fraud_labels, so ground truth stays exact.
+            is_decoy = random.random() < _DECOY_SHARE
+            if is_decoy:
+                _apply_decoy_profile(tx)
+
             # Legitimate verification transfers. Sending R$0.01-5.00 to check a
             # PIX key before the real payment is routine in Brazil, and a
             # legitimate merchant refund can be tiny too. Without them the

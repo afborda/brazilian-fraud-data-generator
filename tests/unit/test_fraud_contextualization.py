@@ -131,8 +131,11 @@ class TestFraudContextualization:
     def test_pix_golpe_pattern(self, generator):
         """Test PIX_GOLPE pattern characteristics."""
         pix_golpe_txs = []
-        
-        for i in range(100):
+
+        # 600 draws so the PIX_GOLPE subset is large enough to estimate a rate.
+        # With ~11 samples even a true rate of 0.82 lands on 1.00 often enough
+        # to make the assertion below flaky.
+        for i in range(600):
             tx = generator.generate(
                 tx_id=str(i),
                 customer_id=f"CUST_{i:012d}",

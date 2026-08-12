@@ -7,7 +7,11 @@ References:
 - IF.data — Participantes do PIX (BACEN open data)
 """
 
+import hashlib
+import random
 from typing import Optional
+
+from ..validators.cpf import generate_valid_cpf
 
 # ── Modalidade de iniciação ────────────────────────────────────────────────────
 
@@ -126,3 +130,42 @@ def generate_end_to_end_id(ispb_pagador: str, timestamp_str: str, sequence: str)
     ts_clean = timestamp_str[:14]
     seq_clean = sequence[:10].upper()
     return f"E{ispb_clean}{ts_clean}{seq_clean}"
+
+
+# ── Counterparty pool ────────────────────────────────────────────────────────
+# Each PIX used to hash a freshly generated CPF, so 119,182 legitimate PIX
+# produced 119,179 distinct recipients: the maximum frequency was 2, and that
+# was a birthday collision. Two consequences:
+#
+#   * `new_beneficiary` sat at 97.4% of legitimate traffic, because the
+#     counterparty was in fact always new; and
+#   * every graph feature (degree, PageRank, community, recurrence) was
+#     constant or noise, since the transaction graph had no repeated edge.
+#
+# Real P2P PIX concentrates on a small, stable set — family, rent, the school,
+# the same corner shop — with a long tail beyond it. The pool is derived from
+# the customer id, so it needs no extra state and stays stable across batches
+# and workers.
+_POOL_SIZE = 14
+
+# Zipf-like weights: the top counterparty takes far more volume than the 14th.
+_POOL_WEIGHTS = [1.0 / (i + 1) ** 1.1 for i in range(_POOL_SIZE)]
+
+# Share of transfers that go outside the pool entirely (a one-off purchase, a
+# new landlord, a marketplace seller).
+_ONE_OFF_SHARE = 0.18
+
+
+def counterparty_hash(customer_id: str, is_fraud: bool) -> str:
+    """Hash of the recipient CPF, drawn from this customer's counterparty pool.
+
+    Fraud mostly pays someone the customer has never paid before, which is a
+    genuine signal — but it must be a tendency, not a certainty: an invoice
+    scam redirects a payment the victim makes every month, landing on a
+    familiar counterparty.
+    """
+    one_off = _ONE_OFF_SHARE if not is_fraud else 0.80
+    if random.random() < one_off:
+        return hashlib.sha256(generate_valid_cpf().encode()).hexdigest()
+    idx = random.choices(range(_POOL_SIZE), weights=_POOL_WEIGHTS, k=1)[0]
+    return hashlib.sha256(f"{customer_id}|counterparty|{idx}".encode()).hexdigest()

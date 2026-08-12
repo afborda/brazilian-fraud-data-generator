@@ -66,6 +66,7 @@ from ..config.pix import (
     HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS,
     ISPB_LIST,
     generate_end_to_end_id,
+    counterparty_hash,
     MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS,
 )
 from ..validators.cpf import generate_valid_cpf
@@ -83,6 +84,12 @@ _PROFILE_CLASSE = {
     'falsa_central_victim': 'D',
     'malware_ats_victim':  'C1',
 }
+
+# Probability that a fraud type flagged as "new beneficiary" actually pays a
+# counterparty the customer has never paid. Kept below 1.0 so the field stays a
+# signal rather than a label.
+_FRAUD_NEW_BENEFICIARY_PROB = 0.82
+
 
 def _profile_to_classe_social(profile: Optional[str]) -> Optional[str]:
     return _PROFILE_CLASSE.get(profile) if profile else None
@@ -403,7 +410,7 @@ class TransactionGenerator:
         }
 
         # ── Type-specific fields (card / PIX / other) ─────────────────────
-        self._add_type_specific_fields(tx, tx_type, banco_destino, customer_id, customer_cpf)
+        self._add_type_specific_fields(tx, tx_type, banco_destino, customer_id, customer_cpf, is_fraud)
 
         # ── Run enricher pipeline ─────────────────────────────────────────
         bag = self._build_bag(
@@ -573,7 +580,7 @@ class TransactionGenerator:
         }
         
         # Add type-specific fields (uses pre-computed buffers)
-        self._add_type_specific_fields(tx, tx_type, banco_destino, customer_id, customer_cpf)
+        self._add_type_specific_fields(tx, tx_type, banco_destino, customer_id, customer_cpf, is_fraud)
         
         # OTIMIZAÇÃO 2: Apply fraud pattern characteristics if fraud
         if is_fraud and fraud_type:
@@ -762,6 +769,7 @@ class TransactionGenerator:
         banco_destino: str,
         customer_id: str = '',
         customer_cpf: Optional[str] = None,
+        is_fraud: bool = False,
     ) -> None:
         """Add transaction type-specific fields."""
         if tx_type in ['CREDIT_CARD', 'DEBIT_CARD']:
@@ -823,9 +831,11 @@ class TransactionGenerator:
                 'cpf_hash_pagador': hashlib.sha256(
                     (customer_cpf or customer_id).encode()
                 ).hexdigest(),
-                'cpf_hash_recebedor': hashlib.sha256(
-                    generate_valid_cpf().encode()
-                ).hexdigest(),
+                # Drawn from this customer's counterparty pool rather than a
+                # fresh CPF per transaction — see enrichers/pix.py. A brand new
+                # recipient every time left the transaction graph with no
+                # repeated edge at all and pinned new_beneficiary near 100%.
+                'cpf_hash_recebedor': counterparty_hash(customer_id, is_fraud),
                 # TPRD3: pacs.008 status and MED devolution fields
                 'pacs_status': self._buf.next_weighted(
                     'pacs_status', ['ACSC', 'RJCT', 'PDNG'], [92, 6, 2]
@@ -918,9 +928,14 @@ class TransactionGenerator:
             new_amount = profile_avg * mult
             tx['amount'] = round(new_amount, 2)
         
-        # NEW BENEFICIARY: Always for certain fraud types
+        # NEW BENEFICIARY: a strong tendency, never a certainty.
+        #
+        # This used to be an unconditional True for the flagged fraud types,
+        # which made `new_beneficiary` a perfect marker for them. Invoice
+        # redirection and account-takeover scams routinely reuse a counterparty
+        # the victim already pays — that is precisely what makes them hard.
         if characteristics.get('new_beneficiary', False):
-            tx['new_beneficiary'] = True
+            tx['new_beneficiary'] = random.random() < _FRAUD_NEW_BENEFICIARY_PROB
             # Different destination bank for transfers
             if tx.get('destination_bank'):
                 tx['destination_bank'] = self._bank_cache.sample()
@@ -1083,7 +1098,9 @@ class TransactionGenerator:
             tx['beneficiary_cpf_hash'] = _hl.sha256(
                 f"BENE_{tx.get('customer_id', '')}_{beneficiary_idx}".encode()
             ).hexdigest()
-            tx['new_beneficiary'] = True
+            # A *fixed* beneficiary is new only the first time it is used, so
+            # forcing True here contradicted the pattern being modelled.
+            tx['new_beneficiary'] = random.random() < 0.35
         else:
             tx.setdefault('beneficiary_cpf_hash', None)
 

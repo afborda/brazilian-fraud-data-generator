@@ -98,9 +98,35 @@ caiu de 0.999990 para 0.9855, contra um alvo de 0.75–0.95.
   sorte); `test_engenharia_social_pattern` punha teto rígido de R$50k sobre uma
   cauda log-normal.
 
+### Decoys e grafo de contrapartes
+
+- **`enrichers/fraud.py`** — `_apply_decoy_profile()`: 3,2% dos registros legítimos
+  recebem de 3 a 6 traços da silhueta de fraude ao mesmo tempo (aparelho novo,
+  conta de destino recente, madrugada, beneficiário novo, rajada de velocity),
+  com `is_fraud=False` e sem `fraud_type`. Contaminar campo a campo não bastava:
+  o modelo ainda separava pela *combinação*, porque nenhum legítimo exibia vários
+  sinais suspeitos juntos. Derrubou a AUC de 0.9855 para 0.9791 e eliminou
+  `fraud_risk_score > 93` e `bot_confidence_score > 0.85` da lista de separadores
+  perfeitos.
+- **`config/pix.py`** — `counterparty_hash()`: pool de ~14 contrapartes por
+  cliente com pesos Zipf, derivado do `customer_id` (sem estado extra, estável
+  entre workers). Antes, 119.182 PIX legítimos geravam 119.179 recebedores
+  distintos — frequência máxima 2, que era colisão de aniversário. Agora são
+  28.657 distintos com frequência máxima 391, e as top-5 contrapartes de um
+  cliente concentram ~60% do volume.
+- **`generators/transaction.py`** — `new_beneficiary` deixa de ser `True`
+  incondicional para os tipos marcados (o comentário dizia "Always for certain
+  fraud types"). Golpe de boleto e ATO reaproveitam contraparte que a vítima já
+  paga — é justamente isso que os torna difíceis.
+
 ### Pendente
 
-- AUC multivariada em 0.9855 — alvo 0.75–0.95.
+- AUC multivariada em 0.9820 — alvo 0.75–0.95.
+- **Catálogo de merchants não feito** — `merchant_id` continua sendo token
+  aleatório por transação para o tráfego não-PIX, o que mantém
+  `new_beneficiary` em 85% no legítimo (real 5–15%).
+- `recipient_is_mule` e `is_impossible_travel` são sinais declarados que nunca
+  disparam (o portão de CI reprova por isso).
 - `fraud_score > 94` e `fraud_risk_score > 93` ainda separam com precisão 100%
   (fora do feature set de ML, mas exportados ao cliente).
 - Campos-marcador remanescentes: `motivo_devolucao_med`, `card_test_phase`,
