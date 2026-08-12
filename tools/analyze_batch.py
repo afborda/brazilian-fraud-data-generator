@@ -885,6 +885,19 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--sample", type=int, default=None)
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="Modo CI: sai com código 1 se houver gap de severidade high ou "
+        "se alguma AUC passar de --max-auc. Sem esta flag o comando sempre sai 0.",
+    )
+    parser.add_argument(
+        "--max-auc",
+        type=float,
+        default=0.97,
+        help="Teto de AUC-ROC aceito sob --gate. Acima disso a fraude é "
+        "trivialmente separável. Default: 0.97",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -984,6 +997,39 @@ def main():
         print(f"    [{sev}] {g['type']}: {g.get('issue','')[:70]}")
     print(f"\n  AVISO: Leia 'methodology_notes' no JSON para entender o que é circular.")
     print(f"{'═'*65}")
+
+    if not args.gate:
+        return
+
+    # ── Portão de CI ────────────────────────────────────────────────────────
+    # Reprova batches trivialmente separáveis. Uma AUC perto de 1.0 significa
+    # que o gerador escreveu o rótulo em alguma coluna — dado que não transfere
+    # para produção. Ver docs: faixa realista 0.75–0.95.
+    failures: list[str] = []
+
+    for col, info in b2.items():
+        auc = info.get("auc_roc")
+        if auc is not None and auc > args.max_auc:
+            failures.append(
+                f"AUC-ROC de '{col}' = {auc} (> {args.max_auc}): "
+                f"{info.get('interpretation')}"
+            )
+
+    for g in gaps:
+        if g["severity"] == "high":
+            failures.append(f"quality gap [high] {g['type']}: {g.get('issue', '')[:90]}")
+
+    if failures:
+        print("\n  ✗ PORTÃO REPROVADO")
+        for f_ in failures:
+            print(f"      · {f_}")
+        print(
+            "\n  Uma AUC acima do teto não é qualidade: é vazamento de rótulo.\n"
+            "  Corrija o gerador ou ajuste --max-auc conscientemente.\n"
+        )
+        sys.exit(1)
+
+    print("\n  ✓ PORTÃO APROVADO — nenhuma AUC acima do teto, nenhum gap high\n")
 
 
 if __name__ == "__main__":

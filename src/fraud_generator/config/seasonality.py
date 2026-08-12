@@ -205,14 +205,16 @@ def get_day_multiplier(d: date) -> float:
     if mult:
         return mult
 
-    # Dia da semana base
-    if dow == 4:    # Sexta
-        return 1.15
-    if dow == 5:    # Sábado
-        return 0.75
-    if dow == 6:    # Domingo
-        return 0.60
-
+    # Dia da semana: NÃO aplicar aqui.
+    #
+    # _date_weight() já multiplica DOW_WEIGHTS[dow] por este retorno, e
+    # DOW_WEIGHTS ([33,34,34,34,31,19,15]) JÁ carrega a penalidade de fim de
+    # semana. Aplicar de novo aqui dobrava o efeito: a razão sábado/segunda
+    # medida saía 0.48 quando só DOW_WEIGHTS daria 0.58. No Brasil real o sábado
+    # é dia forte de varejo e de PIX P2P.
+    #
+    # Se precisar recalibrar o peso de um dia da semana, mexa em DOW_WEIGHTS —
+    # é a fonte única.
     return 1.0
 
 

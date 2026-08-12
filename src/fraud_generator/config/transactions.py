@@ -137,3 +137,36 @@ INSTALLMENT_OPTIONS = {
 
 INSTALLMENT_LIST = list(INSTALLMENT_OPTIONS.keys())
 INSTALLMENT_WEIGHTS = list(INSTALLMENT_OPTIONS.values())
+
+
+# ─── Multiplicador de valor por tipo de transação ────────────────────────────
+# O valor base sai da faixa do MCC, que descreve o *estabelecimento*, não o
+# meio de pagamento. Sem este ajuste, TED e PIX saíam com a mesma mediana:
+# medido antes da correção, TED tinha mediana de R$ 244,96 — um TED de R$ 245
+# não existe na prática desde 2021, porque o TED cobra tarifa e sobreviveu ao
+# PIX justamente por carregar o alto valor (B2B, imóveis, veículos).
+#
+# Aplicado como fator sobre o valor amostrado. Ordens de grandeza derivadas do
+# ticket médio relativo por instrumento (BCB/Febraban 2024).
+#
+# ATENÇÃO: são fatores de ordem de grandeza, não calibração fina. Substituir por
+# distribuição própria por instrumento quando houver dado real de referência.
+TYPE_VALUE_MULTIPLIER: dict[str, float] = {
+    'TED':           15.0,   # canal de alto valor
+    'BOLETO':         3.0,   # contas, mensalidades, fornecedores
+    'AUTO_DEBIT':     1.2,   # contas de consumo e assinaturas
+    'WITHDRAWAL':     1.5,   # saque em espécie
+    'PIX':            1.0,   # referência
+    'CREDIT_CARD':    1.0,
+    'DEBIT_CARD':     0.9,
+    'MOBILE_TOPUP':   0.15,  # recarga de celular
+}
+
+DEFAULT_TYPE_VALUE_MULTIPLIER: float = 1.0
+
+
+def get_value_multiplier_for_type(tx_type: str | None) -> float:
+    """Return the value multiplier for a transaction type (1.0 when unknown)."""
+    if not tx_type:
+        return DEFAULT_TYPE_VALUE_MULTIPLIER
+    return TYPE_VALUE_MULTIPLIER.get(tx_type, DEFAULT_TYPE_VALUE_MULTIPLIER)

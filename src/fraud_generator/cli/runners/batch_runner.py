@@ -53,9 +53,10 @@ class BatchRunner(BaseRunner):
         total_rides = num_files * RIDES_PER_FILE if generate_rides else 0
         num_drivers = max(100, total_rides // RIDES_PER_DRIVER) if generate_rides else 0
 
-        num_customers = self._calc_customers(args, generate_tx, generate_rides,
-                                             total_tx, total_rides)
         start_date, end_date = self._parse_dates(args)
+        num_customers = self._calc_customers(args, generate_tx, generate_rides,
+                                             total_tx, total_rides,
+                                             start_date, end_date)
         workers = args.workers or mp.cpu_count()
         use_profiles = not args.no_profiles
         compression = args.compression if args.compression != "none" else None
@@ -246,15 +247,43 @@ class BatchRunner(BaseRunner):
     # Private helpers
     # -----------------------------------------------------------------------
 
+    # Reference activity per customer, BCB 2024: ~219.9M PIX/day over ~130M
+    # active users ≈ 1.7 transactions/day. Used to size the customer pool so the
+    # generated per-customer volume matches reality.
+    _TX_PER_CUSTOMER_PER_DAY = 1.7
+    _RIDES_PER_CUSTOMER_PER_DAY = 0.12
+
     @staticmethod
-    def _calc_customers(args, gen_tx, gen_rides, total_tx, total_rides) -> int:
+    def _calc_customers(args, gen_tx, gen_rides, total_tx, total_rides,
+                        start_date=None, end_date=None) -> int:
+        """Size the customer pool from volume AND the date span.
+
+        The pool used to be `total_tx // 100` regardless of how many days the
+        data covered, which over the default 365-day span gave every customer
+        0.27 transactions/day — roughly a sixth of the real rate. The visible
+        symptom was that no legitimate customer ever reached 12 transactions in
+        24h, so `velocity_transactions_24h > 11` identified fraud with
+        100.0000% precision. High velocity has to be ordinary for some
+        customers, or a model trained here will flag every heavy user in
+        production.
+        """
         if args.customers:
             return args.customers
-        if gen_tx and gen_rides:
-            return max(1_000, (total_tx + total_rides) // 100)
+
+        days = 1
+        if start_date and end_date:
+            days = max(1, (end_date - start_date).days)
+
+        per_customer = 0.0
         if gen_tx:
-            return max(1_000, total_tx // 100)
-        return max(1_000, total_rides // 50)
+            per_customer += BatchRunner._TX_PER_CUSTOMER_PER_DAY * days
+        if gen_rides:
+            per_customer += BatchRunner._RIDES_PER_CUSTOMER_PER_DAY * days
+
+        total = (total_tx if gen_tx else 0) + (total_rides if gen_rides else 0)
+        if per_customer <= 0:
+            return 1_000
+        return max(200, int(total / per_customer))
 
     @staticmethod
     def _parse_dates(args):

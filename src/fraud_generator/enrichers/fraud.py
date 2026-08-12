@@ -12,6 +12,7 @@ from datetime import timedelta as _td
 from typing import Any, Dict, Optional
 
 from .base import EnricherProtocol, GeneratorBag, is_plan
+from ..utils.overlap import beta_score, lognormal_days, two_class
 from ..config.merchants import get_mcc_info
 from ..config.geography import ESTADOS_BR, ESTADOS_LIST
 from ..config.fraud_patterns import get_fraud_pattern, get_time_window_for_anomaly
@@ -172,6 +173,110 @@ def _get_bot_signature(fraud_type: str, buf) -> tuple:
     return "HUMAN", round(random.uniform(0.05, 0.25), 3)
 
 
+# Share of fraud records that skip the velocity burst entirely and keep the
+# velocity their session actually produced ("low and slow" fraud).
+_LOW_AND_SLOW_SHARE = 0.32
+
+
+# ── Two-class samplers with overlap ──────────────────────────────────────────
+# Every function below is called for BOTH classes. See utils/overlap.py for why
+# the two populations have to contaminate each other rather than occupy
+# neighbouring ranges.
+
+# Signatures a legitimate session can legitimately carry. Automation on the
+# customer side is not by itself fraud: accessibility tools, password managers,
+# corporate RPA and a rushed human all leave traces.
+_LEGIT_SIGNATURES = ("HUMAN", "HUMAN", "HUMAN", "HUMAN", "HUMAN",
+                     "HUMAN", "HUMAN", "HUMAN", "SCRIPTED", "BOT_TOOLKIT")
+
+
+def _legit_automation_signature() -> str:
+    """Signature for an ordinary session — mostly HUMAN, occasionally not."""
+    return random.choice(_LEGIT_SIGNATURES)
+
+
+def _sample_bot_score(is_fraud: bool, fraud_type: Optional[str] = None) -> float:
+    """Bot-confidence score for either class.
+
+    This is the output of a *detector*, not an intrinsic property of the
+    transaction, so both classes must span the whole [0, 1] range with different
+    mass. The old code drew legit from uniform(0, 0.05) and fraud from ranges
+    starting at 0.15, which made `bot_confidence_score > 0.05` a 100.0000%
+    precision rule covering 70% of fraud.
+
+    Beta shapes: an ordinary session concentrates low but has a real tail (a
+    hurried user, a screen reader, a flaky sensor); an automated one
+    concentrates high but dips (a good bot mimics human cadence).
+    """
+    def _ordinary() -> float:
+        return beta_score(1.2, 16.0)
+
+    if fraud_type in _BOT_FRAUD_TYPES_HIGH:
+        alpha, beta = 6.0, 2.2
+    elif fraud_type in _BOT_FRAUD_TYPES_MED or fraud_type in _RAT_FRAUD_TYPES:
+        alpha, beta = 4.0, 3.0
+    elif fraud_type in _ATO_FRAUD_TYPES:
+        alpha, beta = 2.2, 5.0
+    elif fraud_type in _SOCIAL_FRAUD_TYPES:
+        # A real victim on their own device — no automation to detect.
+        return round(_ordinary(), 3)
+    else:
+        alpha, beta = 2.0, 6.0
+
+    def _automated() -> float:
+        return beta_score(alpha, beta)
+
+    # Contamination in both directions. Without it the legitimate maximum
+    # becomes a clean cut point: measured, no legit record exceeded 0.555 while
+    # 13.6% of fraud did. Real detectors misfire on accessibility tooling,
+    # corporate RPA and rushed users.
+    return round(
+        two_class(
+            is_fraud,
+            legit=_ordinary,
+            fraud=_automated,
+            legit_contamination=0.05,
+            fraud_contamination=0.22,
+        ),
+        3,
+    )
+
+
+def _sample_company_age(is_fraud: bool) -> int:
+    """Age in days of a destination company (PJ).
+
+    Brazil registers a very large number of MEIs every month, so a company under
+    90 days old receiving a payment is ordinary — it cannot mean fraud on its
+    own. Conversely, laundering through an established company is common.
+    """
+    return two_class(
+        is_fraud,
+        legit=lambda: lognormal_days(median=1400, sigma=1.1, lo=1, hi=14600),
+        fraud=lambda: lognormal_days(median=45, sigma=0.9, lo=1, hi=14600),
+        legit_contamination=0.10,   # MEI aberto há pouco recebendo pagamento
+        fraud_contamination=0.28,   # laranja usando empresa estabelecida
+    )
+
+
+def _sample_dest_account_age(is_fraud: bool, fraud_type: Optional[str] = None) -> int:
+    """Age in days of the destination account."""
+    fresh_median = 12 if fraud_type in _FRESH_MULE_FRAUD_TYPES else 40
+    return two_class(
+        is_fraud,
+        legit=lambda: lognormal_days(median=900, sigma=1.2, lo=0, hi=7300),
+        fraud=lambda: lognormal_days(median=fresh_median, sigma=1.0, lo=0, hi=7300),
+        legit_contamination=0.09,   # conta digital aberta hoje já recebe PIX
+        fraud_contamination=0.30,   # conta-laranja comprada, antiga
+    )
+
+
+# Fraud types that cash out through freshly-opened mule accounts.
+_FRESH_MULE_FRAUD_TYPES = frozenset({
+    "PIX_GOLPE", "ENGENHARIA_SOCIAL", "LAVAGEM_DINHEIRO",
+    "FRAUDE_QR_CODE", "BOLETO_FALSO", "WHATSAPP_CLONE",
+})
+
+
 # ── Fields that must be null on non-fraud records ────────────────────────────
 _NEW_PRO_FIELDS_NULL = (
     "fraud_labels", "fraud_chain_id", "fraud_chain_role",
@@ -194,23 +299,51 @@ class FraudEnricher:
 
     def enrich(self, tx: Dict[str, Any], bag: GeneratorBag) -> None:
         if not bag.is_fraud or not bag.fraud_type:
-            # Ensure probe fields exist on non-fraud records
-            tx.setdefault("is_probe_transaction", False)
-            tx.setdefault("probe_original_amount", None)
+            # Legitimate verification transfers. Sending R$0.01-5.00 to check a
+            # PIX key before the real payment is routine in Brazil, and a
+            # legitimate merchant refund can be tiny too. Without them the
+            # micro-probe fraud below owned the entire low end: `amount < 9`
+            # identified fraud with 100.0000% precision over 14% of records,
+            # and `is_probe_transaction` was a fraud-only field.
+            if random.random() < 0.018:
+                tx["probe_original_amount"] = tx.get("amount")
+                tx["amount"] = round(random.uniform(0.01, 5.0), 2)
+                tx["is_probe_transaction"] = True
+            else:
+                tx.setdefault("is_probe_transaction", False)
+                tx.setdefault("probe_original_amount", None)
+            # beneficiary_cpf_hash exists whenever there is a beneficiary, which
+            # is most transfers — not only fraudulent ones.
+            if tx.get("beneficiary_cpf_hash") is None and random.random() < 0.55:
+                tx["beneficiary_cpf_hash"] = _hl.sha256(
+                    f"{tx.get('customer_id', '')}|{random.random()}".encode()
+                ).hexdigest()
             tx.setdefault("beneficiary_cpf_hash", None)
             for _f in _NEW_PRO_FIELDS_NULL:
                 tx.setdefault(_f, None)
-            tx.setdefault("automation_signature", "HUMAN")
-            tx.setdefault("bot_confidence_score", round(random.uniform(0.0, 0.05), 3))
+            # automation_signature is pro+ gated. The gate has to be evaluated
+            # identically for both classes: emitting "HUMAN" here while the
+            # fraud branch emitted None under the OS tier turned a licensing
+            # detail into a perfect label (`IS NULL` recovered every fraud).
+            # Under OS neither class carries a signature; under pro+ both do.
+            if is_plan(bag.license, "pro", "team", "enterprise"):
+                tx.setdefault("automation_signature", _legit_automation_signature())
+            else:
+                tx.setdefault("automation_signature", None)
+            tx.setdefault("bot_confidence_score", _sample_bot_score(False))
             # V6-M14: PJ/PF destination defaults for legit transactions
             if random.random() < 0.15:  # 15% PJ in legit (vs 65% fraud)
                 tx.setdefault("destination_account_type", "PJ")
-                tx.setdefault("destination_company_age_days", random.randint(90, 3650))
-                tx.setdefault("destination_account_age_days", random.randint(30, 1825))
+                tx.setdefault("destination_company_age_days", _sample_company_age(False))
+                tx.setdefault("destination_account_age_days", _sample_dest_account_age(False))
             else:
                 tx.setdefault("destination_account_type", "PF")
                 tx.setdefault("destination_company_age_days", None)
-                tx.setdefault("destination_account_age_days", random.randint(30, 3650))
+                tx.setdefault("destination_account_age_days", _sample_dest_account_age(False))
+            # dest_account_age_days used to exist only on fraud records, so
+            # `IS NOT NULL` alone recovered 61% of the label. It is now written
+            # for both classes at the same point in the pipeline.
+            tx.setdefault("dest_account_age_days", _sample_dest_account_age(False))
             return
 
         fraud_type = bag.fraud_type
@@ -254,16 +387,12 @@ class FraudEnricher:
         # Destination account age: PIX/social fraud goes to brand-new mule accounts.
         # This field is read by build_context_for_fraud via tx dict — must be set here
         # so the 17-signal pipeline can evaluate dest_account_new correctly.
-        if not tx.get("dest_account_age_days"):
-            if fraud_type in (
-                "PIX_GOLPE", "ENGENHARIA_SOCIAL", "LAVAGEM_DINHEIRO",
-                "FRAUDE_QR_CODE", "BOLETO_FALSO", "WHATSAPP_CLONE",
-            ):
-                tx["dest_account_age_days"] = random.randint(0, 7)
-            elif fraud_type in (
-                "CONTA_TOMADA", "CARTAO_CLONADO", "FRAUDE_APLICATIVO", "SIM_SWAP",
-            ):
-                tx["dest_account_age_days"] = random.randint(0, 30)
+        if tx.get("dest_account_age_days") is None:
+            # A hard randint(0, 7) here meant no fraud ever landed on an aged
+            # account, while the legit branch never wrote the field at all.
+            # Mules routinely use accounts bought or farmed months earlier, so
+            # a share of these draws must come from the ordinary distribution.
+            tx["dest_account_age_days"] = _sample_dest_account_age(True, fraud_type)
 
         # ── Velocity ──────────────────────────────────────────────────────
         # Noise rationale: hard-capped ranges produce perfect decision
@@ -272,6 +401,12 @@ class FraudEnricher:
         # distribution by ~±40% while keeping values positive and right-skewed
         # (consistent with real transaction data).
         velocity = characteristics.get("velocity", "NONE")
+        # "Low and slow" fraud is real and common: a patient mule moving one
+        # transfer a day defeats velocity rules on purpose. Skipping the burst
+        # override for a share of records leaves those frauds with the ordinary
+        # session-derived velocity, so no threshold on velocity is ever clean.
+        if velocity != "NONE" and random.random() < _LOW_AND_SLOW_SHARE:
+            velocity = "NONE"
         if velocity == "HIGH":
             burst_min, burst_max = characteristics.get("transaction_burst", (10, 30))
             base_vel = random.randint(burst_min, burst_max)
@@ -516,20 +651,20 @@ class FraudEnricher:
         # bot_confidence_score is ALWAYS populated for fraud transactions so
         # ML models can use it as a discriminative feature.
         # automation_signature is restricted to pro+ plans (schema field).
-        sig, score = _get_bot_signature(fraud_type, buf)
-        if is_pro_plus:
-            tx.setdefault("automation_signature", sig)
-        else:
-            tx.setdefault("automation_signature", None)
-        tx.setdefault("bot_confidence_score", score)
+        sig, _legacy_score = _get_bot_signature(fraud_type, buf)
+        # The pro+ gate must not coincide with the label gate: emitting None for
+        # fraud and "HUMAN" for legit turned a licensing detail into the answer.
+        # Under the OS tier neither class carries a signature.
+        tx.setdefault("automation_signature", sig if is_pro_plus else None)
+        tx.setdefault("bot_confidence_score", _sample_bot_score(True, fraud_type))
 
         # ── V6-M14: PJ/PF destination (Artigo Fraudes Transacionais 2026)
         # 65% dos golpes finalizam em contas PJ (vs 15% em legítimas)
         if random.random() < 0.65:
             tx["destination_account_type"] = "PJ"
-            tx["destination_company_age_days"] = random.randint(1, 90)    # empresa recém-criada
-            tx["destination_account_age_days"] = random.randint(1, 30)    # conta nova
+            tx["destination_company_age_days"] = _sample_company_age(True)
+            tx["destination_account_age_days"] = _sample_dest_account_age(True)
         else:
             tx["destination_account_type"] = "PF"
             tx["destination_company_age_days"] = None
-            tx["destination_account_age_days"] = random.randint(30, 1825)
+            tx["destination_account_age_days"] = _sample_dest_account_age(True)

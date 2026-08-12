@@ -37,6 +37,6 @@ applyTo: "benchmarks/**"
 
 ## Quality Guard
 - NEVER sacrifice data quality for speed
-- AUC-ROC must remain at 0.9991 after optimization
+- Effective AUC-ROC must stay within the 0.75–0.95 band (CI fails above 0.97) after optimization. Above 0.97 = trivially separable = regression.
 - Run `pytest tests/ -v` after every change
 - Run `python benchmarks/data_quality_benchmark.py` to verify quality score

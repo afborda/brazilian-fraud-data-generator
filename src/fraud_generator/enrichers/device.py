@@ -16,6 +16,24 @@ import random
 from typing import Any, Dict
 
 from .base import EnricherProtocol, GeneratorBag
+from ..utils.overlap import lognormal_days, two_class
+
+
+def sample_device_age(is_fraud: bool) -> int:
+    """Age in days of the device used, for either class.
+
+    Median around seven months for an ordinary customer with a long tail
+    (people keep phones for years), and around two months for fraud — but a
+    third of fraud runs on an old, ordinary handset and a small share of
+    legitimate traffic comes from a phone bought yesterday.
+    """
+    return two_class(
+        is_fraud,
+        legit=lambda: lognormal_days(median=210, sigma=1.15, lo=0, hi=2555),
+        fraud=lambda: lognormal_days(median=60, sigma=1.05, lo=0, hi=2555),
+        legit_contamination=0.10,   # celular novo, troca de aparelho
+        fraud_contamination=0.30,   # fraudador em aparelho antigo
+    )
 
 
 class DeviceEnricher:
@@ -40,10 +58,11 @@ class DeviceEnricher:
             buf = bag.buf
 
             if tx.get("device_age_days") is None:
-                if is_fraud:
-                    tx["device_age_days"] = buf.next_int(0, 90)  # fraud = newer devices
-                else:
-                    tx["device_age_days"] = buf.next_int(30, 730)  # legit = established
+                # Was randint(0, 90) vs randint(30, 730): overlapping only in
+                # [30, 90], so `device_age_days < 30` identified fraud with
+                # 100.0000% precision and `> 90` identified legit with the same.
+                # People replace phones and fraudsters reuse old ones.
+                tx["device_age_days"] = sample_device_age(is_fraud)
 
             if tx.get("emulator_detected") is None:
                 if is_fraud:

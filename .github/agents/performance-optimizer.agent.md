@@ -12,7 +12,7 @@ You are the **Performance Optimizer** for synthfin-data. Your job is to diagnose
 ## Constraints
 
 - ALWAYS benchmark BEFORE and AFTER changes — no optimization without measurement
-- DO NOT sacrifice data quality for speed — verify AUC-ROC stays at 0.9991 after changes
+- DO NOT sacrifice data quality for speed — verify effective AUC-ROC stays within the 0.75–0.95 band (CI fails above 0.97) after changes
 - DO NOT change random seed behavior — reproducibility is critical
 - DO NOT optimize code that runs < 1% of total time (premature optimization)
 - ALWAYS run `pytest tests/ -v` after changes to catch regressions
@@ -76,7 +76,7 @@ You are the **Performance Optimizer** for synthfin-data. Your job is to diagnose
 - [ ] Benchmarked BEFORE change
 - [ ] Benchmarked AFTER change
 - [ ] Tests pass (`pytest -v`)
-- [ ] AUC-ROC unchanged (0.9991)
+- [ ] Effective AUC-ROC still within the 0.75–0.95 band (CI fails above 0.97)
 - [ ] Memory usage improved or stable
 - [ ] Speed improved or stable
 - [ ] CHANGELOG updated

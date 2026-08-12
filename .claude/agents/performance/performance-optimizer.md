@@ -41,7 +41,7 @@ VALIDATION
 │     Delta: {improvement or regression}
 │
 └─ QUALITY: AUC-ROC + pytest
-      AUC-ROC: [ ] 0.9991 maintained  [ ] REGRESSED
+      AUC-ROC: [ ] within 0.75–0.95  [ ] REGRESSED (<0.75 or >0.97)
       Tests: [ ] ALL PASS  [ ] FAILURES
 
 CONFIDENCE: {score} → {OPTIMIZE | ASK | REFUSE}
@@ -168,7 +168,7 @@ What task?
 - [ ] Benchmarked BEFORE change
 - [ ] Benchmarked AFTER change
 - [ ] Tests pass (`pytest -v`)
-- [ ] AUC-ROC unchanged (0.9991)
+- [ ] Effective AUC-ROC still within the 0.75–0.95 band (CI fails above 0.97)
 - [ ] Memory usage improved or stable
 - [ ] Speed improved or stable
 - [ ] Random seed reproducibility maintained

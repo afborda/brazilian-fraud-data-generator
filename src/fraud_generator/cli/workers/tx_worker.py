@@ -22,6 +22,7 @@ from fraud_generator.generators import TransactionGenerator
 from fraud_generator.exporters import get_exporter
 from fraud_generator.utils import CustomerIndex, DeviceIndex, CustomerSessionState
 from fraud_generator.cli.constants import STREAM_FLUSH_EVERY
+from fraud_generator.profiles.behavioral import PROFILES
 # T1: usa pesos trimodais do módulo de sazonalidade
 from fraud_generator.config.seasonality import (
     HORA_WEIGHTS_PADRAO,
@@ -76,6 +77,25 @@ def worker_generate_batch(args: tuple) -> str:
     if not pairs:
         pairs = [(customer_idx_list[0], device_idx_list[0])]
 
+    # Activity weights — how often each customer shows up in the stream.
+    #
+    # Picking uniformly gave every customer the same expected volume, so the
+    # per-customer count came out near-binomial (measured: min 27, max 181 over
+    # a year). Real activity is heavily heterogeneous: most correntistas make a
+    # handful of PIX a month while MEIs and heavy users make hundreds. Without
+    # that tail, "high velocity" is never legitimate behaviour, so
+    # `velocity_transactions_24h > 8` separated fraud with 100% precision — and
+    # a model trained on it floods production with false positives on the very
+    # customers who transact most.
+    #
+    # BehavioralProfile.monthly_tx_frequency already carries the per-profile
+    # rate (8-25 for falsa_central_victim up to 60-200 for micro_empreendedor)
+    # and was never read by any generator. The lognormal factor adds
+    # within-profile spread.
+    _pair_weights = [
+        _activity_weight(cust) for cust, _dev in pairs
+    ]
+
     tx_generator = TransactionGenerator(
         fraud_rate=fraud_rate, use_profiles=use_profiles, seed=worker_seed
     )
@@ -95,12 +115,15 @@ def worker_generate_batch(args: tuple) -> str:
     _date_list = [start_date.date() + timedelta(days=i) for i in range(days_span + 1)]
     _date_weights = [_dw(d) for d in _date_list]
 
+    # Sessions need transactions in chronological order — see _sorted_timestamps.
+    _timestamps = _sorted_timestamps(num_transactions, _date_list, _date_weights)
+
     if format_name == "jsonl":
         with open(output_path, "wb") as fh:
             buffer = []
             for i in range(num_transactions):
-                customer, device = random.choice(pairs)
-                timestamp = _random_timestamp(_date_list, _date_weights)
+                customer, device = random.choices(pairs, weights=_pair_weights, k=1)[0]
+                timestamp = _timestamps[i]
                 unique_tx_id = f"{session_start_ms}_{batch_id:04d}_{i:06d}"
 
                 session = sessions.setdefault(
@@ -143,8 +166,8 @@ def worker_generate_batch(args: tuple) -> str:
     else:
         transactions = []
         for i in range(num_transactions):
-            customer, device = random.choice(pairs)
-            timestamp = _random_timestamp(_date_list, _date_weights)
+            customer, device = random.choices(pairs, weights=_pair_weights, k=1)[0]
+            timestamp = _timestamps[i]
             unique_tx_id = f"{session_start_ms}_{batch_id:04d}_{i:06d}"
 
             session = sessions.setdefault(
@@ -176,6 +199,48 @@ def worker_generate_batch(args: tuple) -> str:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _activity_weight(customer) -> float:
+    """Relative frequency with which *customer* appears in the transaction stream.
+
+    Combines the profile's declared monthly rate with a lognormal factor for
+    within-profile spread, so the per-customer volume distribution acquires the
+    long right tail that real banking traffic has. See the comment at the call
+    site for why a uniform pick made high velocity a perfect fraud predictor.
+    """
+    profile = getattr(customer, "profile", None)
+    cfg = PROFILES.get(profile) if profile else None
+    if cfg is not None:
+        lo, hi = cfg.monthly_tx_frequency
+        base = (lo + hi) / 2
+    else:
+        base = 40.0
+    return max(0.05, base * random.lognormvariate(0.0, 0.6))
+
+
+def _sorted_timestamps(n: int, date_list, date_weights) -> list:
+    """Draw *n* timestamps from the same distribution, returned in chronological order.
+
+    `CustomerSessionState._prune_old` evicts from the left of a deque while the
+    head is older than the cutoff, which only yields a correct sliding window if
+    transactions arrive in time order. Feeding it independently-drawn timestamps
+    made the "last 24h" window retain up to a full year of history, inflating
+    every velocity feature (measured: mean velocity_transactions_24h of 30.96
+    against a real-world ~1.7-3/day) and making time_since_last_txn_min and
+    distance_from_last_km compare against a "previous" transaction that had in
+    fact happened months later.
+
+    Sorting here is cheap and bounded: batches cap at TRANSACTIONS_PER_FILE, so
+    this list costs ~12 MB regardless of total dataset size.
+
+    Note: this consumes RNG draws in a different order than the previous
+    per-iteration sampling, so output for a given --seed changes from v4.18.0.
+    The marginal distribution of timestamps is unchanged.
+    """
+    stamps = [_random_timestamp(date_list, date_weights) for _ in range(n)]
+    stamps.sort()
+    return stamps
+
 
 def _random_timestamp(date_list, date_weights) -> datetime:
     # T1: dia ponderado por DOW × sazonalidade (pré-computado); hora trimodal (12h, 18h, 21h)

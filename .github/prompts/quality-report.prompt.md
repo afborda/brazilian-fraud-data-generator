@@ -32,7 +32,7 @@ Seed: **${{ input "Random seed for reproducibility (default: 42)" }}**
    ```
 4. Compare results against baseline:
    - Overall score baseline: 9.70/10 (A+)
-   - AUC-ROC baseline: 0.9991
+   - AUC-ROC alvo: 0.75–0.95 (acima de 0.97 = separabilidade trivial, reprova)
    - Reference: `REALISM_METRICS.json`
 5. For field-specific scope, also analyze:
    - Distribution shape (reference: `.claude/kb/synthetic-data/concepts/distributions.md`)

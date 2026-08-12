@@ -13,6 +13,10 @@ Design decisions:
 - is_fraud / fraud_type are EXCLUDED (they are targets, not features)
 - IDs (transaction_id, customer_id, device_id) are EXCLUDED (high cardinality)
 - fraud_signals / fraud_labels are EXCLUDED (direct leakage)
+- fraud_score / fraud_risk_score are EXCLUDED (derived from the label by the
+  generator itself, and absent from any real-world feed: no bank has them before
+  running its own model). Including them made the binary AUC saturate at ~1.0 and
+  turned the quality grade into a measure of leakage strength.
 """
 
 from __future__ import annotations
@@ -58,8 +62,6 @@ FEATURE_NAMES: list[str] = [
     "accumulated_amount_7d",
     # Transaction values
     "amount",
-    "fraud_score",
-    "fraud_risk_score",
     "bot_confidence_score",
     # Device / account state
     "device_age_days",
@@ -98,8 +100,6 @@ FEATURE_DTYPES: dict[str, str] = {
     "accumulated_amount_7d":     "float32",
     # values
     "amount":              "float32",
-    "fraud_score":         "float32",
-    "fraud_risk_score":    "float32",
     "bot_confidence_score":"float32",
     # device / account
     "device_age_days":     "float32",
@@ -127,8 +127,7 @@ _DEFAULTS: dict[str, float] = {
     "velocity_transactions_30d": 0.0, "accumulated_amount_24h": 0.0,
     "accumulated_amount_7d": 0.0,
     # values
-    "amount": 0.0, "fraud_score": 50.0, "fraud_risk_score": 0.0,
-    "bot_confidence_score": 0.0,
+    "amount": 0.0, "bot_confidence_score": 0.0,
     # device / account
     "device_age_days": 365.0, "dest_account_age_days": 180.0, "hours_inactive": 0.0,
     # biometric → -1 (missing, distinguishable from genuine zero)

@@ -22,6 +22,7 @@ from ..config.transactions import (
     CARD_ENTRY_LIST, CARD_ENTRY_WEIGHTS,
     INSTALLMENT_LIST, INSTALLMENT_WEIGHTS,
     REFUSAL_REASONS,
+    get_value_multiplier_for_type,
 )
 from ..config.seasonality import (
     pick_weighted_date,
@@ -364,7 +365,7 @@ class TransactionGenerator:
             merchant_name = random.choice(merchants)
 
         # ── Value ─────────────────────────────────────────────────────────
-        valor = self._calculate_value(is_fraud, fraud_type, mcc_info, customer_profile)
+        valor = self._calculate_value(is_fraud, fraud_type, mcc_info, customer_profile, tx_type)
 
         # ── Channel / Bank ────────────────────────────────────────────────
         if self.use_profiles and customer_profile:
@@ -527,7 +528,8 @@ class TransactionGenerator:
             is_fraud,
             fraud_type,
             mcc_info,
-            customer_profile
+            customer_profile,
+            tx_type,
         )
 
         # Geolocation
@@ -630,17 +632,25 @@ class TransactionGenerator:
         is_fraud: bool,
         fraud_type: Optional[str],
         mcc_info: dict,
-        customer_profile: Optional[str]
+        customer_profile: Optional[str],
+        tx_type: Optional[str] = None,
     ) -> float:
-        """Calculate transaction value."""
+        """Calculate transaction value.
+
+        The MCC range describes the *merchant*, not the payment instrument, so
+        the sampled value is scaled by the transaction type — otherwise TED and
+        PIX come out with the same median. See TYPE_VALUE_MULTIPLIER.
+        """
         if is_fraud:
             return self._calculate_fraud_value(fraud_type)
-        
+
         mcc_range = (mcc_info['min_value'], mcc_info['max_value'])
-        
+        type_mult = get_value_multiplier_for_type(tx_type)
+
         if self.use_profiles and customer_profile:
-            return get_transaction_value_for_profile(customer_profile, mcc_range)
-        
+            base = get_transaction_value_for_profile(customer_profile, mcc_range)
+            return round(base * type_mult, 2)
+
         # Log-normal calibrado: μ = centro geométrico do range MCC, σ = ¼ amplitude log
         # Resulta em mediana ≈ √(min×max), cauda direita realista (sem pile-up nos limites)
         # Calibrado contra distribuição real de transações BCB/FEBRABAN 2024
@@ -649,7 +659,8 @@ class TransactionGenerator:
         sigma = max((math.log(max_value) - math.log(max(min_value, 0.01))) / 4, 0.30)
         value = math.exp(random.gauss(mu, sigma))
         # Permite cauda superior até 2× max (outliers realistas)
-        return round(max(min_value, min(value, max_value * 2.0)), 2)
+        clamped = max(min_value, min(value, max_value * 2.0))
+        return round(clamped * type_mult, 2)
     
     def _calculate_fraud_value(self, fraud_type: Optional[str]) -> float:
         """Calculate fraud transaction value using log-normal distribution.
