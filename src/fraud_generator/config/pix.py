@@ -55,7 +55,7 @@ MOTIVO_DEVOLUCAO_WEIGHTS = [55, 25, 12, 8]
 ISPB_MAP = {
     "BB":           "00000000",  # Banco do Brasil
     "BRB":          "00000208",  # Banco de Brasília
-    "BANRISUL":     "00000000",  # handled via ISPB in production
+    "BANRISUL":     "92702067",  # Banco do Estado do RS (CNPJ 92.702.067)
     "SANTANDER":    "90400888",
     "CAIXA":        "36098519",  # Caixa Econômica Federal
     "BRADESCO":     "60746948",
@@ -63,7 +63,7 @@ ISPB_MAP = {
     "NUBANK":       "18236120",
     "INTER":        "00416968",
     "C6":           "31872495",
-    "ORIGINAL":     "92702067",
+    "ORIGINAL":     "92894922",  # Banco Original (CNPJ 92.894.922)
     "NEXT":         "60746948",  # Bradesco subsidiary
     "PAN":          "59285411",
     "SICREDI":      "01181521",
@@ -81,11 +81,19 @@ ISPB_MAP = {
     "REDE":         "01701201",
 }
 
-ISPB_LIST = list(ISPB_MAP.values())
+# Deduplicated: NEXT shares Bradesco's ISPB (it was folded back into Bradesco in
+# 2022). Keeping the duplicate here gave that ISPB double weight during sampling.
+# NOTE (known gap): sampling over this list is still uniform, so Modal and Getnet
+# are as likely as Nubank and Itaú. Real PIX endpoints concentrate in ~6
+# institutions — needs an ISPB_WEIGHTS table proportional to PIX share.
+ISPB_LIST = list(dict.fromkeys(ISPB_MAP.values()))
 ISPB_NAMES = list(ISPB_MAP.keys())
 
-# Pre-built reverse map: ISPB → name
-_ISPB_TO_NAME = {v: k for k, v in ISPB_MAP.items()}
+# Pre-built reverse map: ISPB → name. First name wins, so a shared ISPB resolves
+# to the parent institution (60746948 → BRADESCO, not NEXT).
+_ISPB_TO_NAME: dict[str, str] = {}
+for _name, _ispb in ISPB_MAP.items():
+    _ISPB_TO_NAME.setdefault(_ispb, _name)
 
 
 def get_ispb_for_bank(bank_name: str) -> Optional[str]:

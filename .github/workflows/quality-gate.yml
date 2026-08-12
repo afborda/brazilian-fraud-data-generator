@@ -1,0 +1,71 @@
+name: Quality Gate
+
+# Gera um batch pequeno e reprova se a fraude for trivialmente separável.
+#
+# Uma AUC-ROC perto de 1.0 NÃO é qualidade: significa que o gerador escreveu o
+# rótulo em alguma coluna, e um modelo treinado nesse dado não transfere para
+# produção. A faixa realista é 0.75–0.95; o teto de reprovação é 0.97.
+#
+# Ver: tools/analyze_batch.py (EXTERNAL_BENCHMARKS, build_quality_gaps).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tools/analyze_batch.py"
+      - ".github/workflows/quality-gate.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tools/analyze_batch.py"
+      - ".github/workflows/quality-gate.yml"
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Separabilidade de fraude
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -q
+          pip install scikit-learn scipy -q
+
+      - name: Generate sample batch
+        run: |
+          python generate.py \
+            --type transactions \
+            --size 20MB \
+            --seed 42 \
+            --format jsonl \
+            --output ./ci-batch
+
+      - name: Run quality gate
+        run: |
+          python tools/analyze_batch.py \
+            --input ./ci-batch/transactions_00000.jsonl \
+            --output ./ci-batch/quality_report.json \
+            --sample 60000 \
+            --max-auc 0.97 \
+            --gate
+
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: ./ci-batch/quality_report.json
+          retention-days: 30

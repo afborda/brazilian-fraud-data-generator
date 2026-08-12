@@ -61,7 +61,7 @@ What task?
 **Process**:
 1. Execute `python benchmarks/data_quality_benchmark.py`
 2. Parse: overall score, per-battery, AUC-ROC, precision
-3. Compare vs baseline (9.70/10, AUC-ROC 0.9991)
+3. Compare vs the target band (effective AUC-ROC 0.75–0.95); flag any fraud type above 0.97 as trivially separable
 4. Flag regressions, highlight improvements
 
 ### Capability 2: Analyze Distribution

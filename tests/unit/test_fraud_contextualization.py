@@ -109,11 +109,18 @@ class TestFraudContextualization:
         
         if len(social_eng_txs) > 0:
             tx = social_eng_txs[0]
-            
-            # Calibrated multiplier [4.0, 14.0] — values can reach ~R$20K
-            # Should still be lower than extreme types (SEQUESTRO, EMPRESTIMO)
-            assert tx['amount'] < 50000, "ENGENHARIA_SOCIAL should have moderate amounts"
-            
+
+            # Amounts are log-normal, so a hard ceiling on one arbitrary record
+            # fails whenever the RNG order shifts — the tail is supposed to
+            # reach high values. Assert the central tendency instead, which is
+            # what "moderate amounts" actually means.
+            amounts = sorted(t['amount'] for t in social_eng_txs)
+            median = amounts[len(amounts) // 2]
+            assert median < 50_000, (
+                f"ENGENHARIA_SOCIAL median was R${median:,.2f}; expected moderate "
+                f"amounts, lower than extreme types (SEQUESTRO, EMPRESTIMO)"
+            )
+
             # New beneficiary — probabilístico: esperado em ~95% dos casos
             # (não assertamos em transação única — verificado em nível de conjunto)
             
@@ -138,15 +145,26 @@ class TestFraudContextualization:
         
         if len(pix_golpe_txs) > 0:
             tx = pix_golpe_txs[0]
-            
+
             # Should be PIX transaction
             if tx.get('channel') == 'PIX' or tx.get('type') == 'PIX':
                 # PIX-specific fields
                 assert tx.get('pix_key_type') is not None, "PIX_GOLPE should have PIX key"
                 assert tx.get('pix_key_destination') is not None
-                
-            # New beneficiary (always for PIX golpe)
-            assert tx.get('new_beneficiary') is True
+
+            # new_beneficiary is a *tendency*, not a certainty. This used to
+            # assert `is True` on a single record while the configured
+            # probability is 0.65, so it passed only by luck of the RNG order
+            # and broke on any upstream change. Asserting it as a distribution
+            # also keeps the field honest: a rate of 1.0 would make
+            # `new_beneficiary` a perfect label for this fraud type.
+            rate = sum(
+                1 for t in pix_golpe_txs if t.get('new_beneficiary')
+            ) / len(pix_golpe_txs)
+            assert 0.35 <= rate <= 0.95, (
+                f"new_beneficiary rate for PIX_GOLPE was {rate:.2f}; expected a "
+                f"strong tendency but not a certainty (1.0 would be leakage)"
+            )
     
     def test_cartao_clonado_pattern(self, generator):
         """Test CARTAO_CLONADO pattern characteristics."""

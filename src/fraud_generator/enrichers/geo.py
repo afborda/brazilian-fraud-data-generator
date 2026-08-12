@@ -89,13 +89,24 @@ class GeoEnricher:
             lon = round(municipio.lon + buf.next_uniform(-0.05, 0.05), 6)
             return lat, lon, municipio
 
-        # Cluster-based placement (normal path — no municipio override)
+        # Cluster-based placement (normal path)
         if location_cluster:
             wts = [p[2] for p in location_cluster]
             idx = random.choices(range(len(location_cluster)), weights=wts, k=1)[0]
             lat = round(location_cluster[idx][0] + buf.next_uniform(-0.01, 0.01), 6)
             lon = round(location_cluster[idx][1] + buf.next_uniform(-0.01, 0.01), 6)
-            return lat, lon, None
+            # This branch used to return municipio=None, which had two effects:
+            # codigo_ibge_municipio and municipio_nome came out null on 100% of
+            # legitimate records, and the only rows carrying them were the 30%
+            # of fraud that takes the location-anomaly path above — so
+            # `municipio_nome IS NOT NULL` was a fraud marker. Resolving the
+            # municipality here fills the schema field for both classes.
+            estado_cluster = (
+                customer_state
+                if (customer_state and customer_state in ESTADOS_BR)
+                else estado_cache.sample()
+            )
+            return lat, lon, pick_municipio(estado_cluster, rng)
 
         # Normal path: use real municipality centroid from customer's state
         estado    = customer_state if (customer_state and customer_state in ESTADOS_BR) else estado_cache.sample()

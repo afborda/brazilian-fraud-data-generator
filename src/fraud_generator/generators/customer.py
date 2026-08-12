@@ -12,11 +12,40 @@ from ..validators.cpf import generate_valid_cpf, generate_cpf_from_state
 from ..config.banks import BANKS, BANK_CODES, BANK_WEIGHTS
 from ..config.geography import ESTADOS_LIST, ESTADOS_WEIGHTS, ESTADOS_BR
 from ..config.municipios import pick_municipio, cep_for_municipio
+from ..config.distributions import (
+    get_income_class,
+    sample_credit_limit,
+    sample_monthly_income,
+    sample_profession,
+)
 from ..profiles.behavioral import (
     assign_random_profile,
     get_profile,
     PROFILES,
+    PROFILE_DISTRIBUTION,
 )
+
+
+def _population_mean_income_multiplier() -> float:
+    """Population-weighted mean of the profiles' income_multiplier midpoints.
+
+    The multipliers were written to scale a base income, so every profile sits
+    at 1.0 or above and their weighted mean is ~2.6 — not 1.0. Treating the raw
+    multiplier as "how far above average" therefore shifts the *entire*
+    population upward. Dividing by this mean re-centres it, so an average
+    profile gets no bias and only genuinely high-income profiles shift up.
+    """
+    total_weight = sum(PROFILE_DISTRIBUTION.values()) or 1
+    acc = 0.0
+    for name, weight in PROFILE_DISTRIBUTION.items():
+        cfg = PROFILES.get(name)
+        mult = getattr(cfg, "income_multiplier", None) if cfg else None
+        mid = (mult[0] + mult[1]) / 2 if mult else 1.0
+        acc += (weight / total_weight) * mid
+    return acc or 1.0
+
+
+_MEAN_INCOME_MULTIPLIER = _population_mean_income_multiplier()
 
 
 class CustomerGenerator:
@@ -134,14 +163,20 @@ class CustomerGenerator:
                 'codigo_ibge':  municipio.ibge,
             },
             'monthly_income': renda,
-            'profession': self.fake.job(),
+            # Faker's generic job() had no relationship to income — a customer
+            # earning one minimum wage could come out a "Diretor Executivo".
+            # PROFESSIONS_BY_CLASS keys the occupation off the income class.
+            'profession': sample_profession(get_income_class(renda)),
             'account_created_at': created_date.isoformat(),
             'account_type': account_type,
             'account_status': random.choices(
                 ['ACTIVE', 'BLOCKED', 'INACTIVE'],
                 weights=[95, 3, 2]
             )[0],
-            'credit_limit': round(renda * random.uniform(2, 8), 2),
+            # CREDIT_LIMIT_BY_CLASS is calibrated per income class; the old
+            # uniform(2, 8) multiplier put the typical limit at 5x income, where
+            # the Brazilian norm sits closer to 0.5-2x with a long upper tail.
+            'credit_limit': sample_credit_limit(get_income_class(renda)),
             'credit_score': score,
             'risk_level': risk_level,
             'bank_code': banco_codigo,
@@ -267,29 +302,31 @@ class CustomerGenerator:
             'CE': 0.72, 'RN': 0.73, 'PB': 0.68, 'PE': 0.75, 'AL': 0.65,
             'SE': 0.72, 'BA': 0.73,
         }
-        # Base income distribution (realistic for Brazil)
-        base_ranges = [
-            (1500, 3000, 40),
-            (3000, 7000, 35),
-            (7000, 15000, 18),
-            (15000, 50000, 7),
-        ]
-        
-        # Select base range
-        ranges, weights = zip(*[(r[:2], r[2]) for r in base_ranges])
-        selected_range = random.choices(ranges, weights=weights)[0]
-        base_income = random.uniform(*selected_range)
-        
-        # Apply profile multiplier
+        # Base income: PNAD 2023 brackets from config/distributions.py.
+        #
+        # This used to be a hardcoded ladder starting at R$1,500, which put the
+        # floor above roughly a quarter of Brazilian earners: measured median
+        # came out at R$7,981 with only 2.4% below one minimum wage, against a
+        # real ~R$2,000-2,600 and ~25-30%. INCOME_BRACKETS is the project's own
+        # calibrated table and was sitting unused.
+        base_income = sample_monthly_income()
+
+        # Profile bias: draw several samples and keep the highest, instead of
+        # multiplying. A multiplier of 2-8x on an already-correct sample pushes
+        # the marginal distribution off the real support; an order statistic
+        # shifts a profile upward while every value stays a value that the PNAD
+        # distribution actually produces.
         if profile_config:
             min_mult, max_mult = profile_config.income_multiplier
-            multiplier = random.uniform(min_mult, max_mult)
-            base_income *= multiplier
-        
+            relative = ((min_mult + max_mult) / 2) / _MEAN_INCOME_MULTIPLIER
+            draws = max(1, min(6, round(relative)))
+            if draws > 1:
+                base_income = max(sample_monthly_income() for _ in range(draws))
+
         # V6-M9: Modulate by state median income
         state_mult = _STATE_INCOME_MULT.get(estado, 1.0)
         base_income *= state_mult
-        
+
         return round(base_income, 2)
     
     def _calculate_credit_score(self, renda: float, account_age_days: int) -> int:

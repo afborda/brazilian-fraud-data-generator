@@ -26,7 +26,7 @@ Run full quality assessment and generate a comprehensive report.
 
 4. Compare against baselines:
    - Overall score: 9.70/10 (A+)
-   - AUC-ROC: 0.9991
+   - AUC-ROC alvo: 0.75–0.95 (acima de 0.97 = separabilidade trivial, reprova)
    - Reference: `REALISM_METRICS.json`
 
 5. For field-specific scope, analyze:

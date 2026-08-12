@@ -103,6 +103,16 @@ class CustomerSessionState:
         self._PRIMARY_MAX = 2
         # Pro+: 30d extended window — (timestamp, amount, device_id, merchant_id)
         self._transactions_30d: deque = deque()
+        # Last activity, kept outside every window. Inactivity is unbounded by
+        # definition, so reading it from the 24h deque made a dormant customer
+        # look like the most active one: once the deque was pruned empty,
+        # get_last_transaction_minutes_ago() returned None and hours_inactive
+        # collapsed to 0. Legitimate hours_inactive therefore never exceeded 23,
+        # while fraud (which sets it directly) ran to thousands — so
+        # `hours_inactive > 23` identified fraud with 100.0000% precision.
+        self._last_seen_ts: Optional[datetime] = None
+        self._last_seen_lat: Optional[float] = None
+        self._last_seen_lon: Optional[float] = None
 
     def _prune_old(self, current_time: datetime) -> None:
         """Remove transactions older than 24h (24h window) and 30d (extended window)."""
@@ -140,6 +150,11 @@ class CustomerSessionState:
         self._accumulated_amount += amount
         # 30d extended window
         self._transactions_30d.append((timestamp, amount, device_id, merchant_id))
+        # Unbounded last-activity marker (see __init__)
+        if self._last_seen_ts is None or timestamp >= self._last_seen_ts:
+            self._last_seen_ts = timestamp
+            if lat is not None and lon is not None:
+                self._last_seen_lat, self._last_seen_lon = lat, lon
 
         if merchant_id:
             self._merchant_counts[merchant_id] = self._merchant_counts.get(merchant_id, 0) + 1
@@ -230,18 +245,21 @@ class CustomerSessionState:
         return merchant_id not in self._merchant_counts
 
     def get_last_transaction_minutes_ago(self, current_time: datetime) -> Optional[int]:
-        """Minutes since last transaction."""
-        if not self._transactions:
+        """Minutes since the customer's last transaction, at any distance in the past.
+
+        Reads `_last_seen_ts`, which survives window pruning — a customer
+        dormant for three months must report three months, not None.
+        """
+        if self._last_seen_ts is None:
             return None
-        last_ts = self._transactions[-1][0]
-        delta = current_time - last_ts
+        delta = current_time - self._last_seen_ts
         return int(delta.total_seconds() / 60) if delta.total_seconds() >= 0 else None
 
     def get_distance_from_last_txn_km(self, lat: Optional[float], lon: Optional[float]) -> Optional[float]:
-        """Distance from last transaction (km)."""
-        if not self._transactions or lat is None or lon is None:
+        """Distance from the customer's last transaction (km)."""
+        if lat is None or lon is None:
             return None
-        _last_ts, _amount, _merchant_id, last_lat, last_lon, _device_id = self._transactions[-1]
+        last_lat, last_lon = self._last_seen_lat, self._last_seen_lon
         if last_lat is None or last_lon is None:
             return None
         return round(haversine_distance(last_lat, last_lon, lat, lon), 2)

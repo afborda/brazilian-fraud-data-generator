@@ -41,6 +41,159 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ---
 
+## v4.20.0 — Camada 2: Sobreposição (2026-08-12) — PARCIAL
+
+Substitui o padrão `if is_fraud: <range A> else: <range B>` por distribuições que
+se contaminam nos dois sentidos. **Ainda não fecha a meta**: a AUC multivariada
+caiu de 0.999990 para 0.9855, contra um alvo de 0.75–0.95.
+
+### Novo: `utils/overlap.py`
+
+- `two_class()` — primitiva central. Uma fração das fraudes amostra da população
+  legítima (laranja com conta antiga, fraudador em aparelho velho) e uma fração
+  dos legítimos amostra da suspeita (conta digital aberta hoje, MEI recém-aberto).
+  Sem isso, reduzir a distância entre as faixas só move o limiar de corte.
+- `lognormal_days()`, `truncated_gauss()`, `beta_score()` — substituem `uniform`
+  em grandezas que no mundo real são multiplicativas e de cauda longa.
+
+### Separadores de precisão 100% eliminados
+
+| Regra | Recall antes | Depois |
+|---|---|---|
+| `bot_confidence_score > 0.05` | 72,3% | `> 0.85`, 1,6% |
+| `hours_inactive > 23` | 69,4% | eliminado |
+| `destination_account_age_days < 30` | 62,4% | eliminado |
+| `dest_account_age_days IS NOT NULL` | 61,5% | eliminado |
+| `velocity_transactions_24h > 8` | 46,9% | `> 33`, 4,4% |
+| `device_age_days < 30` | 33,1% | eliminado |
+| `amount < 9` | 13,4% | eliminado |
+| `automation_signature IS NULL` | 100% da classe | eliminado |
+| `municipio_nome IS NOT NULL` | 30,0% | eliminado |
+| `beneficiary_cpf_hash IS NOT NULL` | 15,0% | eliminado |
+| `is_probe_transaction` | 8,9% | eliminado |
+
+### Correções de causa raiz
+
+- **`utils/streaming.py`** — `_last_seen_ts` fora de qualquer janela. `hours_inactive`
+  era lido do deque podado em 24h, então cliente dormente reportava 0 (o valor de
+  máxima atividade) e o legítimo nunca passava de 23h.
+  `get_distance_from_last_txn_km` tinha o mesmo defeito.
+- **`cli/runners/batch_runner.py`** — pool de clientes agora considera o intervalo
+  de datas: era `total_tx // 100` fixo, o que sobre 365 dias dava 0,27 tx/dia por
+  cliente (BCB: ~1,7). Nenhum cliente legítimo chegava a 12 transações em 24h.
+- **`cli/workers/tx_worker.py`** — `_activity_weight()`: seleção de cliente ponderada
+  por `monthly_tx_frequency` (que existia e nunca era lido) mais fator lognormal,
+  dando a cauda longa de volume que o tráfego real tem.
+- **`enrichers/geo.py`** — o ramo de cluster devolvia `municipio=None`, deixando
+  `municipio_nome` e `codigo_ibge_municipio` nulos em 100% dos legítimos.
+- **`enrichers/fraud.py`** — o gate pro+ do `automation_signature` era avaliado só
+  no ramo de fraude; transferência de verificação legítima (R$0,01–5,00) passa a
+  existir; `_LOW_AND_SLOW_SHARE` = 32% das fraudes mantêm a velocity da sessão.
+
+### Testes
+
+- Dois testes frágeis corrigidos para propriedade distribucional, conforme
+  `.claude/rules/testing.md`: `test_pix_golpe_pattern` exigia `new_beneficiary is
+  True` num registro único com probabilidade configurada de 0,65 (passava por
+  sorte); `test_engenharia_social_pattern` punha teto rígido de R$50k sobre uma
+  cauda log-normal.
+
+### Pendente
+
+- AUC multivariada em 0.9855 — alvo 0.75–0.95.
+- `fraud_score > 94` e `fraud_risk_score > 93` ainda separam com precisão 100%
+  (fora do feature set de ML, mas exportados ao cliente).
+- Campos-marcador remanescentes: `motivo_devolucao_med`, `card_test_phase`,
+  `velocity_burst_id`, `distributed_attack_group`.
+- Decoys, pool de contrapartes PIX e catálogo de merchants não iniciados.
+
+---
+
+## v4.19.0 — Camada 1: Vazamento (2026-08-12)
+
+Primeira das três camadas de correção do vazamento de rótulo. Auditoria completa
+em três trilhas (vazamento de sinal, fidelidade estatística, aparato de medição)
+apontou que a AUC-ROC de 0.9991 anunciada como selo de qualidade media a força do
+vazamento, não a qualidade do dado.
+
+**Esta camada não derruba a AUC** — os separadores de precisão 100% (ranges
+disjuntos `if is_fraud: A else: B`) são o alvo da camada 2. O que ela entrega é
+realismo do tráfego legítimo, destravamento dos guards e um portão de CI.
+
+### Removido do feature set de ML
+
+- **`ml/features.py`** — `fraud_score` e `fraud_risk_score` saíram de
+  `FEATURE_NAMES`, `FEATURE_DTYPES` e `_DEFAULTS` (31 → 29 features). Ambos são
+  derivados do rótulo pelo próprio gerador e não existem em feed real de banco.
+  Contradiziam o docstring do próprio módulo, que já declarava excluir vazamento.
+- **`tests/unit/test_ml_features_no_leakage.py`** (novo) — 15 testes que barram a
+  reintrodução de qualquer campo derivado do rótulo e mantêm as três tabelas de
+  feature em sincronia.
+
+### Guards de AUC invertidos
+
+- 12 pontos em `CLAUDE.md`, `.github/instructions/`, `.github/agents/`,
+  `.github/prompts/`, `.claude/agents/`, `.claude/rules/` e `.claude/commands/`
+  passaram de "manter AUC ≥ 0.9991" para "AUC efetiva na faixa 0.75–0.95, CI
+  reprova acima de 0.97". Antes, qualquer correção real de vazamento seria lida
+  como regressão pelos agentes.
+
+### Portão de qualidade no CI
+
+- **`tools/analyze_batch.py`** — novas flags `--gate` e `--max-auc` (default 0.97).
+  Sai com código 1 quando alguma AUC passa do teto ou há gap de severidade `high`.
+  Sem `--gate` o comportamento é o de antes (sempre 0).
+- **`.github/workflows/quality-gate.yml`** (novo) — gera um batch de 20MB e roda o
+  portão em PR e push para `main`.
+
+### Fidelidade do tráfego legítimo
+
+- **`cli/workers/tx_worker.py`** — `_sorted_timestamps()`: as transações passam a
+  ser geradas em ordem cronológica. `CustomerSessionState._prune_old` assume ordem
+  temporal, e a chegada aleatória fazia a "janela de 24h" reter até um ano.
+  Inversões temporais 49,9% → 1,5%; `velocity_transactions_24h` média 30,96 → 1,38
+  (real ≈1,7–3/dia); `customer_velocity_z_score` +17,9 → −1,2 (real ≈0);
+  `time_since_last_txn_min` p50 98 dias → 0,4 dia.
+  **Quebra reprodutibilidade por seed em relação à v4.18.0** — a ordem de consumo
+  do RNG muda; a distribuição marginal dos timestamps não.
+- **`config/seasonality.py`** — `get_day_multiplier()` não aplica mais peso de dia
+  da semana: `DOW_WEIGHTS` já carrega a penalidade e o efeito estava dobrado.
+  Razão sábado/segunda 0,48 → 0,588.
+- **`config/transactions.py`** — novo `TYPE_VALUE_MULTIPLIER` +
+  `get_value_multiplier_for_type()`. O valor vinha só da faixa do MCC, que
+  descreve o estabelecimento e não o meio de pagamento. Medianas: TED
+  R$ 244,96 → R$ 3.629,70; BOLETO R$ 163,82 → R$ 487,56; WITHDRAWAL
+  R$ 174,48 → R$ 265,77.
+- **`generators/customer.py`** — `config/distributions.py` (189 linhas calibradas
+  com PNAD/IBGE, até então código morto) passa a ser usado: renda por
+  `sample_monthly_income()`, profissão por `sample_profession(classe)`, limite por
+  `sample_credit_limit(classe)`. O multiplicador de perfil virou viés por
+  estatística de ordem, centrado na média ponderada da população — multiplicar uma
+  amostra correta por 2–8× levaria a marginal para fora do suporte real.
+  Renda mediana R$ 7.981 → R$ 4.360; abaixo de 1 SM 2,4% → 22,7% (real 25–30%);
+  limite/renda 5,02× → 0,51× (real 0,5–2×).
+- **`config/pix.py`** — ISPB do Banrisul corrigido (`00000000`, que é do Banco do
+  Brasil, → `92702067`) e do Banco Original (`92702067`, que é do Banrisul, →
+  `92894922`). `ISPB_LIST` deduplicada (NEXT compartilha o ISPB do Bradesco e
+  recebia peso dobrado) e mapa reverso passa a resolver para a instituição-mãe.
+
+### Pendências conhecidas (camada 2)
+
+- Separadores de precisão 100% intactos: `bot_confidence_score > 0.05`,
+  `destination_account_age_days < 30`, `device_age_days < 30`,
+  `automation_signature IS NULL`, entre outros.
+- A correção de ordenação **expôs** vazamentos de velocity antes mascarados por
+  ruído: `hours_inactive > 23`, `velocity_transactions_24h > 8` e
+  `customer_velocity_z_score > 6` agora separam com precisão 100%.
+- `new_beneficiary` subiu para 97,4% no tráfego legítimo: com a janela correta,
+  fica exposto que cada PIX sorteia um CPF de recebedor novo (não há grafo de
+  contrapartes).
+- Amostragem uniforme dentro das faixas de renda mantém a mediana ~1,7× acima do
+  alvo PNAD.
+- Peso do ISPB continua uniforme; falta `ISPB_WEIGHTS` por share PIX real.
+
+---
+
 ## v4.18.0 — ML Quality Lab (2026-04-13)
 
 ### Novo: Pacote `src/fraud_generator/ml/`

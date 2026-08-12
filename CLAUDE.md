@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-High-performance synthetic data generator for Brazilian banking & ride-share fraud detection. Generates labeled datasets (JSONL, CSV, Parquet) at MB–TB scale. Published on PyPI as `fraud-generator`. Current metrics: quality 9.70/10 (A+), AUC-ROC 0.9991.
+High-performance synthetic data generator for Brazilian banking & ride-share fraud detection. Generates labeled datasets (JSONL, CSV, Parquet) at MB–TB scale. Published on PyPI as `fraud-generator`.
+
+**Em correção (camada 1, branch `fix/camada-1-vazamento`):** as métricas históricas "quality 9.70/10 (A+), AUC-ROC 0.9991" medem vazamento de rótulo, não qualidade. Uma AUC próxima de 1.0 significa fraude trivialmente separável — dado que não transfere para produção. O alvo é AUC efetiva **0.75–0.95**. Não trate quedas de AUC como regressão.
 
 ## Commands
 
@@ -89,11 +91,11 @@ Every config module in `config/` exports: `THING_LIST`, `THING_WEIGHTS`, `get_th
 
 ### Risk scoring — 17 signals
 
-`generators/score.py` computes `fraud_risk_score` [0-100] by summing weighted boolean signals (emulator=35, rooted=30, ATO triad=25, etc.) plus 4 correlation rules. The score must remain meaningful after optimization — guard with AUC-ROC ≥ 0.9991.
+`generators/score.py` computes `fraud_risk_score` [0-100] by summing weighted boolean signals (emulator=35, rooted=30, ATO triad=25, etc.) plus 4 correlation rules. The score must remain meaningful after optimization — guard with effective AUC-ROC within the 0.75–0.95 band (CI fails above 0.97). An AUC above 0.97 means the fraud is trivially separable and the batch must FAIL, not pass: see tools/analyze_batch.py.
 
 ### ML quality validation
 
-`ml/` module: extracts 31 features → trains LightGBM binary + multilabel models → evaluates AUC-ROC/AUC-PR. Used by `benchmarks/data_quality_benchmark.py` which scores 9 quality dimensions and assigns letter grades. The quality pipeline is optional (graceful degradation if LightGBM unavailable).
+`ml/` module: extracts 29 features → trains LightGBM binary + multilabel models → evaluates AUC-ROC/AUC-PR. `fraud_score` and `fraud_risk_score` are deliberately NOT features — the generator derives them from the label, so feeding them back in is circular. Do not re-add them. Used by `benchmarks/data_quality_benchmark.py` which scores 9 quality dimensions and assigns letter grades. The quality pipeline is optional (graceful degradation if LightGBM unavailable).
 
 ### Profile stickiness
 
