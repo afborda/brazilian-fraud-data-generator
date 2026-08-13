@@ -40,7 +40,7 @@ from ..config.fraud_patterns import (
 )
 from ..config.merchants import (
     MCC_LIST, MCC_WEIGHTS, MCC_CODES,
-    get_merchants_for_mcc, get_mcc_info,
+    get_merchants_for_mcc, get_mcc_info, pick_merchant,
 )
 from ..config.banks import BANK_CODES, BANK_WEIGHTS
 from ..config.geography import ESTADOS_BR, ESTADOS_LIST, ESTADOS_WEIGHTS
@@ -348,6 +348,7 @@ class TransactionGenerator:
             and random.random() < 0.70
         )
         _fav_merchant_id = None
+        _catalog_merchant_id = None
         if _fav_from_session:
             _fav = session_state.get_favorite_merchant()
             if _fav is not None:
@@ -368,8 +369,9 @@ class TransactionGenerator:
             else:
                 mcc_code = self._mcc_cache.sample()
             mcc_info = get_mcc_info(mcc_code)
-            merchants = self._merchants_cache.get(mcc_code, ["Local Merchant"])
-            merchant_name = random.choice(merchants)
+            # Estabelecimento vem do catálogo global: um id identifica uma loja,
+            # com nome e MCC fixos, compartilhada entre clientes.
+            _catalog_merchant_id, merchant_name = pick_merchant(mcc_code)
 
         # ── Value ─────────────────────────────────────────────────────────
         valor = self._calculate_value(is_fraud, fraud_type, mcc_info, customer_profile, tx_type)
@@ -395,7 +397,7 @@ class TransactionGenerator:
             "ip_address": self._buf.next_ip(),
             "geolocation_lat": None,  # filled by GeoEnricher
             "geolocation_lon": None,
-            "merchant_id": _fav_merchant_id or self._buf.next_merchant_id(),
+            "merchant_id": _fav_merchant_id or _catalog_merchant_id,
             "merchant_name": merchant_name,
             "merchant_category": mcc_info["category"],
             "mcc_code": mcc_code,
@@ -506,6 +508,8 @@ class TransactionGenerator:
             and session_state is not None
             and random.random() < 0.70
         )
+        _fav_merchant_id = None
+        _catalog_merchant_id = None
         if _fav_from_session:
             _fav = session_state.get_favorite_merchant()  # type: ignore[union-attr]
             if _fav is not None:
@@ -527,8 +531,7 @@ class TransactionGenerator:
             else:
                 mcc_code = self._mcc_cache.sample()
             mcc_info = get_mcc_info(mcc_code)
-            merchants = self._merchants_cache.get(mcc_code, ['Local Merchant'])  # OTIMIZAÇÃO 1.2
-            merchant_name = random.choice(merchants)
+            _catalog_merchant_id, merchant_name = pick_merchant(mcc_code)
 
         # Calculate value (uses mcc_info; resolved above regardless of path)
         valor = self._calculate_value(
@@ -565,7 +568,7 @@ class TransactionGenerator:
             'ip_address': self._buf.next_ip(),
             'geolocation_lat': lat,
             'geolocation_lon': lon,
-            'merchant_id': _fav_merchant_id or self._buf.next_merchant_id(),
+            'merchant_id': _fav_merchant_id or _catalog_merchant_id,
             'merchant_name': merchant_name,
             'merchant_category': mcc_info['category'],
             'mcc_code': mcc_code,

@@ -113,6 +113,11 @@ class CustomerSessionState:
         self._last_seen_ts: Optional[datetime] = None
         self._last_seen_lat: Optional[float] = None
         self._last_seen_lon: Optional[float] = None
+        # Merchants/counterparties this customer has EVER paid — never pruned.
+        # "New beneficiary" means never seen before, not "not seen in the last
+        # 24h": _merchant_counts is decremented by _prune_old, so a merchant
+        # paid last week counted as new again.
+        self._merchants_ever: set = set()
 
     def _prune_old(self, current_time: datetime) -> None:
         """Remove transactions older than 24h (24h window) and 30d (extended window)."""
@@ -158,6 +163,7 @@ class CustomerSessionState:
 
         if merchant_id:
             self._merchant_counts[merchant_id] = self._merchant_counts.get(merchant_id, 0) + 1
+            self._merchants_ever.add(merchant_id)
             # T4: accumulate favorites from first _FAVORITE_MAX distinct merchants
             if (
                 merchant_id not in self._favorite_ids
@@ -239,10 +245,18 @@ class CustomerSessionState:
         return round(self._accumulated_amount, 2)
 
     def is_new_merchant(self, merchant_id: Optional[str]) -> bool:
-        """Is this a new merchant for customer within 24h window?"""
+        """Has this customer never paid this merchant/counterparty before?
+
+        Reads `_merchants_ever`, which is never pruned. It used to read
+        `_merchant_counts`, which `_prune_old` decrements as transactions leave
+        the 24h window — so a merchant paid last week counted as new again. At
+        a realistic ~1.7 transactions/day a customer has one or two records
+        inside any 24h window, which pinned `new_beneficiary` near 100% of
+        legitimate traffic (real: 5-15%) and made the field useless as a signal.
+        """
         if not merchant_id:
             return False
-        return merchant_id not in self._merchant_counts
+        return merchant_id not in self._merchants_ever
 
     def get_last_transaction_minutes_ago(self, current_time: datetime) -> Optional[int]:
         """Minutes since the customer's last transaction, at any distance in the past.

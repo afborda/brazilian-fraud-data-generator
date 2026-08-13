@@ -119,12 +119,32 @@ caiu de 0.999990 para 0.9855, contra um alvo de 0.75–0.95.
   fraud types"). Golpe de boleto e ATO reaproveitam contraparte que a vítima já
   paga — é justamente isso que os torna difíceis.
 
+### Catálogo de estabelecimentos
+
+- **`config/merchants.py`** — `MERCHANT_CATALOG` + `pick_merchant()`: 3.781
+  estabelecimentos estáveis, marcas maiores com mais lojas, amostragem Zipf.
+  `merchant_id` era um token aleatório `MERCH_%06d` sem relação com
+  `merchant_name`: 57.601 ids para 264k transações, 36,5% deles mapeando para
+  mais de um nome, "Carrefour" com 642 ids distintos e média de 1,49 clientes
+  por id. Agora: 3.390 ids, 0,4% ambíguos, Carrefour com 48 lojas, 19,9 clientes
+  por estabelecimento. Features de nível de merchant passam a ser possíveis.
+- **`utils/streaming.py`** — `_merchants_ever`, não podado. `is_new_merchant()`
+  lia `_merchant_counts`, que `_prune_old` decrementa quando a transação sai da
+  janela de 24h — o docstring dizia "within 24h window". A ~1,7 tx/dia o cliente
+  tem uma ou duas transações em qualquer janela de 24h, então quase todo merchant
+  era "novo". `new_beneficiary` no tráfego legítimo: 84,3% → **26,7%**
+  (real 5–15%); na fraude, 91,2%.
+
 ### Pendente
 
-- AUC multivariada em 0.9820 — alvo 0.75–0.95.
-- **Catálogo de merchants não feito** — `merchant_id` continua sendo token
-  aleatório por transação para o tráfego não-PIX, o que mantém
-  `new_beneficiary` em 85% no legítimo (real 5–15%).
+- AUC multivariada em 0.9874 — alvo 0.75–0.95. A correção do `new_beneficiary`
+  subiu a AUC de propósito: o campo virou um discriminador de verdade
+  (26,7% legítimo vs 91,2% fraude) em vez de ruído constante.
+- O sinal restante está distribuído entre `amount`, `accumulated_amount_24h`,
+  `dest_account_age_days`, `bot_confidence_score` e `device_age_days`, sem
+  nenhum limiar dominante. Reduzir mais exige calibração contra dado real —
+  enfraquecer os sinais sem referência seria trocar um número arbitrário por
+  outro.
 - `recipient_is_mule` e `is_impossible_travel` são sinais declarados que nunca
   disparam (o portão de CI reprova por isso).
 - `fraud_score > 94` e `fraud_risk_score > 93` ainda separam com precisão 100%
