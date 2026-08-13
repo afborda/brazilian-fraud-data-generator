@@ -135,9 +135,30 @@ caiu de 0.999990 para 0.9855, contra um alvo de 0.75–0.95.
   era "novo". `new_beneficiary` no tráfego legítimo: 84,3% → **26,7%**
   (real 5–15%); na fraude, 91,2%.
 
+### Sinais mortos e teto do fraud_score
+
+- **`enrichers/risk.py`** — `recipient_is_mule` descrevia o DESTINO mas estava
+  amarrado ao papel do remetente no anel de fraude, disparando **21 vezes em
+  268 mil registros**. Cash-out por conta-laranja é a norma no PIX, não evento
+  raro de anel. Agora: 37,9% na fraude, 0,21% no legítimo — a taxa legítima é
+  deliberada, porque lista de mula tem falso positivo.
+- **`utils/streaming.py`** — `check_impossible_travel()` lia o deque podado em
+  24h. Cliente que transacionou há 30h em outro estado é exatamente o caso que
+  o sinal existe para pegar. Passa a usar o marcador não-podado.
+- **`enrichers/risk.py`** — faixa alta do `fraud_score` legítimo ia até
+  `uniform(80, 95)`, ou seja, máximo 94 após `int()`. Isso fazia
+  `fraud_score > 94` isolar fraude com precisão 100% sobre ~16% dos registros.
+  Teto subiu para 101: um antifraude legado crava 100 em cliente bom de vez em
+  quando.
+- **`tests/`** — `test_non_fraud_transactions` exigia `fraud_score < 96`,
+  recriando exatamente o separador. Convertido para forma da distribuição
+  (mediana < 40, p90 < 75) sobre 400 amostras.
+
+**O portão de CI passa** com estes dados.
+
 ### Pendente
 
-- AUC multivariada em 0.9874 — alvo 0.75–0.95. A correção do `new_beneficiary`
+- AUC multivariada em 0.9864 — alvo 0.75–0.95. A correção do `new_beneficiary`
   subiu a AUC de propósito: o campo virou um discriminador de verdade
   (26,7% legítimo vs 91,2% fraude) em vez de ruído constante.
 - O sinal restante está distribuído entre `amount`, `accumulated_amount_24h`,

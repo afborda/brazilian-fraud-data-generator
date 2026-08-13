@@ -248,18 +248,31 @@ class TestFraudContextualization:
         # Create generator with 0% fraud rate
         clean_gen = TransactionGenerator(fraud_rate=0.0, use_profiles=False, seed=123)
         
-        for i in range(20):
+        scores = []
+        for i in range(400):
             tx = clean_gen.generate(
                 tx_id=str(i),
                 customer_id=f"CUST_{i:012d}",
                 device_id=f"DEV_{i:06d}",
                 timestamp=datetime(2025, 1, 15, 12, 0)
             )
-            
+
             assert tx['is_fraud'] is False
             assert tx['fraud_type'] is None
-            # Com ruído realista: 85% < 40, 12% borderline, 3% até ~95. Limite ampliado.
-            assert tx['fraud_score'] < 96, f"Non-fraud score inesperadamente alto: {tx['fraud_score']}"
+            scores.append(tx['fraud_score'])
+
+        # A hard ceiling here recreated the very leak the score is meant to
+        # avoid: capping legitimate scores below the fraud maximum made
+        # `fraud_score > 94` a 100%-precision fraud rule. A legacy antifraud
+        # engine does score the occasional good customer at 100 — that false
+        # positive is what makes the problem realistic.
+        #
+        # Assert the shape instead: the mass sits low, the tail is allowed.
+        scores.sort()
+        p50 = scores[len(scores) // 2]
+        p90 = scores[int(len(scores) * 0.90)]
+        assert p50 < 40, f"mediana do score legítimo alta demais: {p50}"
+        assert p90 < 75, f"p90 do score legítimo alto demais: {p90}"
     
     def test_fraud_pattern_fields_present(self, generator):
         """Test that fraud pattern application adds expected fields."""

@@ -293,10 +293,14 @@ class CustomerSessionState:
         elapsed time is at least 5 minutes and the distance exceeds what a
         commercial flight could cover.  Returns (is_impossible: bool, distance_km: float).
         """
-        if not self._transactions or lat is None or lon is None:
+        if lat is None or lon is None:
             return False, 0.0
-        last_ts, _amt, _mid, last_lat, last_lon, _did = self._transactions[-1]
-        if last_lat is None or last_lon is None:
+        # Uses the unpruned last-seen marker, not the 24h deque: a customer who
+        # transacted 30h ago in another state is exactly the case this check
+        # exists for, and reading the pruned window made it invisible.
+        last_ts = self._last_seen_ts
+        last_lat, last_lon = self._last_seen_lat, self._last_seen_lon
+        if last_ts is None or last_lat is None or last_lon is None:
             return False, 0.0
         dist_km = haversine_distance(last_lat, last_lon, lat, lon)
         elapsed_min = (current_time - last_ts).total_seconds() / 60.0
