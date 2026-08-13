@@ -53,6 +53,7 @@ from ..profiles.behavioral import (
     get_transaction_value_for_profile,
 )
 from ..utils.helpers import generate_ip_brazil, generate_random_hash
+from ..utils.ground_truth import split_ground_truth
 from ..utils.streaming import CustomerSessionState
 from ..utils.weight_cache import WeightCache  # OTIMIZAÇÃO 1.1
 from ..utils.precompute import PrecomputeBuffers  # OTIMIZAÇÃO 3: RAM pre-compute
@@ -433,6 +434,14 @@ class TransactionGenerator:
         # internamente mas nenhum enricher os propaga para o dict de saída.
         tx["is_fraud"] = bag.is_fraud
         tx["fraud_type"] = bag.fraud_type
+
+        # Investigation-consequence fields (multiclass label, chain linkage,
+        # report delay, card-test phase, attack-cluster id) move to a
+        # companion ground-truth record instead of riding along with every
+        # ordinary feature — see utils/ground_truth.py. The caller (tx_worker
+        # / batch_gen / parallel) is responsible for writing `_ground_truth`
+        # to fraud_ground_truth_NNNNN.jsonl and popping it before export.
+        tx["_ground_truth"] = split_ground_truth(tx)
 
         return tx
 

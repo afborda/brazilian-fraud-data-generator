@@ -52,6 +52,14 @@ MOTIVO_DEVOLUCAO_LIST = [
 
 MOTIVO_DEVOLUCAO_WEIGHTS = [55, 25, 12, 8]
 
+# Devolução em PIX legítimo: BE08 (chave PIX errada, pagamento duplicado) e
+# REFU (recebedor recusa um valor inesperado) acontecem sem qualquer fraude
+# envolvida — só FR01/MD06 carregam a alegação de golpe, por isso ficam de
+# fora daqui. É o mesmo campo `motivo_devolucao_med` que a fraude usa; a
+# diferença é a taxa e o motivo, não a existência do campo.
+MOTIVO_DEVOLUCAO_LEGIT_LIST = ["BE08", "REFU"]
+MOTIVO_DEVOLUCAO_LEGIT_WEIGHTS = [65, 35]
+
 # ── ISPB map — participantes do PIX (principais bancos) ──────────────────────
 # Source: BACEN IF.data, updated 2024-06
 # Format: nome_curto → ISPB (8 digits, zero-padded)

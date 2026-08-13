@@ -27,7 +27,7 @@ import os
 import re
 import textwrap
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .parser import FIELD_CATALOG, VALID_FAKER_METHODS, SchemaParser, SchemaValidationError
 

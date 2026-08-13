@@ -190,16 +190,27 @@ class TestFraudRiskScore:
         assert fraud_avg > legit_avg, \
             f"Fraud avg {fraud_avg:.1f} should be higher than legit avg {legit_avg:.1f}"
 
-    def test_legit_max_score_is_low(self, legit_generator):
-        """Legitimate transactions should not score very high.
-        
-        Normal-human device signals occasionally coincide with risk indicators
-        (e.g. 3% rooted devices), so the ceiling is intentionally set at 70
-        to remain robust across different random-state orderings in the suite.
+    def test_legit_score_distribution_is_low(self, legit_generator):
+        """Legitimate transactions should mostly score very low.
+
+        A hard ceiling on the max (as this test used to assert) is itself a
+        precision-100% separator in disguise: if no legit record can ever
+        reach score X, then score >= X predicts fraud perfectly. Real risk
+        signals coincide by chance sometimes — a legitimate customer can be
+        rooted, on an unfamiliar network, and transacting at 3am in the same
+        transaction — so an occasional high score on a legit record is a
+        realistic false positive, not a bug. What must hold is the shape of
+        the distribution: most legit traffic scores low, and only a small
+        tail reaches into fraud territory. See `.claude/rules/testing.md`.
         """
-        txs = _gen_txs(legit_generator, 200)
-        max_score = max(tx["fraud_risk_score"] for tx in txs)
-        assert max_score < 70, f"Legit transaction scored {max_score} — too high"
+        import statistics
+
+        txs = _gen_txs(legit_generator, 500)
+        scores = sorted(tx["fraud_risk_score"] for tx in txs)
+        median = statistics.median(scores)
+        p95 = scores[int(len(scores) * 0.95)]
+        assert median < 10, f"Legit median fraud_risk_score {median} — too high"
+        assert p95 < 55, f"Legit p95 fraud_risk_score {p95} — too high"
 
 
 # ── Fraud type consistency ────────────────────────────────────────────────────

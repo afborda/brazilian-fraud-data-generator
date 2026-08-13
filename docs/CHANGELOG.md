@@ -38,6 +38,157 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.17 | **README** | README reescrito, agent-ia/ removido, tools/ criado, docs/README.md criado | 2026-04-01 |
 | v4.17.1 | **Auditoria** | Remoção de docs sensíveis, workflows privados, fix Dockerfile key | 2026-04-01 |
 | v4.18.0 | **ML Quality Lab** | Pacote ml/ (LightGBM adversarial), tools/analyze_batch.py, tools/train_ml.py, fixes enrichers (odd_hours, dest_account_age_days, log-normal noise), README com pipeline e benchmarks | 2026-04-13 |
+| v4.21.0 | **Camada 2: Fechamento** | Quarto caso do bug de janela curta (`is_new_device`), separação de ground truth em arquivo próprio, últimos 3 separadores de precisão 100% eliminados | 2026-08-13 |
+
+---
+
+## v4.21.0 — Camada 2: Fechamento (2026-08-13)
+
+Fecha os pendentes deixados pela v4.20.0: o quarto caso do bug de janela curta
+em `CustomerSessionState`, a separação de campos de investigação num arquivo
+próprio, e os 3 separadores de precisão 100% que restavam
+(`velocity_transactions_24h > 32`, `customer_velocity_z_score > 28`,
+`geolocation_lon < -63.9792`). AUC multivariada: 0.986431 → 0.987865
+(praticamente estável — nenhuma das correções deste ciclo visava reduzir AUC,
+e o gate de CI não usa nenhum dos campos-marcador tratados aqui, porque
+nenhum deles jamais esteve no feature set oficial de `ml/features.py`).
+
+### `utils/streaming.py` — quarto caso do padrão de janela curta
+
+- **`is_new_device`**: lia `_primary_devices`, um set travado nos 2 primeiros
+  dispositivos distintos vistos (`_PRIMARY_MAX = 2`). Depois de preenchido, o
+  set parava de crescer — então o 3º dispositivo de um cliente (comum: até 3
+  por cliente em `config/device.py`, 2-3 para os perfis `young_digital` e
+  `subscription_heavy`) ficava marcado "novo" para sempre, inclusive na
+  quingentésima transação de um aparelho de 18 meses. Medido: 34,3% dos
+  clientes legítimos têm 3+ dispositivos. Trocado por `_devices_ever`, um set
+  nunca podado — mesmo padrão já usado em `_merchants_ever` para
+  `is_new_merchant`. `device_new_for_customer` no tráfego legítimo: 12,8% →
+  0,34% (o valor antigo era inflado pelo recount indevido; o novo mede
+  literalmente "primeira vez que este dispositivo específico aparece", que é
+  raro frente ao volume total de um cliente).
+- Auditados todos os demais métodos e consumidores da classe
+  (`get_favorite_merchant`/`_favorite_merchants`, `get_velocity_window`,
+  `get_accumulated_window`, `get_unique_merchants_window`,
+  `get_unique_devices_window`, janelas de 30d) — todos já liam da estrutura
+  correta (marcador vitalício para perguntas "alguma vez", janela real para
+  perguntas "nesta janela"). Nenhuma outra ocorrência encontrada.
+
+### Ground truth separado do registro transacional
+
+- **`utils/ground_truth.py`** (novo) — `GROUND_TRUTH_FIELDS` +
+  `split_ground_truth()`/`ground_truth_path()`. Campos que só existem como
+  *conclusão* de uma investigação — nunca observáveis no instante da
+  transação — saem do registro principal: `fraud_labels` (taxonomia
+  multiclasse), `fraud_chain_id`, `fraud_chain_role`,
+  `fraud_reported_days_after`, `credential_breach_days_before`,
+  `card_test_phase`, `distributed_attack_group`.
+- **`cli/workers/tx_worker.py`** — escreve `fraud_ground_truth_NNNNN.jsonl` ao
+  lado de `transactions_NNNNN.{ext}`, unido por `transaction_id`. `is_fraud`/
+  `fraud_type` são duplicados nesse arquivo (para join autocontido) mas **não**
+  removidos do arquivo principal — ver justificativa no `ARCHITECTURE.md` §10:
+  ao contrário dos 7 campos acima, ambos já estão fora do feature set de ML
+  desde a v4.19.0, e este produto existe para entregar dataset rotulado.
+  Registros sem nenhum campo de investigação (~98%) gravam só
+  `transaction_id`/`is_fraud` no arquivo de ground truth, evitando dobrar o
+  tamanho do output por linhas quase todas nulas.
+- Lacuna conhecida: `cli/workers/batch_gen.py` (MinIO/S3) e `utils/parallel.py`
+  (streaming ao vivo) descartam `_ground_truth` em vez de gravá-lo — nenhum
+  dos dois tinha um canal auxiliar equivalente, e um dict aninhado quebraria
+  upload Parquet/S3 ou um evento de stream.
+- **`card_test_phase`, `distributed_attack_group`**: decisão = ground truth
+  (fase de uma campanha de fraude conhecida e id de cluster de ataque não têm
+  análogo observável em tráfego legítimo).
+- **`motivo_devolucao_med`**: decisão = dual-class. Dos 4 motivos BACEN de
+  devolução, só `FR01`/`MD06` alegam golpe; `BE08` (erro operacional — chave
+  PIX errada, pagamento duplicado) e `REFU` (recusa do recebedor) não
+  envolvem fraude nenhuma. `config/pix.py` ganhou
+  `MOTIVO_DEVOLUCAO_LEGIT_LIST`; `enrichers/pix.py` agora sorteia devolução
+  legítima em 1,5% dos PIX (vs. 30% dos PIX fraudulentos), com motivo
+  restrito a BE08/REFU.
+- **`velocity_burst_id`**: decisão = dual-class. Agrupar transações que caem
+  próximas no tempo não é intrinsecamente fraude — um dono de negócio ou MEI
+  pagando fornecedores em lote (contas a pagar, folha) produz a mesma forma
+  de rajada que `MICRO_BURST_VELOCITY` produz na fraude. `enrichers/fraud.py`
+  passa a sortear rajada legítima para os perfis `business_owner`/
+  `micro_empreendedor` (5% de chance por transação desses perfis).
+- **`fraud_signals`**: decisão = manter no registro principal. Não estava de
+  fato restrito a uma classe (90,6% fraude vs. 26,5% legítimo já antes desta
+  mudança) — é um resumo computado a partir de sinais já observáveis
+  (`build_context_for_fraud` roda para as duas classes), análogo a
+  `fraud_risk_score`.
+
+### Últimos 3 separadores de precisão 100%
+
+- **`geolocation_lon < -63.9792`** (recall 1,81%) — `enrichers/fraud.py`,
+  ramo `location_anomaly == "HIGH"`: o estado de destino da anomalia era
+  sorteado uniformemente entre os 27 estados/DF, ignorando população. Estados
+  do extremo oeste (Acre, Rondônia) raramente são o endereço real de um
+  cliente, mas tinham a mesma chance de qualquer outro no sorteio da fraude —
+  então a fraude visitava o extremo oeste desproporcionalmente mais que o
+  tráfego legítimo jamais visita. Trocado por `random.choices` ponderado por
+  `ESTADOS_WEIGHTS` (o mesmo peso populacional que já governa onde os
+  clientes legítimos moram), excluindo o estado atual do cliente. Corrige a
+  causa (distribuição de UF enviesada), não o sintoma.
+- **`velocity_transactions_24h > 32`** (recall 5,07%) e
+  **`customer_velocity_z_score > 28`** (recall 2,44%, derivado do mesmo
+  campo) — o valor legítimo vinha 100% do estado de sessão real
+  (`session_state.get_velocity()`), sem nenhum caminho de override direto;
+  só o ramo de fraude podia setar o campo diretamente. Num batch de 268 mil
+  registros / 432 clientes / ~1 ano, o máximo empiricamente observável por
+  essa via ficou preso em exatamente 32 — não por limite de código, mas
+  porque nenhum cliente simulado tem um "dia de pico" independente da
+  sazonalidade populacional compartilhada. Um dia de pagamento em lote
+  (contas a pagar, folha) de um `business_owner`/`micro_empreendedor` real
+  facilmente excede isso. `enrichers/fraud.py` agora seta
+  `velocity_transactions_24h` diretamente nesse mesmo evento de rajada
+  legítima (log-normal, mediana 20, até 80) — simétrico ao que o ramo de
+  fraude já fazia para HIGH/MEDIUM/LOW. `customer_velocity_z_score` é
+  recalculado a partir do valor final por `SessionEnricher`, então não
+  precisou de ajuste separado.
+
+### Lint
+
+- **`schema/ai_corrector.py`** — os 2 erros `F821` do ruff eram o mesmo bug:
+  `Any` usado em anotação de tipo (`def _walk(node: Any) -> Any`) sem import.
+  `from __future__ import annotations` evitava o `NameError` em runtime, mas
+  qualquer introspecção de anotações (`typing.get_type_hints`, um decorator
+  de validação) quebraria. Adicionado `Any` ao import de `typing`.
+- Lint completo do projeto (`ruff check src/`) **não está limpo** — 1116
+  ocorrências pré-existentes (883 `W293`, 93 `F401`, 80 `I001`, 30 `E501`,
+  14 `E402`, 9 `F841`, 3 `W291`, 1 cada de `W292`/`F541`/`E741`), a maioria
+  concentrada em `generators/transaction.py` e nos módulos `cli/workers/*`
+  que usam o truque `sys.path.insert` pré-import. Fora de escopo desta
+  entrega (que tratou apenas os 2 `F821`); mantido documentado aqui em vez de
+  omitido.
+
+### Testes
+
+- **`tests/unit/test_output_schema.py::test_legit_max_score_is_low`** →
+  renomeado `test_legit_score_distribution_is_low`. O teto rígido
+  (`max_score < 70` sobre 200 amostras) era, por definição, mais um
+  separador de precisão: se nenhum legítimo passa de 70, então
+  `fraud_risk_score >= 70` prevê fraude com precisão perfeita. Um legítimo
+  pode coincidir em vários sinais de risco por acaso — falso positivo real,
+  não bug — e a mudança de RNG desta entrega expôs exatamente esse caso
+  (score 93 numa amostra de 200). Convertido para forma distribucional
+  (mediana < 10, p95 < 55) sobre 500 amostras, conforme
+  `.claude/rules/testing.md`.
+
+### Pendente
+
+- AUC multivariada em 0.987865, ainda acima do alvo 0.75–0.95. Como já
+  registrado na v4.20.0, o sinal restante está distribuído sem limiar
+  dominante entre `amount`, `accumulated_amount_24h`, `dest_account_age_days`,
+  `bot_confidence_score` e `device_age_days` — reduzir mais exige calibração
+  contra dado real; enfraquecer os sinais sem essa referência repetiria o
+  erro que a auditoria original apontou. Este ciclo não tentou.
+- `fraud_chain_id`/`fraud_chain_role`/`fraud_labels`/
+  `fraud_reported_days_after`/`credential_breach_days_before` continuam
+  sempre nulos no tier padrão (gated Pro+/Team/Enterprise) — o
+  `fraud_ground_truth_NNNNN.jsonl` só carrega valor real quando o batch é
+  gerado com licença paga.
+- Gap de exportação do ground truth para MinIO/S3 e streaming ao vivo (acima).
 
 ---
 

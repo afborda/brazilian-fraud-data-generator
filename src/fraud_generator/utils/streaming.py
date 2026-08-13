@@ -98,9 +98,10 @@ class CustomerSessionState:
         self._favorite_merchants: List[tuple] = []   # (merchant_id, merchant_name, mcc_code)
         self._favorite_ids: set = set()
         self._FAVORITE_MAX = 8
-        # T4: device consistency — first 2 devices seen become "primary"; others are anomalies
-        self._primary_devices: set = set()
-        self._PRIMARY_MAX = 2
+        # Devices this customer has EVER used — never pruned. Mirrors
+        # `_merchants_ever`; see `is_new_device` for why this replaced the
+        # capped "primary devices" set.
+        self._devices_ever: set = set()
         # Pro+: 30d extended window — (timestamp, amount, device_id, merchant_id)
         self._transactions_30d: deque = deque()
         # Last activity, kept outside every window. Inactivity is unbounded by
@@ -175,9 +176,7 @@ class CustomerSessionState:
                 self._favorite_ids.add(merchant_id)
         if device_id:
             self._device_counts[device_id] = self._device_counts.get(device_id, 0) + 1
-            # T4: first _PRIMARY_MAX distinct devices become "primary"
-            if len(self._primary_devices) < self._PRIMARY_MAX:
-                self._primary_devices.add(device_id)
+            self._devices_ever.add(device_id)
 
     def get_velocity_window(self, current_time: datetime, hours: float) -> int:
         """Count transactions in the last `hours` window (Pro+ extended velocity)."""
@@ -225,14 +224,22 @@ class CustomerSessionState:
         return _random.choice(self._favorite_merchants)
 
     def is_new_device(self, device_id: Optional[str]) -> bool:
-        """T4: True when device_id is not one of the customer's primary devices.
+        """Has this customer never used this device before?
 
-        Returns False (not anomalous) when fewer than 2 primaries have been
-        accumulated, so first-time customers don't trigger a false signal.
+        Reads `_devices_ever`, which is never pruned — same fix as
+        `is_new_merchant`/`_merchants_ever`. It used to read `_primary_devices`,
+        a set capped at the first 2 distinct devices seen (`_PRIMARY_MAX`);
+        once that cap was hit the set stopped growing, so a customer's 3rd (or
+        later) device was reported "new" on every single transaction forever —
+        the 500th use of an 18-month-old phone still set
+        device_new_for_customer=True. `config/device.py` gives up to
+        `max_devices=3` per customer (2-3 for young_digital/subscription_heavy
+        profiles), so this hit roughly a third of legitimate customers
+        (measured: 34.3% have >=3 devices), not an edge case.
         """
-        if not device_id or len(self._primary_devices) < 1:
+        if not device_id:
             return False
-        return device_id not in self._primary_devices
+        return device_id not in self._devices_ever
 
     def get_velocity(self, current_time: datetime) -> int:
         """Transactions in last 24h."""

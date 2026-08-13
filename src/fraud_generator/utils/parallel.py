@@ -98,6 +98,12 @@ def _tx_worker(
                     session_state=session,
                 )
                 session.add_transaction(tx, timestamp)
+                # Live streaming has no batch file to pair a ground-truth
+                # companion with — see utils/ground_truth.py — so the
+                # investigation-only fields are dropped rather than left in
+                # the event (they'd be a nested dict, not a stream-safe
+                # scalar). is_fraud/fraud_type stay inline, unaffected.
+                tx.pop("_ground_truth", None)
                 batch.append(tx)
                 counter += 1
 

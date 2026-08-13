@@ -94,6 +94,13 @@ def generate_transaction_batch(
             session_state=session,
         )
         session.add_transaction(tx, ts)
+        # KNOWN GAP: the MinIO/S3 batch path doesn't (yet) write the companion
+        # fraud_ground_truth file that cli/workers/tx_worker.py writes for the
+        # local-file path — see utils/ground_truth.py. Dropped rather than left
+        # in the record: a nested dict value would break the Parquet/JSONL
+        # upload rather than silently leak, so this is the safe default until
+        # MinIORunner grows the same side-channel.
+        tx.pop("_ground_truth", None)
         result.append(tx)
     return result
 

@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional
 from .base import EnricherProtocol, GeneratorBag, is_plan
 from ..utils.overlap import beta_score, lognormal_days, two_class
 from ..config.merchants import get_mcc_info
-from ..config.geography import ESTADOS_BR, ESTADOS_LIST
+from ..config.geography import ESTADOS_BR, ESTADOS_LIST, ESTADOS_WEIGHTS
 from ..config.fraud_patterns import get_fraud_pattern, get_time_window_for_anomaly
 from ..config.pix import (
     MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS,
@@ -419,6 +419,36 @@ class FraudEnricher:
             # `IS NOT NULL` alone recovered 61% of the label. It is now written
             # for both classes at the same point in the pipeline.
             tx.setdefault("dest_account_age_days", _sample_dest_account_age(False))
+            # velocity_burst_id: grouping several transactions that land close
+            # together in time isn't inherently fraudulent — a business owner
+            # or MEI running contas-a-pagar/payroll pays a batch of suppliers
+            # back-to-back and produces exactly the same burst shape as
+            # MICRO_BURST_VELOCITY does for fraud. Only the profile and rate
+            # differ, so the field can't stay fraud-exclusive.
+            if bag.customer_profile in ("business_owner", "micro_empreendedor") and random.random() < 0.05:
+                tx["velocity_burst_id"] = str(_uuid.uuid4())
+                # A batch-payment day (contas a pagar, folha) genuinely
+                # produces a high same-day transaction count for these
+                # profiles. Left to SessionEnricher, velocity_transactions_24h
+                # is always derived from the customer's actual simulated
+                # session — and across a finite date range that emergent
+                # count topped out at 32 for every legit record, while only
+                # fraud's HIGH-velocity branch could ever set the field
+                # directly. That asymmetry (fraud can be set directly to any
+                # value; legit is 100% session-derived) made
+                # `velocity_transactions_24h > 32` and
+                # `customer_velocity_z_score > 28` (which SessionEnricher
+                # derives from it) 100%-precision separators — not because
+                # real batch-payment days can't reach that volume, but
+                # because the simulation had no direct path to represent one.
+                # SessionEnricher only fills the field `if ... is None`, so
+                # setting it here directly (like the fraud branch already
+                # does for HIGH/MEDIUM/LOW velocity) is the symmetric fix.
+                tx["velocity_transactions_24h"] = lognormal_days(
+                    median=20, sigma=0.55, lo=8, hi=80, rng=random
+                )
+            else:
+                tx.setdefault("velocity_burst_id", None)
             return
 
         fraud_type = bag.fraud_type
@@ -520,7 +550,21 @@ class FraudEnricher:
         location_anomaly = characteristics.get("location_anomaly", "NONE")
         if location_anomaly == "HIGH":
             current_state = tx.get("customer_state", "SP")
-            diff_state = random.choice([s for s in ESTADOS_LIST if s != current_state])
+            # Uniform choice among all 27 states/DF over-represents sparsely
+            # populated ones (Acre, Rondônia...) relative to how rarely any
+            # real customer — fraud victim or not — is ever there. Legit
+            # geolocations follow the real population distribution
+            # (ESTADOS_WEIGHTS), so a uniform draw here put anomalous fraud
+            # locations in the far west far more often than any legit
+            # customer's coordinates ever land there:
+            # `geolocation_lon < -63.9792` (west of virtually all legit
+            # traffic) identified fraud with 100% precision. Weighting by the
+            # same population weights fixes the cause, not just the symptom —
+            # an anomalous-location fraud is likelier to look like Rio de
+            # Janeiro than Acre, same as real traffic is.
+            _candidates = [(s, w) for s, w in zip(ESTADOS_LIST, ESTADOS_WEIGHTS) if s != current_state]
+            _cand_states, _cand_weights = zip(*_candidates)
+            diff_state = random.choices(_cand_states, weights=_cand_weights, k=1)[0]
             info = ESTADOS_BR.get(diff_state, ESTADOS_BR["SP"])
             tx["geolocation_lat"] = round(info["lat"] + random.uniform(-0.5, 0.5), 6)
             tx["geolocation_lon"] = round(info["lon"] + random.uniform(-0.5, 0.5), 6)

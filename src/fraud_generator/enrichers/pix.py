@@ -20,6 +20,7 @@ from ..config.pix import (
     generate_end_to_end_id,
     counterparty_hash,
     MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS,
+    MOTIVO_DEVOLUCAO_LEGIT_LIST, MOTIVO_DEVOLUCAO_LEGIT_WEIGHTS,
 )
 from ..validators.cpf import generate_valid_cpf
 
@@ -95,13 +96,25 @@ class PIXEnricher:
                 "motivo_devolucao_med": None,
             })
 
-        # TPRD3: MED devolution — 30% of fraud PIX transactions
-        if (
-            bag.is_fraud
-            and tx.get("is_devolucao") is False
-            and buf.next_float() < 0.30
-        ):
-            tx["is_devolucao"] = True
-            tx["motivo_devolucao_med"] = buf.next_weighted(
-                "motivo_devolucao", MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS
-            )
+        # TPRD3: MED devolution. `motivo_devolucao_med` used to be non-null
+        # exclusively when bag.is_fraud — a perfect leak, but a devolution by
+        # itself doesn't prove fraud. Two of the four BACEN reasons (BE08
+        # operational error, REFU recipient refusal) carry no fraud claim: a
+        # PIX sent to the wrong key, a duplicate payment, or a merchant
+        # declining an unexpected transfer produce the exact same
+        # is_devolucao=True / motivo_devolucao_med fields on a transaction
+        # nobody disputes as fraud. FR01/MD06 (the golpe-specific reasons)
+        # stay exclusive to the fraud branch.
+        if bag.is_fraud:
+            if tx.get("is_devolucao") is False and buf.next_float() < 0.30:
+                tx["is_devolucao"] = True
+                tx["motivo_devolucao_med"] = buf.next_weighted(
+                    "motivo_devolucao", MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS
+                )
+        else:
+            if tx.get("is_devolucao") is False and buf.next_float() < 0.015:
+                tx["is_devolucao"] = True
+                tx["motivo_devolucao_med"] = buf.next_weighted(
+                    "motivo_devolucao_legit",
+                    MOTIVO_DEVOLUCAO_LEGIT_LIST, MOTIVO_DEVOLUCAO_LEGIT_WEIGHTS,
+                )
