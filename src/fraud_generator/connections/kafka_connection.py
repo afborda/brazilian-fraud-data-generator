@@ -22,14 +22,14 @@ class KafkaConnection(ConnectionProtocol):
         conn.send({'transaction_id': '123', 'valor': 100.0})
         conn.close()
     """
-    
+
     name = "Apache Kafka"
-    
+
     def __init__(self):
         self.producer = None
         self.default_topic = None
         self._connected = False
-    
+
     @classmethod
     def is_available(cls) -> bool:
         """Check if kafka-python is installed."""
@@ -38,7 +38,7 @@ class KafkaConnection(ConnectionProtocol):
             return True
         except ImportError:
             return False
-    
+
     def connect(
         self,
         bootstrap_servers: str = 'localhost:9092',
@@ -77,11 +77,11 @@ class KafkaConnection(ConnectionProtocol):
                 "kafka-python is not installed. "
                 "Install with: pip install kafka-python"
             )
-        
+
         from kafka import KafkaProducer
-        
+
         self.default_topic = topic
-        
+
         # Default configuration
         producer_config = {
             'bootstrap_servers': bootstrap_servers,
@@ -90,10 +90,10 @@ class KafkaConnection(ConnectionProtocol):
             'acks': 'all',
             'retries': 3,
         }
-        
+
         # Override with user config
         producer_config.update(kwargs)
-        
+
         # Retry loop with exponential backoff
         last_error = None
         for attempt in range(1, max_retries + 1):
@@ -102,19 +102,19 @@ class KafkaConnection(ConnectionProtocol):
                     print(f"📡 Connecting to Kafka ({bootstrap_servers})...", end=" ", flush=True)
                 else:
                     print(f"   Retry {attempt}/{max_retries}...", end=" ", flush=True)
-                
+
                 self.producer = KafkaProducer(**producer_config)
                 self._connected = True
                 print("✅ Connected!")
                 return
-                
+
             except Exception as e:
                 last_error = e
-                
+
                 if attempt == max_retries:
                     print(f"❌ Failed after {max_retries} attempts")
                     break
-                
+
                 # Calculate exponential backoff with jitter
                 # Formula: min(initial_backoff * 2^(attempt-1), max_backoff) + random_jitter
                 backoff = min(
@@ -123,11 +123,11 @@ class KafkaConnection(ConnectionProtocol):
                 )
                 jitter = random.uniform(0, backoff * 0.1)  # Add up to 10% jitter
                 wait_time = backoff + jitter
-                
+
                 error_name = type(e).__name__
                 print(f"retrying in {wait_time:.1f}s ({error_name})")
                 time.sleep(wait_time)
-        
+
         # If we got here, all retries failed
         error_msg = (
             f"Failed to connect to Kafka at '{bootstrap_servers}' "
@@ -142,7 +142,7 @@ class KafkaConnection(ConnectionProtocol):
             f"  6. For Kubernetes: ensure Kafka service is accessible"
         )
         raise ConnectionError(error_msg)
-    
+
     def send(
         self,
         data: Dict[str, Any],
@@ -163,9 +163,9 @@ class KafkaConnection(ConnectionProtocol):
         """
         if not self._connected:
             raise RuntimeError("Not connected. Call connect() first.")
-        
+
         target_topic = topic or self.default_topic
-        
+
         try:
             future = self.producer.send(
                 target_topic,
@@ -178,12 +178,12 @@ class KafkaConnection(ConnectionProtocol):
         except Exception as e:
             print(f"❌ Kafka send error: {e}")
             return False
-    
+
     def flush(self) -> None:
         """Flush pending messages."""
         if self.producer:
             self.producer.flush()
-    
+
     def close(self) -> None:
         """Close the Kafka producer."""
         if self.producer:

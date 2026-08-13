@@ -39,22 +39,22 @@ from .parser import FIELD_CATALOG, VALID_FAKER_METHODS, SchemaParser, SchemaVali
 @dataclass
 class CorrectionResult:
     """Result of a schema correction attempt."""
-    
+
     original: str
     """The original (possibly broken) input text."""
-    
+
     fixed_schema: str
     """The corrected JSON schema as a string."""
-    
+
     explanation: str
     """Human-readable explanation of changes made."""
-    
+
     used_ai: bool = False
     """True if an LLM was used; False if only rule-based heuristics were applied."""
-    
+
     warnings: List[str] = field(default_factory=list)
     """Non-fatal issues detected during correction."""
-    
+
     success: bool = True
     """False if correction failed completely and original was returned."""
 

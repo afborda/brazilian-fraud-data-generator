@@ -286,13 +286,26 @@ class MinIORunner(BaseRunner):
         results: List[str] = []
 
         def _upload(bid):
+            # Transactions carry investigation-only fields that must not travel
+            # in the record itself — see utils/ground_truth.py. The local-file
+            # path writes a companion file; here we upload a companion object
+            # with the same batch number so the two join on transaction_id.
+            # Same exporter, so the side object is readable with the same
+            # tooling as the batch it belongs to.
+            gt_sink: List[dict] = [] if upload_name == "transactions" else None
+            kwargs = dict(common_kwargs)
+            if gt_sink is not None:
+                kwargs["ground_truth_sink"] = gt_sink
+
             records = generate_fn(
                 batch_id=bid, **{("num_transactions" if upload_name == "transactions"
                                   else "num_rides"): batch_size},
-                **common_kwargs,
+                **kwargs,
             )
             fname = f"{upload_name}_{bid:05d}"
             exporter.export_batch(records, fname)
+            if gt_sink:
+                exporter.export_batch(gt_sink, f"fraud_ground_truth_{bid:05d}")
             return fname
 
         with ThreadPoolExecutor(max_workers=max_w) as ex:

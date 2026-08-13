@@ -42,6 +42,23 @@ ruff check src/ tests/
 ruff format --check src/ tests/
 ```
 
+**O lint NÃO está limpo.** `ruff check src/` acusa ~468 problemas pré-existentes,
+e por isso o passo de lint do `.github/workflows/test.yml` falha hoje, inclusive
+no `main`. A composição:
+
+| Regra | Qtd | Situação |
+|---|---|---|
+| `W293` blank-line-with-whitespace | 239 | dentro de strings/docstrings; só sai com `--unsafe-fixes` |
+| `F401` unused-import | 93 | **não auto-corrigir** — pode haver re-export ou import com efeito colateral |
+| `I001` unsorted-imports | 80 | reordenar pode quebrar import cíclico; requer verificação |
+| `E501` line-too-long | 30 | cosmético |
+| `E402`, `F841`, `E741`, `F541` | 26 | avulsos |
+
+Ao mexer num arquivo, deixe-o mais limpo do que encontrou, mas **não rode
+`ruff check src/ --fix` de uma vez**: o diff resultante enterra qualquer mudança
+real de comportamento na mesma revisão. Espaço em branco puro (`W291,W293,W292`)
+é seguro corrigir em commit separado.
+
 ## Architecture
 
 ### Two execution modes

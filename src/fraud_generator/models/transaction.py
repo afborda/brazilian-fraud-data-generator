@@ -79,7 +79,7 @@ class Transaction:
     merchant_category: str
     mcc_code: str
     mcc_risk_level: str
-    
+
     # Card fields (optional)
     card_number_hash: Optional[str] = None  # numero_cartao_hash
     card_brand: Optional[str] = None  # bandeira
@@ -88,12 +88,12 @@ class Transaction:
     card_entry: Optional[str] = None  # entrada_cartao
     cvv_validated: Optional[bool] = None  # cvv_validado
     auth_3ds: Optional[bool] = None  # autenticacao_3ds
-    
+
     # PIX fields (optional)
     pix_key_type: Optional[str] = None  # chave_pix_tipo
     pix_key_destination: Optional[str] = None  # chave_pix_destino
     destination_bank: Optional[str] = None  # banco_destino
-    
+
     # Risk indicators
     distance_from_last_txn_km: Optional[float] = None  # distancia_ultima_transacao_km
     time_since_last_txn_min: Optional[int] = None  # tempo_desde_ultima_transacao_min
@@ -101,7 +101,7 @@ class Transaction:
     accumulated_amount_24h: float = 0.0  # valor_acumulado_24h
     unusual_time: bool = False  # horario_incomum
     new_beneficiary: bool = False  # novo_beneficiario
-    
+
     # Status and fraud
     status: str = 'APPROVED'  # APROVADA
     refusal_reason: Optional[str] = None  # motivo_recusa
@@ -109,7 +109,7 @@ class Transaction:
     fraud_risk_score: int = 0  # 0-100 composite (17 signals)
     is_fraud: bool = False
     fraud_type: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
         data = {
@@ -154,18 +154,18 @@ class Transaction:
             'fraud_type': self.fraud_type,
         }
         return data
-    
+
     def to_json(self) -> str:
         """Convert to JSON string."""
         return json.dumps(self.to_dict(), ensure_ascii=False)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Transaction':
         """Create Transaction from dictionary."""
         timestamp = data.get('timestamp')
         if isinstance(timestamp, str):
             timestamp = datetime.fromisoformat(timestamp)
-        
+
         return cls(
             transaction_id=data['transaction_id'],
             customer_id=data['customer_id'],

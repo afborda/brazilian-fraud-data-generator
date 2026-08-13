@@ -64,18 +64,18 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     """
     # Earth's radius in kilometers
     R = 6371.0
-    
+
     # Convert to radians
     lat1_rad = math.radians(lat1)
     lat2_rad = math.radians(lat2)
     delta_lat = math.radians(lat2 - lat1)
     delta_lon = math.radians(lon2 - lon1)
-    
+
     # Haversine formula
     a = math.sin(delta_lat / 2) ** 2 + \
         math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    
+
     return R * c
 
 
@@ -112,14 +112,14 @@ def calculate_surge(hour: int, weather_condition: str) -> float:
     """
     # Base surge from hour
     base_surge = SURGE_POR_HORARIO.get(hour, 1.0)
-    
+
     # Weather impact
     weather_surge = get_surge_impact(weather_condition)
-    
+
     # Combine (not simply multiply to avoid extreme values)
     # Use weighted combination
     combined = base_surge * 0.6 + weather_surge * 0.4 + (base_surge * weather_surge - 1) * 0.2
-    
+
     # Clamp to reasonable range
     return max(1.0, min(3.0, combined))
 
@@ -148,26 +148,26 @@ def calculate_fare(
     rates = TAXAS_POR_CATEGORIA.get(category, TAXAS_POR_CATEGORIA.get('UberX', {
         'base': 5.0, 'km': 1.20, 'min': 0.25
     }))
-    
+
     # Calculate base fare
     base = rates['base']
     distance_fare = distance_km * rates['km']
     time_fare = duration_min * rates['min']
     base_fare = base + distance_fare + time_fare
-    
+
     # Apply surge
     final_fare = base_fare * surge
-    
+
     # Minimum fare (at least R$8)
     final_fare = max(8.0, final_fare)
-    
+
     # Platform fee
     platform_fee_pct = PLATFORM_FEE_PERCENT.get(app, 0.20)
     platform_fee = final_fare * platform_fee_pct
-    
+
     # Driver pay
     driver_pay = final_fare - platform_fee
-    
+
     return {
         'base_fare': round(base_fare, 2),
         'final_fare': round(final_fare, 2),
@@ -188,27 +188,27 @@ def select_pois(state: str, city: Optional[str] = None) -> Tuple[Dict, Dict]:
         Tuple of (pickup_poi, dropoff_poi) with different types
     """
     pois = get_pois_for_state(state)
-    
+
     if len(pois) < 2:
         # Fallback: create synthetic POIs
         return (
             {'name': 'Origin', 'type': 'CENTER', 'lat': -23.55, 'lon': -46.64},
             {'name': 'Destination', 'type': 'SHOPPING', 'lat': -23.56, 'lon': -46.65},
         )
-    
+
     # Select pickup POI
     pickup = random.choice(pois)
-    
+
     # Select dropoff POI (different from pickup, preferably different type)
     available_dropoffs = [p for p in pois if p['name'] != pickup['name']]
-    
+
     # Prefer different POI type
     different_type = [p for p in available_dropoffs if p['type'] != pickup['type']]
     if different_type:
         dropoff = random.choice(different_type)
     else:
         dropoff = random.choice(available_dropoffs) if available_dropoffs else pois[1]
-    
+
     return pickup, dropoff
 
 
@@ -248,7 +248,7 @@ class RideGenerator:
     - Fraud type generation
     - Profile-aware generation (optional)
     """
-    
+
     def __init__(
         self,
         fraud_rate: float = 0.008,
@@ -265,10 +265,10 @@ class RideGenerator:
         """
         self.fraud_rate = fraud_rate
         self.use_profiles = use_profiles
-        
+
         if seed is not None:
             random.seed(seed)
-    
+
     def generate(
         self,
         ride_id: str,
@@ -299,26 +299,26 @@ class RideGenerator:
             is_fraud = force_fraud
         else:
             is_fraud = random.random() < self.fraud_rate
-        
+
         fraud_type = None
         if is_fraud:
             fraud_type = get_random_fraud_type()
-        
+
         # Select app and category
         app = get_random_app()
         category = get_random_category_for_app(app)
-        
+
         # Get weather for state and timestamp
         weather_data = generate_weather(passenger_state, timestamp)
         weather_condition = weather_data['condition']
         temperature = weather_data['temperature']
-        
+
         # Select POIs
         pickup_poi, dropoff_poi = select_pois(passenger_state)
-        
+
         # Get city name
         city = CAPITAL_POR_ESTADO.get(passenger_state, CIDADES_POR_ESTADO.get(passenger_state, ['Capital'])[0])
-        
+
         # Build location dicts
         pickup_location = {
             'lat': pickup_poi['lat'],
@@ -328,7 +328,7 @@ class RideGenerator:
             'city': city,
             'state': passenger_state,
         }
-        
+
         dropoff_location = {
             'lat': dropoff_poi['lat'],
             'lon': dropoff_poi['lon'],
@@ -337,35 +337,35 @@ class RideGenerator:
             'city': city,
             'state': passenger_state,
         }
-        
+
         # Calculate distance (Haversine * urban factor)
         straight_distance = HAVERSINE_DISTANCE(
             pickup_poi['lat'], pickup_poi['lon'],
             dropoff_poi['lat'], dropoff_poi['lon']
         )
-        
+
         # Urban factor: roads are not straight
         urban_factor = random.uniform(1.3, 1.5)
         distance_km = straight_distance * urban_factor
-        
+
         # Minimum distance
         distance_km = max(1.0, distance_km)
-        
+
         # Calculate duration based on speed
         hour = timestamp.hour
         avg_speed = get_average_speed(hour)
         duration_minutes = int((distance_km / avg_speed) * 60)
         duration_minutes = max(5, duration_minutes)  # Minimum 5 minutes
-        
+
         # Calculate surge
         surge_multiplier = calculate_surge(hour, weather_condition)
-        
+
         # Calculate fare
         fare_data = calculate_fare(distance_km, duration_minutes, category, surge_multiplier, app)
-        
+
         # Determine status
         status = get_random_final_status()
-        
+
         # Timestamps based on status
         request_datetime = timestamp
         accept_datetime = None
@@ -375,45 +375,45 @@ class RideGenerator:
         cancellation_reason = None
         driver_rating = None
         passenger_rating = None
-        
+
         if status == 'COMPLETED':
             # Full ride flow
             wait_time_minutes = random.randint(2, 15)
             accept_datetime = request_datetime + timedelta(seconds=random.randint(10, 60))
             pickup_datetime = accept_datetime + timedelta(minutes=wait_time_minutes)
             dropoff_datetime = pickup_datetime + timedelta(minutes=duration_minutes)
-            
+
             # Ratings (most give 5 stars)
             driver_rating = random.choices([5, 4, 3, 2, 1], weights=[70, 20, 5, 3, 2], k=1)[0]
             passenger_rating = random.choices([5, 4, 3, 2, 1], weights=[75, 18, 4, 2, 1], k=1)[0]
-            
+
         elif status == 'CANCELLED_PASSENGER':
             accept_datetime = request_datetime + timedelta(seconds=random.randint(10, 60))
             wait_time_minutes = random.randint(1, 10)
             cancellation_reason = get_random_cancellation_reason('PASSENGER')
             # Zero fare for cancelled
             fare_data = {'base_fare': 0, 'final_fare': 0, 'driver_pay': 0, 'platform_fee': 0}
-            
+
         elif status == 'CANCELLED_DRIVER':
             accept_datetime = request_datetime + timedelta(seconds=random.randint(10, 60))
             wait_time_minutes = random.randint(1, 5)
             cancellation_reason = get_random_cancellation_reason('DRIVER')
             fare_data = {'base_fare': 0, 'final_fare': 0, 'driver_pay': 0, 'platform_fee': 0}
-            
+
         elif status == 'NO_DRIVER':
             wait_time_minutes = random.randint(5, 15)
             cancellation_reason = 'No driver available'
             fare_data = {'base_fare': 0, 'final_fare': 0, 'driver_pay': 0, 'platform_fee': 0}
-        
+
         # Tip (only for completed rides, ~20% give tips)
         tip = 0.0
         if status == 'COMPLETED' and random.random() < 0.20:
             # Tip is typically 10-20% of fare
             tip = round(fare_data['final_fare'] * random.uniform(0.10, 0.25), 2)
-        
+
         # Payment method
         payment_method = get_random_payment_method()
-        
+
         ride = {
             'ride_id': ride_id,
             'timestamp': timestamp.isoformat(),
@@ -541,29 +541,29 @@ class RideGenerator:
         """
         if start_time is None:
             start_time = datetime.now() - timedelta(hours=time_span_hours)
-        
+
         if not drivers or not passengers:
             return
-        
+
         for i in range(count):
             # Generate timestamp within time span
             offset_seconds = random.randint(0, time_span_hours * 3600)
             timestamp = start_time + timedelta(seconds=offset_seconds)
-            
+
             # Select random driver and passenger
             driver = random.choice(drivers)
             passenger = random.choice(passengers)
-            
+
             # Get passenger state
             passenger_state = passenger.get('endereco', {}).get('estado', 'SP')
             if isinstance(passenger_state, str) and len(passenger_state) != 2:
                 # Try to extract from nested structure
                 passenger_state = 'SP'
-            
+
             passenger_profile = passenger.get('perfil_comportamental')
-            
+
             ride_id = f"RIDE_{start_id + i:012d}"
-            
+
             yield self.generate(
                 ride_id=ride_id,
                 driver_id=driver['driver_id'],
@@ -572,7 +572,7 @@ class RideGenerator:
                 passenger_state=passenger_state,
                 passenger_profile=passenger_profile,
             )
-    
+
     def generate_index(self, ride_data: Dict[str, Any]) -> RideIndex:
         """
         Create a lightweight index from ride data.
@@ -585,7 +585,7 @@ class RideGenerator:
         """
         pickup = ride_data.get('pickup_location', {})
         city = pickup.get('city', '') if isinstance(pickup, dict) else ''
-        
+
         return RideIndex(
             ride_id=ride_data['ride_id'],
             driver_id=ride_data['driver_id'],

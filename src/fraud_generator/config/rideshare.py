@@ -338,14 +338,14 @@ def get_random_vehicle(category_min: Optional[str] = None) -> Dict[str, Any]:
     """
     if category_min:
         min_level = CATEGORY_HIERARCHY.index(category_min) if category_min in CATEGORY_HIERARCHY else 0
-        eligible = [v for v in VEICULOS_POPULARES 
+        eligible = [v for v in VEICULOS_POPULARES
                    if CATEGORY_HIERARCHY.index(v['categoria_min']) >= min_level]
     else:
         eligible = VEICULOS_POPULARES
-    
+
     if not eligible:
         eligible = VEICULOS_POPULARES
-    
+
     vehicle = random.choice(eligible)
     return {
         'marca': vehicle['marca'],
@@ -383,12 +383,12 @@ def calculate_base_fare(category: str, distance_km: float, duration_min: float) 
         Dict with base, distance_fare, time_fare, total
     """
     rates = TAXAS_POR_CATEGORIA.get(category, TAXAS_POR_CATEGORIA['UberX'])
-    
+
     base = rates['base']
     distance_fare = distance_km * rates['km']
     time_fare = duration_min * rates['min']
     total = base + distance_fare + time_fare
-    
+
     return {
         'base': round(base, 2),
         'distance_fare': round(distance_fare, 2),

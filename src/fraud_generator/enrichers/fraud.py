@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 
 from .base import EnricherProtocol, GeneratorBag, is_plan
 from ..utils.overlap import beta_score, lognormal_days, two_class
+from ..config.calibration import rate as _rate
 from ..config.merchants import get_mcc_info
 from ..config.geography import ESTADOS_BR, ESTADOS_LIST, ESTADOS_WEIGHTS
 from ..config.fraud_patterns import get_fraud_pattern, get_time_window_for_anomaly
@@ -175,12 +176,12 @@ def _get_bot_signature(fraud_type: str, buf) -> tuple:
 
 # Share of fraud records that skip the velocity burst entirely and keep the
 # velocity their session actually produced ("low and slow" fraud).
-_LOW_AND_SLOW_SHARE = 0.32
+_LOW_AND_SLOW_SHARE = _rate("fraud.low_and_slow_share")
 
 # Share of legitimate records generated as decoys — see _apply_decoy_profile.
 # Sized so decoys outnumber real fraud roughly 2:1, which is the regime a
 # production antifraud team actually works in: most alerts are false.
-_DECOY_SHARE = 0.032
+_DECOY_SHARE = _rate("fraud.decoy_share")
 
 
 def _apply_decoy_profile(tx: Dict[str, Any]) -> None:
@@ -296,8 +297,8 @@ def _sample_bot_score(is_fraud: bool, fraud_type: Optional[str] = None) -> float
             is_fraud,
             legit=_ordinary,
             fraud=_automated,
-            legit_contamination=0.05,
-            fraud_contamination=0.22,
+            legit_contamination=_rate("bot_score.legit_contamination"),
+            fraud_contamination=_rate("bot_score.fraud_contamination"),
         ),
         3,
     )
@@ -314,8 +315,8 @@ def _sample_company_age(is_fraud: bool) -> int:
         is_fraud,
         legit=lambda: lognormal_days(median=1400, sigma=1.1, lo=1, hi=14600),
         fraud=lambda: lognormal_days(median=45, sigma=0.9, lo=1, hi=14600),
-        legit_contamination=0.10,   # MEI aberto há pouco recebendo pagamento
-        fraud_contamination=0.28,   # laranja usando empresa estabelecida
+        legit_contamination=_rate("company_age.legit_contamination"),
+        fraud_contamination=_rate("company_age.fraud_contamination"),
     )
 
 
@@ -326,8 +327,8 @@ def _sample_dest_account_age(is_fraud: bool, fraud_type: Optional[str] = None) -
         is_fraud,
         legit=lambda: lognormal_days(median=900, sigma=1.2, lo=0, hi=7300),
         fraud=lambda: lognormal_days(median=fresh_median, sigma=1.0, lo=0, hi=7300),
-        legit_contamination=0.09,   # conta digital aberta hoje já recebe PIX
-        fraud_contamination=0.30,   # conta-laranja comprada, antiga
+        legit_contamination=_rate("dest_account_age.legit_contamination"),
+        fraud_contamination=_rate("dest_account_age.fraud_contamination"),
     )
 
 

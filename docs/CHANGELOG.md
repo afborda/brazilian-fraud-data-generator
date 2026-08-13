@@ -42,6 +42,57 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ---
 
+## v4.22.0 — Paridade de Saída e Calibração (2026-08-13)
+
+Fecha as três pendências registradas na v4.21.0.
+
+### Ground truth em todos os modos de saída
+
+O arquivo companheiro `fraud_ground_truth_NNNNN` só era escrito no caminho de
+arquivo local; MinIO/S3 e streaming ao vivo descartavam os campos em silêncio.
+Saídas diferentes entregavam conteúdo diferente sem o consumidor ter como saber.
+
+- **`cli/workers/batch_gen.py`** — `generate_transaction_batch()` ganha
+  `ground_truth_sink`. Quando fornecido, os campos são coletados em vez de
+  descartados. Default `None` preserva o comportamento anterior.
+- **`cli/runners/minio_runner.py`** — sobe objeto companheiro
+  `fraud_ground_truth_NNNNN` com o mesmo exporter e mesmo número de batch.
+- **`cli/workers/minio_parquet.py`** — mesmo tratamento no caminho Parquet.
+- **`utils/parallel.py`** — streaming não tem arquivo para parear, então ganha
+  `emit_ground_truth` (default `False`). O comportamento é o mesmo de antes, mas
+  agora é uma escolha explícita e não um descarte silencioso.
+
+### Registro de calibração
+
+**`config/calibration.py`** (novo). As 14 taxas que decidem a dificuldade dos
+dados estavam espalhadas como literais em 6 módulos, sem distinção entre chute
+fundamentado e número medido.
+
+Cada entrada carrega proveniência: `ESTIMATE` (raciocinada, é hipótese) ou
+`CALIBRATED` (derivada de referência real, com fonte nomeada). Hoje são
+**0 de 16 calibradas** — `report()` diz isso em voz alta, e é isso que deve ir
+na frente de um comprador que pergunte como o dado foi calibrado.
+
+Overrides carregam de JSON via `FRAUDGEN_CALIBRATION`, então agregados de um
+parceiro entram sem tocar em código. Chave desconhecida ou valor fora de [0,1]
+**levanta exceção** — um typo deixaria o default no lugar e o operador
+acreditaria ter calibrado algo que não calibrou.
+
+Refatoração pura: nenhum valor mudou, AUC idêntica em 0.987865.
+
+### Lint
+
+`ruff check src/` foi de 1117 para 468 problemas. Corrigido **apenas espaço em
+branco** (`W291,W293,W292`, 648 itens) em commit isolado — `F401` e `I001` podem
+alterar comportamento e ficaram de fora deliberadamente. O `CLAUDE.md` afirmava
+que o lint estava limpo; passa a documentar o estado real, a composição por
+regra e a orientação de não rodar `--fix` de uma vez.
+
+Um `F821` novo foi introduzido e corrigido na mesma leva (`pd` usado sem import
+no helper de upload do Parquet).
+
+---
+
 ## v4.21.0 — Camada 2: Fechamento (2026-08-13)
 
 Fecha os pendentes deixados pela v4.20.0: o quarto caso do bug de janela curta

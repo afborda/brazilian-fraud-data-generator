@@ -32,7 +32,7 @@ class Location:
     poi_type: str
     city: str
     state: str
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -43,7 +43,7 @@ class Location:
             'city': self.city,
             'state': self.state,
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Location':
         """Create Location from dictionary."""
@@ -110,7 +110,7 @@ class Driver:
     operating_state: str
     categories_enabled: List[str]
     is_active: bool = True
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
         return {
@@ -136,11 +136,11 @@ class Driver:
             'categories_enabled': self.categories_enabled,
             'is_active': self.is_active,
         }
-    
+
     def to_json(self) -> str:
         """Convert to JSON string."""
         return json.dumps(self.to_dict(), ensure_ascii=False)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Driver':
         """Create Driver from dictionary."""
@@ -148,11 +148,11 @@ class Driver:
         cnh_expiration = data.get('cnh_expiration')
         if isinstance(cnh_expiration, str):
             cnh_expiration = date.fromisoformat(cnh_expiration)
-        
+
         registration_date = data.get('registration_date')
         if isinstance(registration_date, str):
             registration_date = datetime.fromisoformat(registration_date)
-        
+
         return cls(
             driver_id=data['driver_id'],
             name=data['name'],
@@ -249,14 +249,14 @@ class Ride:
     temperature: float
     is_fraud: bool
     fraud_type: Optional[str]
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
         def format_datetime(dt: Optional[datetime]) -> Optional[str]:
             if dt is None:
                 return None
             return dt.isoformat() if isinstance(dt, datetime) else dt
-        
+
         return {
             'ride_id': self.ride_id,
             'timestamp': format_datetime(self.timestamp),
@@ -289,11 +289,11 @@ class Ride:
             'is_fraud': self.is_fraud,
             'fraud_type': self.fraud_type,
         }
-    
+
     def to_json(self) -> str:
         """Convert to JSON string."""
         return json.dumps(self.to_dict(), ensure_ascii=False)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Ride':
         """Create Ride from dictionary."""
@@ -303,20 +303,20 @@ class Ride:
             if isinstance(value, datetime):
                 return value
             return datetime.fromisoformat(value)
-        
+
         # Handle nested Location objects
         pickup_data = data.get('pickup_location', {})
         if isinstance(pickup_data, dict):
             pickup_location = Location.from_dict(pickup_data)
         else:
             pickup_location = pickup_data
-        
+
         dropoff_data = data.get('dropoff_location', {})
         if isinstance(dropoff_data, dict):
             dropoff_location = Location.from_dict(dropoff_data)
         else:
             dropoff_location = dropoff_data
-        
+
         return cls(
             ride_id=data['ride_id'],
             timestamp=parse_datetime(data['timestamp']),
@@ -366,7 +366,7 @@ class DriverIndex(NamedTuple):
     operating_state: str
     operating_city: str
     active_apps: Tuple[str, ...]  # Tuple for hashability
-    
+
     def __repr__(self) -> str:
         return f"DriverIndex({self.driver_id}, {self.operating_state}, {self.operating_city})"
 
@@ -381,7 +381,7 @@ class RideIndex(NamedTuple):
     passenger_id: str
     app: str
     city: str
-    
+
     def __repr__(self) -> str:
         return f"RideIndex({self.ride_id}, {self.driver_id}, {self.passenger_id})"
 
@@ -403,7 +403,7 @@ def create_driver_index(driver_dict: Dict[str, Any]) -> DriverIndex:
     active_apps = driver_dict.get('active_apps', [])
     if isinstance(active_apps, list):
         active_apps = tuple(active_apps)
-    
+
     return DriverIndex(
         driver_id=driver_dict['driver_id'],
         operating_state=driver_dict['operating_state'],
@@ -425,7 +425,7 @@ def create_ride_index(ride_dict: Dict[str, Any]) -> RideIndex:
     # Get city from pickup location
     pickup = ride_dict.get('pickup_location', {})
     city = pickup.get('city', '') if isinstance(pickup, dict) else ''
-    
+
     return RideIndex(
         ride_id=ride_dict['ride_id'],
         driver_id=ride_dict['driver_id'],

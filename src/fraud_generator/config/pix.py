@@ -161,7 +161,9 @@ _POOL_WEIGHTS = [1.0 / (i + 1) ** 1.1 for i in range(_POOL_SIZE)]
 
 # Share of transfers that go outside the pool entirely (a one-off purchase, a
 # new landlord, a marketplace seller).
-_ONE_OFF_SHARE = 0.18
+from .calibration import rate as _rate
+
+_ONE_OFF_SHARE = _rate("counterparty.one_off_share_legit")
 
 
 def counterparty_hash(customer_id: str, is_fraud: bool) -> str:
@@ -172,7 +174,7 @@ def counterparty_hash(customer_id: str, is_fraud: bool) -> str:
     scam redirects a payment the victim makes every month, landing on a
     familiar counterparty.
     """
-    one_off = _ONE_OFF_SHARE if not is_fraud else 0.80
+    one_off = _ONE_OFF_SHARE if not is_fraud else _rate("counterparty.one_off_share_fraud")
     if random.random() < one_off:
         return hashlib.sha256(generate_valid_cpf().encode()).hexdigest()
     idx = random.choices(range(_POOL_SIZE), weights=_POOL_WEIGHTS, k=1)[0]

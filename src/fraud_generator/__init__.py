@@ -28,7 +28,7 @@ from .validators.cpf import generate_valid_cpf, validate_cpf
 __all__ = [
     # Generators
     'CustomerGenerator',
-    'DeviceGenerator', 
+    'DeviceGenerator',
     'TransactionGenerator',
     'DriverGenerator',
     'RideGenerator',

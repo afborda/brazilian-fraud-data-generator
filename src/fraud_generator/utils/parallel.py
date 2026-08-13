@@ -40,8 +40,15 @@ def _tx_worker(
     output_queue: Queue,
     stop_event: Event,
     base_tx_id: int,
+    emit_ground_truth: bool = False,
 ) -> None:
-    """Transaction generation worker (child process, batch queuing)."""
+    """Transaction generation worker (child process, batch queuing).
+
+    Args:
+        emit_ground_truth: Keep the investigation-only fields nested under
+            `_ground_truth` in each event instead of dropping them. Off by
+            default so the streamed record stays a flat, stream-safe shape.
+    """
     import traceback
     try:
         from fraud_generator.generators import TransactionGenerator
@@ -98,12 +105,18 @@ def _tx_worker(
                     session_state=session,
                 )
                 session.add_transaction(tx, timestamp)
-                # Live streaming has no batch file to pair a ground-truth
-                # companion with — see utils/ground_truth.py — so the
-                # investigation-only fields are dropped rather than left in
-                # the event (they'd be a nested dict, not a stream-safe
-                # scalar). is_fraud/fraud_type stay inline, unaffected.
-                tx.pop("_ground_truth", None)
+                # Live streaming has no batch file to pair a companion with —
+                # see utils/ground_truth.py. The investigation-only fields are
+                # either dropped (default, keeping the event a flat stream-safe
+                # record) or kept nested under `_ground_truth` when the caller
+                # asks for them, e.g. to score a detector against the stream.
+                # `is_fraud` and `fraud_type` stay inline either way.
+                #
+                # Being explicit matters: silently discarding them made the
+                # streaming output differ from the batch output with no way for
+                # the consumer to tell which they were getting.
+                if not emit_ground_truth:
+                    tx.pop("_ground_truth", None)
                 batch.append(tx)
                 counter += 1
 
@@ -208,8 +221,15 @@ class ParallelStreamManager:
         fraud_rate: float,
         use_profiles: bool,
         seed: Optional[int],
+        emit_ground_truth: bool = False,
     ) -> None:
-        """Partition customers across workers and launch processes."""
+        """Partition customers across workers and launch processes.
+
+        Args:
+            emit_ground_truth: Forwarded to `_tx_worker` — keep the
+                investigation-only fields nested in each event instead of
+                dropping them silently.
+        """
         base_tx_id = int(time.time() * 1000)
         cust_tuples = [tuple(c) for c in customers]
         dev_tuples = [tuple(d) for d in devices]
@@ -227,7 +247,7 @@ class ParallelStreamManager:
             p = Process(
                 target=_tx_worker,
                 args=(wid, cust_slice, dev_slice, fraud_rate, use_profiles, seed,
-                      self.queue, self.stop_event, base_tx_id),
+                      self.queue, self.stop_event, base_tx_id, emit_ground_truth),
                 daemon=True,
             )
             p.start()

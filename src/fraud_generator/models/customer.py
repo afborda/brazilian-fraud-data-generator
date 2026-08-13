@@ -18,7 +18,7 @@ class Address:
     postal_code: str  # cep
     number: Optional[str] = None  # numero
     complement: Optional[str] = None  # complemento
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary, excluding None values."""
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -71,7 +71,7 @@ class Customer:
     branch: str  # agencia
     account_number: str  # numero_conta
     behavioral_profile: Optional[str] = None  # perfil_comportamental
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
         data = {
@@ -98,11 +98,11 @@ class Customer:
         if self.behavioral_profile:
             data['behavioral_profile'] = self.behavioral_profile
         return data
-    
+
     def to_json(self) -> str:
         """Convert to JSON string."""
         return json.dumps(self.to_dict(), ensure_ascii=False)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Customer':
         """Create Customer from dictionary."""
@@ -112,16 +112,16 @@ class Customer:
             address = Address(**address_data)
         else:
             address = address_data
-        
+
         # Handle date conversions
         birth_date = data.get('birth_date')
         if isinstance(birth_date, str):
             birth_date = date.fromisoformat(birth_date)
-        
+
         account_created_at = data.get('account_created_at')
         if isinstance(account_created_at, str):
             account_created_at = datetime.fromisoformat(account_created_at)
-        
+
         return cls(
             customer_id=data['customer_id'],
             name=data['name'],
@@ -166,6 +166,6 @@ class CustomerIndex:
     bank_code: Optional[str] = None  # banco_codigo
     risk_level: Optional[str] = None  # nivel_risco
     location_cluster: Optional[tuple] = None  # 3-5 locações habituais (lat, lon, weight)
-    
+
     def __repr__(self) -> str:
         return f"CustomerIndex({self.customer_id}, {self.state}, {self.behavioral_profile})"

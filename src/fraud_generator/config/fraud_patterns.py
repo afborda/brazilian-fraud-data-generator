@@ -642,7 +642,7 @@ def get_fraud_pattern(fraud_type: str) -> FraudPattern:
     """
     if fraud_type not in FRAUD_PATTERNS:
         raise KeyError(f"Unknown fraud type: {fraud_type}. Available: {FRAUD_TYPES_LIST}")
-    
+
     return FRAUD_PATTERNS[fraud_type]
 
 

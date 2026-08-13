@@ -16,6 +16,7 @@ from ..config.transactions import REFUSAL_REASONS
 from ..generators.session_context import build_context_for_fraud
 from ..generators.correlations import match_fraud_rule
 from ..generators.score import compute_fraud_risk_score, score_breakdown
+from ..config.calibration import rate as _rate
 
 
 # Fraud types whose money leaves through a mule account. Kept here rather than
@@ -160,9 +161,13 @@ class RiskEnricher:
         # account). Without that, the field is a label again.
         if tx.get("type") in ("PIX", "TED"):
             if is_fraud:
-                p_mule = 0.62 if fraud_type in _MULE_CASHOUT_TYPES else 0.28
+                p_mule = (
+                    _rate("mule.p_fraud_cashout_types")
+                    if fraud_type in _MULE_CASHOUT_TYPES
+                    else _rate("mule.p_fraud_other_types")
+                )
             else:
-                p_mule = 0.004
+                p_mule = _rate("mule.p_legit")
             tx["recipient_is_mule"] = buf.next_float() < p_mule
         else:
             tx["recipient_is_mule"] = False

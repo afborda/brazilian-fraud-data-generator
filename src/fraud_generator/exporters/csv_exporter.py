@@ -15,7 +15,7 @@ class CSVExporter(ExporterProtocol):
     Handles nested dictionaries by flattening them with dot notation.
     Example: {'endereco': {'cidade': 'SP'}} -> 'endereco.cidade': 'SP'
     """
-    
+
     def __init__(
         self,
         delimiter: str = ',',
@@ -37,15 +37,15 @@ class CSVExporter(ExporterProtocol):
         # OTIMIZAÇÃO 2.5: Larger write buffer for fewer syscalls
         self._buffer_size = 262144  # 256KB
         self._chunk_size = 5000
-    
+
     @property
     def extension(self) -> str:
         return '.csv'
-    
+
     @property
     def format_name(self) -> str:
         return 'CSV'
-    
+
     def _flatten_dict(
         self,
         d: Dict[str, Any],
@@ -61,12 +61,12 @@ class CSVExporter(ExporterProtocol):
             else:
                 items.append((new_key, v))
         return dict(items)
-    
+
     def _get_fieldnames(self, data: List[Dict[str, Any]]) -> List[str]:
         """Extract all unique field names from data."""
         if not data:
             return []
-        
+
         all_keys: Set[str] = set()
         for record in data:
             if self.flatten_nested:
@@ -74,10 +74,10 @@ class CSVExporter(ExporterProtocol):
             else:
                 flat = record
             all_keys.update(flat.keys())
-        
+
         # Sort for consistent column order
         return sorted(all_keys)
-    
+
     def _get_fieldnames_from_iterator(
         self,
         data_iterator: Iterator[Dict[str, Any]],
@@ -98,22 +98,22 @@ class CSVExporter(ExporterProtocol):
         """
         all_keys: Set[str] = set()
         sample = []
-        
+
         # Sample first records to determine schema
         for i, record in enumerate(data_iterator):
             sample.append(record)
-            
+
             if self.flatten_nested:
                 flat = self._flatten_dict(record)
             else:
                 flat = record
             all_keys.update(flat.keys())
-            
+
             if i >= sample_size - 1:
                 break
-        
+
         return sorted(all_keys), sample
-    
+
     def export_batch(
         self,
         data: List[Dict[str, Any]],
@@ -126,20 +126,20 @@ class CSVExporter(ExporterProtocol):
         OTIMIZAÇÃO 1.6: Writes directly to disk without accumulating in memory.
         """
         self.ensure_directory(output_path)
-        
+
         if not data:
             return 0
-        
+
         # Determine fieldnames
         if self._fieldnames is None:
             self._fieldnames = self._get_fieldnames(data)
-        
+
         # Check if file exists and has content (for append mode)
         file_exists = os.path.exists(output_path) and os.path.getsize(output_path) > 0
-        
+
         mode = 'a' if append else 'w'
         newline = '' if os.name == 'nt' else None
-        
+
         # OTIMIZAÇÃO 1.6: Use buffering for better I/O performance
         with open(output_path, mode, newline='', encoding='utf-8', buffering=self._buffer_size) as f:
             writer = csv.DictWriter(
@@ -149,11 +149,11 @@ class CSVExporter(ExporterProtocol):
                 quoting=self.quoting,
                 extrasaction='ignore'
             )
-            
+
             # Write header only if not appending to existing file
             if not (append and file_exists):
                 writer.writeheader()
-            
+
             # OTIMIZAÇÃO 1.6: Write in chunks to reduce memory pressure
             count = 0
             for i in range(0, len(data), self._chunk_size):
@@ -165,13 +165,13 @@ class CSVExporter(ExporterProtocol):
                         flat_record = record
                     writer.writerow(flat_record)
                     count += 1
-                
+
                 # Flush periodically to reduce memory buffer
                 if count % 20000 == 0:
                     f.flush()
-        
+
         return count
-    
+
     def export_stream(
         self,
         data_iterator: Iterator[Dict[str, Any]],
@@ -187,10 +187,10 @@ class CSVExporter(ExporterProtocol):
         Reduced default batch_size from 10000 to 5000 for better memory efficiency.
         """
         self.ensure_directory(output_path)
-        
+
         total_count = 0
         newline = '' if os.name == 'nt' else None
-        
+
         # OTIMIZAÇÃO 1.6: Sample first records to infer schema without full buffering
         if self._fieldnames is None:
             self._fieldnames, sample = self._get_fieldnames_from_iterator(
@@ -199,10 +199,10 @@ class CSVExporter(ExporterProtocol):
             )
         else:
             sample = []
-        
+
         if not self._fieldnames and not sample:
             return 0
-        
+
         with open(output_path, 'w', newline='', encoding='utf-8', buffering=self._buffer_size) as f:
             writer = csv.DictWriter(
                 f,
@@ -212,7 +212,7 @@ class CSVExporter(ExporterProtocol):
                 extrasaction='ignore'
             )
             writer.writeheader()
-            
+
             # Write sampled records first
             for record in sample:
                 if self.flatten_nested:
@@ -221,7 +221,7 @@ class CSVExporter(ExporterProtocol):
                     flat_record = record
                 writer.writerow(flat_record)
                 total_count += 1
-            
+
             # Continue streaming remaining records
             for record in data_iterator:
                 if self.flatten_nested:
@@ -230,28 +230,28 @@ class CSVExporter(ExporterProtocol):
                     flat_record = record
                 writer.writerow(flat_record)
                 total_count += 1
-                
+
                 # Flush periodically to reduce memory buffer
                 if total_count % batch_size == 0:
                     f.flush()
-        
+
         return total_count
 
 
 class TSVExporter(CSVExporter):
     """Export data to TSV (Tab-Separated Values) format."""
-    
+
     def __init__(self, flatten_nested: bool = True):
         super().__init__(
             delimiter='\t',
             quoting=csv.QUOTE_MINIMAL,
             flatten_nested=flatten_nested
         )
-    
+
     @property
     def extension(self) -> str:
         return '.tsv'
-    
+
     @property
     def format_name(self) -> str:
         return 'TSV'

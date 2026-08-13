@@ -61,6 +61,7 @@ from .session_context import build_context_for_fraud
 from .correlations import match_fraud_rule
 from .score import compute_fraud_risk_score, score_breakdown
 from ..config.distributions import get_income_class
+from ..config.calibration import rate as _rate
 from ..config.pix import (
     MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS,
     TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS,
@@ -89,7 +90,7 @@ _PROFILE_CLASSE = {
 # Probability that a fraud type flagged as "new beneficiary" actually pays a
 # counterparty the customer has never paid. Kept below 1.0 so the field stays a
 # signal rather than a label.
-_FRAUD_NEW_BENEFICIARY_PROB = 0.82
+_FRAUD_NEW_BENEFICIARY_PROB = _rate("fraud.new_beneficiary_prob")
 
 
 def _profile_to_classe_social(profile: Optional[str]) -> Optional[str]:
@@ -183,7 +184,7 @@ class TransactionGenerator:
     - Realistic value distributions
     - Proper PIX, card, and other transaction types
     """
-    
+
     def __init__(
         self,
         fraud_rate: float = 0.008,
@@ -222,11 +223,11 @@ class TransactionGenerator:
         self._card_entry_cache = WeightCache(CARD_ENTRY_LIST, CARD_ENTRY_WEIGHTS)
         self._pix_type_cache = WeightCache(PIX_TYPES_LIST, PIX_TYPES_WEIGHTS)
         self._ispb_list = ISPB_LIST
-        
+
         # OTIMIZAÇÃO 1.2: Cache merchant lists by MCC (avoid repeated dict lookups)
         from ..config.merchants import MERCHANTS_BY_MCC
         self._merchants_cache = MERCHANTS_BY_MCC
-        
+
         # OTIMIZAÇÃO 2: Fraud pattern cache for contextualized fraud
         self._fraud_patterns = FRAUD_PATTERNS
 
@@ -498,17 +499,17 @@ class TransactionGenerator:
             is_fraud = force_fraud
         else:
             is_fraud = random.random() < self.fraud_rate
-        
+
         fraud_type = None
         if is_fraud:
             fraud_type = self._fraud_type_cache.sample()
-        
+
         # Select transaction type (profile-aware)
         if self.use_profiles and customer_profile:
             tx_type = get_transaction_type_for_profile(customer_profile)
         else:
             tx_type = self._tx_type_cache.sample()
-        
+
         # T4: merchant clustering — reuse a favourite for legit transactions 70% of the time.
         # Builds stable per-customer patterns so anomalous merchants become a real signal.
         _fav_merchant_id: Optional[str] = None
@@ -553,16 +554,16 @@ class TransactionGenerator:
 
         # Geolocation
         lat, lon = self._get_geolocation(customer_state, is_fraud, location_cluster)
-        
+
         # Channel (profile-aware)
         if self.use_profiles and customer_profile:
             canal = get_channel_for_profile(customer_profile)
         else:
             canal = self._channel_cache.sample()
-        
+
         # Bank destination
         banco_destino = self._bank_cache.sample()
-        
+
         # Build base transaction
         tx = {
             'transaction_id': make_transaction_id(tx_id, customer_id, timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)),
@@ -590,19 +591,19 @@ class TransactionGenerator:
             'velocity_burst_id': None,
             'distributed_attack_group': None,
         }
-        
+
         # Add type-specific fields (uses pre-computed buffers)
         self._add_type_specific_fields(tx, tx_type, banco_destino, customer_id, customer_cpf, is_fraud)
-        
+
         # OTIMIZAÇÃO 2: Apply fraud pattern characteristics if fraud
         if is_fraud and fraud_type:
             tx = self._apply_fraud_pattern(tx, fraud_type, customer_profile, timestamp)
-        
+
         # Add risk indicators
         self._add_risk_indicators(tx, timestamp, is_fraud, fraud_type, session_state, customer_profile)
-        
+
         return tx
-    
+
     def generate_batch(
         self,
         count: int,
@@ -627,16 +628,16 @@ class TransactionGenerator:
         for i in range(count):
             # Select random customer/device pair
             customer_idx, device_idx = random.choice(customer_device_pairs)
-            
+
             # Generate timestamp
             timestamp = self._generate_timestamp(
                 start_date,
                 end_date,
                 getattr(customer_idx, 'behavioral_profile', None)
             )
-            
+
             tx_id = f"{start_tx_id + i:015d}"
-            
+
             yield self.generate(
                 tx_id=tx_id,
                 customer_id=customer_idx.customer_id,
@@ -645,7 +646,7 @@ class TransactionGenerator:
                 customer_state=getattr(customer_idx, 'state', None),
                 customer_profile=getattr(customer_idx, 'behavioral_profile', None),
             )
-    
+
     def _calculate_value(
         self,
         is_fraud: bool,
@@ -680,7 +681,7 @@ class TransactionGenerator:
         # Permite cauda superior até 2× max (outliers realistas)
         clamped = max(min_value, min(value, max_value * 2.0))
         return round(clamped * type_mult, 2)
-    
+
     def _calculate_fraud_value(self, fraud_type: Optional[str]) -> float:
         """Calculate fraud transaction value using log-normal distribution.
 
@@ -731,7 +732,7 @@ class TransactionGenerator:
             mu, sigma, max_val = math.log(500), 1.10, 10_000.0
         value = math.exp(random.gauss(mu, sigma))
         return round(max(5.0, min(value, max_val)), 2)
-    
+
     def _get_geolocation(
         self,
         customer_state: Optional[str],
@@ -773,7 +774,7 @@ class TransactionGenerator:
         lat = round(info['lat'] + self._buf.next_uniform(-0.5, 0.5), 6)
         lon = round(info['lon'] + self._buf.next_uniform(-0.5, 0.5), 6)
         return lat, lon
-    
+
     def _add_type_specific_fields(
         self,
         tx: dict,
@@ -882,7 +883,7 @@ class TransactionGenerator:
                 'is_devolucao': None,
                 'motivo_devolucao_med': None,
             })
-    
+
     def _apply_fraud_pattern(
         self,
         tx: Dict[str, Any],
@@ -911,7 +912,7 @@ class TransactionGenerator:
         """
         pattern = get_fraud_pattern(fraud_type)
         characteristics = pattern['characteristics']
-        
+
         # VALUE ANOMALY: Adjust amount based on fraud pattern
         if 'amount_override' in characteristics:
             # Force specific amount range (e.g., for card testing)
@@ -920,13 +921,13 @@ class TransactionGenerator:
         elif 'amount_multiplier' in characteristics:
             min_mult, max_mult = characteristics['amount_multiplier']
             current_amount = tx.get('amount', 100.0)
-            
+
             # Get base value for profile
             if self.use_profiles and customer_profile:
                 profile_avg = get_transaction_value_for_profile(customer_profile)
             else:
                 profile_avg = current_amount
-            
+
             # V6-M8: Use Pareto distribution when calibrated, uniform as fallback
             pareto_shape = characteristics.get('pareto_shape')
             pareto_scale = characteristics.get('pareto_scale')
@@ -936,10 +937,10 @@ class TransactionGenerator:
                 mult = max(min_mult, min(mult, max_mult * 3))  # clamp within reasonable range
             else:
                 mult = random.uniform(min_mult, max_mult)
-            
+
             new_amount = profile_avg * mult
             tx['amount'] = round(new_amount, 2)
-        
+
         # NEW BENEFICIARY: a strong tendency, never a certainty.
         #
         # This used to be an unconditional True for the flagged fraud types,
@@ -951,7 +952,7 @@ class TransactionGenerator:
             # Different destination bank for transfers
             if tx.get('destination_bank'):
                 tx['destination_bank'] = self._bank_cache.sample()
-        
+
         # VELOCITY: Transaction burst pattern
         if characteristics.get('velocity') == 'HIGH':
             if 'transaction_burst' in characteristics:
@@ -959,13 +960,13 @@ class TransactionGenerator:
                 tx['velocity_transactions_24h'] = random.randint(min_burst, max_burst)
             else:
                 tx['velocity_transactions_24h'] = random.randint(10, 30)
-            
+
             # High accumulated amount
             tx['accumulated_amount_24h'] = round(tx['amount'] * tx['velocity_transactions_24h'] * random.uniform(0.6, 0.9), 2)
         elif characteristics.get('velocity') == 'MEDIUM':
             tx['velocity_transactions_24h'] = random.randint(5, 12)
             tx['accumulated_amount_24h'] = round(tx['amount'] * tx['velocity_transactions_24h'] * 0.7, 2)
-        
+
         # TIME ANOMALY: Unusual hours (madrugada for account takeover)
         time_anomaly = characteristics.get('time_anomaly', 'NONE')
         if time_anomaly != 'NONE':
@@ -974,7 +975,7 @@ class TransactionGenerator:
             new_timestamp = timestamp.replace(hour=new_hour, minute=random.randint(0, 59))
             tx['timestamp'] = new_timestamp.isoformat()
             tx['unusual_time'] = new_hour < 6 or new_hour > 22
-        
+
         # LOCATION ANOMALY: Different state/geo
         location_anomaly = characteristics.get('location_anomaly', 'NONE')
         if location_anomaly == 'HIGH':
@@ -989,18 +990,18 @@ class TransactionGenerator:
             tx['geolocation_lat'] += random.uniform(-2.0, 2.0)
             tx['geolocation_lon'] += random.uniform(-2.0, 2.0)
             tx['distance_from_last_txn_km'] = round(random.uniform(50, 200), 2)
-        
+
         # DEVICE ANOMALY: New/suspicious device
         device_anomaly = characteristics.get('device_anomaly', 'NONE')
         if device_anomaly == 'HIGH':
             # Completely different device
             tx['device_id'] = f"DEV_FRAUD_{random.randint(100000, 999999):06d}"
-        
+
         # CHANNEL PREFERENCE: Force specific channels
         if 'channel_preference' in characteristics:
             preferred_channels = characteristics['channel_preference']
             tx['channel'] = random.choice(preferred_channels)
-            
+
             # Update PIX fields if PIX fraud
             if 'PIX' in preferred_channels and tx['channel'] == 'PIX':
                 tx['type'] = 'PIX'
@@ -1025,7 +1026,7 @@ class TransactionGenerator:
                     tx['tipo_conta_recebedor'] = self._buf.next_weighted('tipo_conta', TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS)
                     tx['holder_type_recebedor'] = self._buf.next_weighted('holder', HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS)
                     tx['modalidade_iniciacao'] = self._buf.next_weighted('modalidade', MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS)
-        
+
         # MCC PREFERENCE: Common MCCs for fraud type
         if 'mcc_preference' in characteristics:
             mcc_codes = characteristics['mcc_preference']
@@ -1037,7 +1038,7 @@ class TransactionGenerator:
             # Update merchant
             merchants = self._merchants_cache.get(new_mcc, ['Suspicious Merchant'])
             tx['merchant_name'] = random.choice(merchants)
-        
+
         # ---- T3: Card Testing phases ------------------------------------ #
         if fraud_type == 'CARD_TESTING':
             chars = characteristics
@@ -1121,7 +1122,7 @@ class TransactionGenerator:
         tx['fraud_score'] = int(random.uniform(base_score * 100, 95))
 
         return tx
-    
+
     def _add_risk_indicators(
         self,
         tx: dict,
@@ -1134,7 +1135,7 @@ class TransactionGenerator:
         """Add risk indicators to transaction."""
         hour = timestamp.hour
         unusual_time = hour < 6 or hour > 23
-        
+
         if is_fraud:
             status = self._buf.next_weighted(
                 'status_fraud',
@@ -1204,7 +1205,7 @@ class TransactionGenerator:
                 tx['accumulated_amount_24h'] = default_accumulated_amount
             if tx.get('new_beneficiary') is None:
                 tx['new_beneficiary'] = self._buf.next_float() < (0.7 if is_fraud else 0.15)
-        
+
         tx.update({
             'unusual_time': unusual_time,
             'status': status,
@@ -1315,7 +1316,7 @@ class TransactionGenerator:
             tx.get('type') in ('PIX', 'TED') and
             is_fraud
         ) if ring_id else False
-    
+
     def _generate_timestamp(
         self,
         start_date: datetime,

@@ -15,7 +15,7 @@ from typing import List, Any
 
 class WeightCache:
     """Cache cumulative weights for fast weighted random selection."""
-    
+
     def __init__(self, choices: List[Any], weights: List[float]):
         """
         Initialize weight cache.
@@ -25,18 +25,18 @@ class WeightCache:
             weights: Corresponding weights (will be normalized)
         """
         self.choices = choices
-        
+
         # Normalize weights to sum to 1.0
         total = sum(weights)
         normalized_weights = [w / total for w in weights]
-        
+
         # Pre-compute cumulative distribution (using pure Python for speed)
         self.cumsum = []
         cumulative = 0.0
         for w in normalized_weights:
             cumulative += w
             self.cumsum.append(cumulative)
-    
+
     def sample(self) -> Any:
         """
         Sample one item from choices using weighted distribution.
@@ -48,15 +48,15 @@ class WeightCache:
             One randomly selected item based on weights
         """
         r = random.random()  # 0.0 to 1.0
-        
+
         # bisect_right finds insertion point, which is the index we want
         idx = bisect.bisect_right(self.cumsum, r)
-        
+
         # Ensure index is in bounds
         idx = min(idx, len(self.choices) - 1)
-        
+
         return self.choices[idx]
-    
+
     def __call__(self) -> Any:
         """Allow instance to be called as function."""
         return self.sample()

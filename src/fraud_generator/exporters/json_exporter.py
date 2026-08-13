@@ -23,7 +23,7 @@ class JSONExporter(ExporterProtocol):
     - Log-style data
     - Easy parsing with standard tools
     """
-    
+
     def __init__(
         self,
         ensure_ascii: bool = False,
@@ -49,7 +49,7 @@ class JSONExporter(ExporterProtocol):
         self.skip_none = skip_none
         self.jsonl_compress = jsonl_compress
         self._compressor = CompressionHandler(jsonl_compress, verbose=False) if jsonl_compress != 'none' else None
-    
+
     @property
     def extension(self) -> str:
         """Return file extension based on compression algorithm."""
@@ -62,11 +62,11 @@ class JSONExporter(ExporterProtocol):
         elif self.jsonl_compress == 'snappy':
             return '.jsonl.snappy'
         return '.jsonl'
-    
+
     @property
     def format_name(self) -> str:
         return 'JSON Lines'
-    
+
     def _clean_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """
         Remove None values from record (OTIMIZAÇÃO 1.3).
@@ -75,9 +75,9 @@ class JSONExporter(ExporterProtocol):
         """
         if not self.skip_none:
             return record
-        
+
         return {k: v for k, v in record.items() if v is not None}
-    
+
     def export_batch(
         self,
         data: List[Dict[str, Any]],
@@ -86,10 +86,10 @@ class JSONExporter(ExporterProtocol):
     ) -> int:
         """Export a batch of records to JSON Lines file with optional compression (OTIMIZAÇÃO 2.1)."""
         self.ensure_directory(output_path)
-        
+
         mode = 'ab' if append else 'wb'  # Changed to binary mode for compression support
         count = 0
-        
+
         with open(output_path, mode) as f:
             for record in data:
                 clean_record = self._clean_record(record)  # OTIMIZAÇÃO 1.3: Remove None values
@@ -100,16 +100,16 @@ class JSONExporter(ExporterProtocol):
                     indent=self.indent
                 )
                 line_bytes = (line + '\n').encode('utf-8')
-                
+
                 # OTIMIZAÇÃO 2.1: Apply compression if enabled
                 if self._compressor is not None:
                     line_bytes = self._compressor.compress(line_bytes)
-                
+
                 f.write(line_bytes)
                 count += 1
-        
+
         return count
-    
+
     def export_stream(
         self,
         data_iterator: Iterator[Dict[str, Any]],
@@ -118,41 +118,41 @@ class JSONExporter(ExporterProtocol):
     ) -> int:
         """Export data from iterator to JSON Lines file."""
         self.ensure_directory(output_path)
-        
+
         total_count = 0
         first_batch = True
-        
+
         batch = []
         for record in data_iterator:
             batch.append(record)
-            
+
             if len(batch) >= batch_size:
                 self.export_batch(batch, output_path, append=not first_batch)
                 total_count += len(batch)
                 batch = []
                 first_batch = False
-        
+
         # Write remaining records
         if batch:
             self.export_batch(batch, output_path, append=not first_batch)
             total_count += len(batch)
-        
+
         return total_count
-    
+
     def export_single(self, record: Dict[str, Any], output_path: str, append: bool = True) -> None:
         """Export a single record to JSON Lines file with optional compression (OTIMIZAÇÃO 2.1)."""
         self.ensure_directory(output_path)
-        
+
         mode = 'ab' if append else 'wb'  # Changed to binary mode for compression support
         with open(output_path, mode) as f:
             clean_record = self._clean_record(record)  # OTIMIZAÇÃO 1.3: Remove None values
             line = json.dumps(clean_record, ensure_ascii=self.ensure_ascii)
             line_bytes = (line + '\n').encode('utf-8')
-            
+
             # OTIMIZAÇÃO 2.1: Apply compression if enabled
             if self._compressor is not None:
                 line_bytes = self._compressor.compress(line_bytes)
-            
+
             f.write(line_bytes)
 
 
@@ -163,26 +163,26 @@ class JSONArrayExporter(ExporterProtocol):
     All records are written as a single JSON array.
     Best for smaller datasets that need to be loaded entirely.
     """
-    
+
     def __init__(self, ensure_ascii: bool = False, indent: int = 2, skip_none: bool = False):
         self.ensure_ascii = ensure_ascii
         self.indent = indent
         self.skip_none = skip_none  # OTIMIZAÇÃO 1.3: Support filtering None values
-    
+
     @property
     def extension(self) -> str:
         return '.json'
-    
+
     @property
     def format_name(self) -> str:
         return 'JSON Array'
-    
+
     def _clean_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """Remove None values from record if skip_none is enabled."""
         if not self.skip_none:
             return record
         return {k: v for k, v in record.items() if v is not None}
-    
+
     def export_batch(
         self,
         data: List[Dict[str, Any]],
@@ -191,10 +191,10 @@ class JSONArrayExporter(ExporterProtocol):
     ) -> int:
         """Export records as JSON array."""
         self.ensure_directory(output_path)
-        
+
         # OTIMIZAÇÃO 1.3: Clean records before export
         clean_data = [self._clean_record(record) for record in data]
-        
+
         if append and os.path.exists(output_path):
             file_size = os.path.getsize(output_path)
             if file_size > 100 * 1024 * 1024:  # 100MB
@@ -208,7 +208,7 @@ class JSONArrayExporter(ExporterProtocol):
             with open(output_path, 'r', encoding='utf-8') as f:
                 existing = json.load(f)
             clean_data = existing + clean_data
-        
+
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(
                 clean_data,
@@ -216,9 +216,9 @@ class JSONArrayExporter(ExporterProtocol):
                 ensure_ascii=self.ensure_ascii,
                 indent=self.indent
             )
-        
+
         return len(clean_data)
-    
+
     def export_stream(
         self,
         data_iterator: Iterator[Dict[str, Any]],

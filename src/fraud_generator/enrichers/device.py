@@ -17,6 +17,7 @@ from typing import Any, Dict
 
 from .base import EnricherProtocol, GeneratorBag
 from ..utils.overlap import lognormal_days, two_class
+from ..config.calibration import rate as _rate
 
 
 def sample_device_age(is_fraud: bool) -> int:
@@ -31,8 +32,8 @@ def sample_device_age(is_fraud: bool) -> int:
         is_fraud,
         legit=lambda: lognormal_days(median=210, sigma=1.15, lo=0, hi=2555),
         fraud=lambda: lognormal_days(median=60, sigma=1.05, lo=0, hi=2555),
-        legit_contamination=0.10,   # celular novo, troca de aparelho
-        fraud_contamination=0.30,   # fraudador em aparelho antigo
+        legit_contamination=_rate("device_age.legit_contamination"),
+        fraud_contamination=_rate("device_age.fraud_contamination"),
     )
 
 

@@ -26,7 +26,7 @@ class DeviceGenerator:
     Generates devices with appropriate manufacturers, models,
     and OS versions based on device type.
     """
-    
+
     def __init__(
         self,
         locale: str = 'pt_BR',
@@ -40,11 +40,11 @@ class DeviceGenerator:
             seed: Random seed for reproducibility
         """
         self.fake = Faker(locale)
-        
+
         if seed is not None:
             Faker.seed(seed)
             random.seed(seed)
-    
+
     def generate(
         self,
         device_id: str,
@@ -70,26 +70,26 @@ class DeviceGenerator:
                 DEVICE_TYPES_LIST,
                 weights=DEVICE_TYPES_WEIGHTS
             )[0]
-        
+
         # Get manufacturer and model
         manufacturers = get_manufacturers_for_device_type(device_type)
         manufacturer = random.choice(manufacturers)
-        
+
         models = get_models_for_manufacturer(manufacturer)
         model = random.choice(models)
-        
+
         # Get OS
         os_options = get_os_for_device_type(device_type)
         os_name = random.choice(os_options)
-        
+
         # Generate fingerprint
         fingerprint = hashlib.sha256(
             f"{device_id}{random.random()}".encode()
         ).hexdigest()[:32]
-        
+
         # First use date
         first_use = self.fake.date_between(start_date='-2y', end_date='today')
-        
+
         # Trust and security status
         is_trusted = random.choices([True, False], weights=[85, 15])[0]
         is_rooted = random.choices([False, True], weights=[97, 3])[0]
@@ -119,7 +119,7 @@ class DeviceGenerator:
             'vpn_active': vpn_active,
             'ip_type': ip_type,
         }
-    
+
     def generate_for_customer(
         self,
         customer_id: str,
@@ -148,13 +148,13 @@ class DeviceGenerator:
             num_devices = random.randint(1, 2)
         else:
             num_devices = random.randint(min_devices, max_devices)
-        
+
         # Determine preferred device types based on profile
         preferred_types = self._get_preferred_types(customer_profile)
-        
+
         for i in range(num_devices):
             device_id = f"DEV_{start_device_id + i:012d}"
-            
+
             # First device is usually the most used type for profile
             if i == 0 and preferred_types:
                 preferred = preferred_types[0]
@@ -162,9 +162,9 @@ class DeviceGenerator:
                 preferred = random.choice(preferred_types)
             else:
                 preferred = None
-            
+
             yield self.generate(device_id, customer_id, preferred_type=preferred)
-    
+
     def generate_index(self, device_data: Dict[str, Any]) -> DeviceIndex:
         """Create a lightweight index from device data."""
         return DeviceIndex(
@@ -175,7 +175,7 @@ class DeviceGenerator:
             vpn_active=device_data.get('vpn_active', False),
             ip_type=device_data.get('ip_type', 'RESIDENTIAL'),
         )
-    
+
     def _get_preferred_types(self, profile: Optional[str]) -> list:
         """Get preferred device types for a profile."""
         profile_preferences = {
