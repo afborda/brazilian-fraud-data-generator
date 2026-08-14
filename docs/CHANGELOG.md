@@ -42,6 +42,218 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ---
 
+### Análise de sensibilidade das taxas (adendo)
+
+Sweep completo: cada taxa movida +50% isoladamente, com regeração e medição da
+AUC. 16 taxas de transação, 7 de ride-share, ~90s cada.
+
+**Transações — ranking por |ΔAUC|:**
+
+| taxa | ΔAUC |
+|---|---|
+| `fraud.low_and_slow_share` | −0.0162 |
+| `dest_account_age.fraud_contamination` | −0.0113 |
+| `counterparty.one_off_share_legit` | −0.0084 |
+| `counterparty.one_off_share_fraud` | −0.0076 |
+| `fraud.decoy_share` | −0.0065 |
+| `dest_account_age.legit_contamination` | −0.0059 |
+| `bot_score.legit_contamination` | −0.0054 |
+| `device_age.fraud_contamination` | −0.0048 |
+| `bot_score.fraud_contamination` | −0.0033 |
+| `device_age.legit_contamination` | −0.0018 |
+| `company_age.*`, `mule.p_*` (5 taxas) | 0.0000 |
+
+**Ride-share:** a maior alavanca é `ride.legit_refund_zero_share` com +0.0196,
+e isso levando a taxa a 1,0 — o extremo de nenhum passageiro legítimo jamais
+pedir reembolso. Calibração não move o ride-share: confirma que o problema é
+lacuna de instrumentação, não de taxa.
+
+**Cinco taxas com efeito exatamente zero** não são bug: `destination_company_age_days`
+e `recipient_is_mule` não estão no feature set oficial de `ml/features.py`.
+Elas afetam o dado entregue e a AUC do benchmark, só não esta métrica.
+
+### Bug encontrado pela análise: taxa morta no registro
+
+`fraud.new_beneficiary_prob` dava delta **exatamente** zero até a 16ª casa
+decimal — o dado gerado saía idêntico. Investigado: o único ramo que lia a
+constante estava atrás de `if characteristics.get('new_beneficiary')`, e
+**nenhum dos 25 padrões define essa chave booleana** — os 25 definem
+`new_beneficiary_prob`, consumida pelo `FraudEnricher`.
+
+A taxa foi removida do registro e o ramo passa a ler a probabilidade do próprio
+padrão. Uma taxa listada que não muda a saída é pior que taxa nenhuma: promete
+um controle que não existe. Novo teste `test_every_rate_is_referenced_in_src`
+falha se qualquer entrada do registro deixar de ser consumida.
+
+Registro: 22 taxas, 0 calibradas contra referência real.
+
+## v4.26.0 — Decomposição de AUC (2026-08-14)
+
+Auditoria estatística sobre o estado pós-camada-2: nenhum separador de
+precisão 100%, mas AUC do feature set oficial (`ml/features.py`, 15/29 campos
+presentes neste batch) ainda em **0.985999** — bem acima do alvo 0.75–0.95.
+Objetivo: decompor de onde vem a separabilidade residual e corrigir o que for
+claramente errado, sem tocar em taxa nenhuma para "acertar" o número.
+
+### Achado central: `unusual_time` e `new_beneficiary` dominavam por fora do
+### radar da importância de split
+
+Nenhum dos dois aparecia no "top 8 por importância" (a métrica default do
+LightGBM é contagem de splits, e um campo binário só cabe em um split por
+ramo). Mas a AUC univariada de `unusual_time` media **0.885** (odds ratio 60x
+fraude/legítimo) e a de `new_beneficiary` **0.818** (odds ratio 26x) — maior
+que qualquer uma das features "top 8". Uma ablação cumulativa por importância
+mostra a AUC saltando de 0.936 para 0.978 só ao incluir `unusual_time` (feature
+nº 11 na ordem de importância, não nº 1).
+
+- **`config/fraud_patterns.py` — `TIME_ANOMALY_WINDOWS`**: 11 padrões marcam
+  `time_anomaly='LOW'` com comentários como *"Horário normal"*
+  (ENGENHARIA_SOCIAL, 28% de prevalência — o tipo mais comum) ou *"Horário
+  comercial"* (BOLETO_FALSO, FALSA_CENTRAL_TELEFONICA), mas a janela real
+  (22h-2h) era tão noturna quanto HIGH. 7 padrões marcam `MEDIUM` com
+  *"Pode ser qualquer hora"* (CARTAO_CLONADO, PIX_GOLPE — 39% de prevalência
+  juntos), mas a janela (20h-4h) excluía o dia inteiro. LOW+MEDIUM somam ~82%
+  da prevalência de fraude e colapsavam na mesma faixa madrugada de HIGH — o
+  código contradizia o comentário escrito ao lado dele. Corrigido para bater
+  com o texto: `LOW` → 6h-23h (dia inteiro), `MEDIUM` → 0h-24h (literalmente
+  qualquer hora), `HIGH` inalterado (22h-5h — ATO/RAT/sequestro relâmpago com
+  vítima dormindo é fenômeno real, não artefato). `NONE` inalterado.
+- **`enrichers/fraud.py` — probabilidade de `new_beneficiary` só gravava o
+  `True`**: quando o padrão definia `new_beneficiary_prob` e o sorteio dava
+  falso, o campo ficava `None` em vez de `False`, e os enrichers a jusante
+  (`session.py`/`session_context.py`) tratam `None` como "ainda não decidido"
+  e sorteiam de novo com a taxa genérica de fraude (0.40-0.45), ignorando a
+  probabilidade do padrão específico. Dois sorteios independentes por trás de
+  um só campo — `P(True) = 1-(1-p)(1-p_fallback)` — inflava qualquer padrão
+  com prob baixa (CARTAO_CLONADO, 0.25 → efetivo ~0.56) para perto da taxa
+  genérica. Corrigido: o `False` agora é gravado explicitamente quando o
+  padrão define a probabilidade, então o sorteio do padrão vale sozinho.
+
+**Resultado**: `unusual_time` odds ratio 60x → 3.18x, `new_beneficiary` 26x →
+3.39x. AUC do feature set oficial: **0.985999 → 0.957038**. Portão de CI
+(`tools/analyze_batch.py --gate`, teto 0.97) segue aprovado. 346 testes.
+
+### `type` × `channel` eram sorteados independentemente
+
+Cramér's V = 0.082 entre as duas colunas no tráfego legítimo — essencialmente
+não relacionadas, quando na realidade o instrumento de pagamento restringe o
+canal. Produzia combinações que o produto real não tem: PIX via ATM (3.907
+registros em 268k), e ~35% dos registros de WITHDRAWAL (saque) via
+MOBILE_APP/WEB_BANKING — não existe "sacar dinheiro pela web".
+
+- **`config/transactions.py`** — nova `CHANNEL_WEIGHTS_BY_TYPE`: pesos de
+  canal por tipo de transação, construídos a partir de como cada instrumento é
+  de fato acessado num app de banco/PSP brasileiro (WITHDRAWAL quase só
+  ATM/BRANCH; PIX majoritariamente MOBILE_APP; WHATSAPP_PAY ausente onde o
+  produto não oferece o instrumento — BOLETO, TED, WITHDRAWAL, AUTO_DEBIT).
+- **`profiles/behavioral.py` — `get_channel_for_profile`** ganha parâmetro
+  `tx_type` opcional: intersecta a preferência de canal do perfil com a tabela
+  do tipo (multiplicação + renormalização), então um `young_digital` ainda
+  prefere MOBILE_APP mas nunca "saca" por WEB_BANKING.
+- **`generators/transaction.py`** — os dois caminhos de geração (com e sem
+  perfil) passam a amostrar canal condicionado ao tipo já escolhido.
+
+PIX via ATM: 3.907 → 133 (0,1% dos PIX). WITHDRAWAL via canal digital: ~35% →
+0%. Não move a AUC binária (nem `type` nem `channel` fazem parte do feature
+set oficial de `ml/features.py`) — é correção de estrutura conjunta, não de
+separabilidade.
+
+### Ride-share: `DESTINATION_DISPARITY` era um separador quase perfeito isolado
+
+A v4.23.0 fechou o vazamento agregado de corridas (AUC caiu para 0.688 num
+feature set ad-hoc), mas não tinha auditado cada um dos 11 padrões
+individualmente. `DESTINATION_DISPARITY` (rota realizada != rota pedida)
+multiplicava `distance_km` por um fator sempre ≥ 0,35x — sempre acima da
+cauda curta do baseline legítimo (`abs(N(0, 0.8))`, raramente > 3km). Medido
+isolado: `route_deviation_km > 3.43` capturava 97,65% deste tipo com 100% de
+precisão — o mesmo padrão de leak já corrigido em outros campos, só que
+faltando aqui.
+
+- **`generators/ride.py`** — `_apply_fraud_fields` (DESTINATION_DISPARITY):
+  uma fração (`ride.destination_disparity_mild_share`, 30%) agora recebe um
+  desvio discreto — golpe morno ou tentativa abortada, ainda dentro do que
+  trânsito comum explicaria — em vez de sempre um múltiplo grande da
+  distância pedida.
+- **`_apply_legit_ride_fields`** — cauda rara (`ride.legit_large_deviation_prob`,
+  2%) de desvio GRANDE legítimo: obra, bloqueio de via, engarrafamento que
+  força uma rota bem mais longa que a pedida. Sem ela o legítimo nunca
+  ultrapassava ~3,4 km e o tipo acima ficava isolado por construção.
+- **`config/calibration.py`** — as duas taxas novas, ambas `ESTIMATE`.
+
+AUC de `DESTINATION_DISPARITY` isolado contra todo o tráfego legítimo:
+1.0000 → 0.6377. Nenhum outro dos 11 padrões de corrida mediu AUC = 1.0
+isolado (GPS_SPOOFING 0.90, PROMO_ABUSE 0.97, REFUND_ABUSE 0.94, GHOST_RIDE
+0.89 — já tinham contaminação real da v4.23.0).
+
+### Diagnóstico do piso de corridas (AUC 0.688, alvo mínimo 0.75)
+
+Com um feature set ad-hoc mais completo (19 campos: os 5 marcadores de fraude
+mais mecânica de corrida — distância, duração, tarifas, avaliações),
+a AUC agregada mede 0.743 pós-correção acima — ainda abaixo do piso. A
+AUC por tipo isolado explica por quê: **não é contaminação em excesso**, é
+**ausência de campo observável** para quase metade do portfólio de padrões.
+
+| Padrão | AUC isolado | Tem campo dedicado? |
+|---|---|---|
+| PROMO_ABUSE | 0.97 | sim (`promo_abuse_group`) |
+| REFUND_ABUSE | 0.94 | sim (`refund_count_30d`) |
+| GPS_SPOOFING | 0.90 | sim (`route_deviation_km`) |
+| GHOST_RIDE | 0.89 | sim (`driver_rating` ausente) |
+| ACCOUNT_TAKEOVER_RIDE | 0.77 | parcial (`new_device_first_ride`) |
+| DESTINATION_DISPARITY | 0.64 | sim, agora com overlap real |
+| SURGE_ABUSE | 0.53 | não |
+| MULTI_ACCOUNT_DRIVER | 0.44 | não |
+| RATING_FRAUD | 0.45 | não |
+| SPLIT_FARE_FRAUD | 0.43 | não |
+| PAYMENT_CHARGEBACK | 0.40 | não (n pequeno, ruído provável) |
+
+Os cinco últimos padrões existem no gerador (`config/rideshare.py`) mas não
+escrevem nenhum campo que os distinga do tráfego legítimo — não há
+`fare_split_count`, `rating_manipulation_flag`, `driver_account_switch_count`
+ou equivalente no schema de corridas. Fechar o piso exige **instrumentar
+esses tipos com campos observáveis reais**, não recalibrar os que já têm
+sinal. Registrado aqui em vez de maquiado — mexer nas taxas dos tipos que já
+funcionam até a média subir seria o mesmo erro que a auditoria original
+apontou.
+
+### Sensibilidade das 23 taxas de calibração
+
+Perturbação de +50% (ou -50% quando já perto do teto) em cada uma das 16
+taxas que afetam transações, uma de cada vez, medindo ΔAUC do feature set
+oficial contra o baseline 0.957038. Ranking completo e taxas de corrida
+(sensibilidade separada, medida contra o feature set ad-hoc de corridas) no
+relatório da tarefa — não repetido aqui para não expor um número sem o
+método ao lado.
+
+### `fraud.new_beneficiary_prob` está morta — e o registro de calibração não avisava
+
+A varredura de sensibilidade (seção acima) mediu delta de AUC **exatamente
+zero** para esta taxa, mesmo perturbando de 0,82 para 1,0. Motivo: o único
+trecho que a lê é `generators/transaction.py:950-951`, atrás de
+`if characteristics.get('new_beneficiary', False):` — e nenhum dos 25 padrões
+de fraude em `fraud_patterns.py` define a chave booleana `'new_beneficiary'`
+(só a chave separada `'new_beneficiary_prob'`, lida por um mecanismo
+diferente em `enrichers/fraud.py`, que é o que de fato governa o campo). O
+ramo é código morto; girar essa taxa não muda nada gerado. Não é um bug de
+realismo — o campo `new_beneficiary` funciona corretamente pelo outro
+caminho — mas é uma taxa que promete um controle que não existe.
+
+- **`tests/unit/test_calibration.py`** — nova classe `TestEveryRateIsWired`:
+  varre `src/` inteiro e falha se alguma chave do registro de calibração não
+  aparecer referenciada em nenhum módulo (typo, taxa órfã, entrada esquecida
+  depois de uma refatoração). Removido `test_transaction_new_beneficiary_prob`,
+  que só verificava que a constante do módulo espelha a taxa — verdade, mas
+  irrelevante, já que a constante nunca é lida pelo branch morto.
+
+### Testes
+
+346 passed, 3 skipped — mesma contagem (um teste obsoleto saiu, um de guarda
+entrou). Nenhum teste codificava os valores antigos de
+`TIME_ANOMALY_WINDOWS`, o comportamento de `new_beneficiary` ou
+`CHANNELS_LIST`/`CHANNELS_WEIGHTS` diretamente.
+
+---
+
 ## v4.25.0 — TSTR de Verdade (2026-08-14)
 
 `tools/tstr_benchmark.py` se chamava "Train Synthetic, Test Real" e rodava

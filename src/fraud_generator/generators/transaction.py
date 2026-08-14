@@ -16,6 +16,7 @@ from ..enrichers.session import (  # canonical velocity baselines (BCB 2024 cali
 from ..config.transactions import (
     TX_TYPES_LIST, TX_TYPES_WEIGHTS,
     CHANNELS_LIST, CHANNELS_WEIGHTS,
+    CHANNEL_WEIGHTS_BY_TYPE,
     FRAUD_TYPES_LIST, FRAUD_TYPES_WEIGHTS,
     PIX_TYPES_LIST, PIX_TYPES_WEIGHTS,
     BRANDS_LIST, BRANDS_WEIGHTS,
@@ -86,12 +87,6 @@ _PROFILE_CLASSE = {
     'falsa_central_victim': 'D',
     'malware_ats_victim':  'C1',
 }
-
-# Probability that a fraud type flagged as "new beneficiary" actually pays a
-# counterparty the customer has never paid. Kept below 1.0 so the field stays a
-# signal rather than a label.
-_FRAUD_NEW_BENEFICIARY_PROB = _rate("fraud.new_beneficiary_prob")
-
 
 def _profile_to_classe_social(profile: Optional[str]) -> Optional[str]:
     return _PROFILE_CLASSE.get(profile) if profile else None
@@ -216,6 +211,12 @@ class TransactionGenerator:
         self._fraud_type_cache = WeightCache(FRAUD_TYPES_LIST, FRAUD_TYPES_WEIGHTS)
         self._mcc_cache = WeightCache(MCC_LIST, MCC_WEIGHTS)
         self._channel_cache = WeightCache(CHANNELS_LIST, CHANNELS_WEIGHTS)
+        # Channel conditioned on transaction type — see CHANNEL_WEIGHTS_BY_TYPE
+        # in config/transactions.py for why this replaced the unconditional cache.
+        self._channel_cache_by_type = {
+            t: WeightCache(list(w.keys()), list(w.values()))
+            for t, w in CHANNEL_WEIGHTS_BY_TYPE.items()
+        }
         self._bank_cache = WeightCache(BANK_CODES, BANK_WEIGHTS)
         self._estado_cache = WeightCache(ESTADOS_LIST, ESTADOS_WEIGHTS)
         self._brand_cache = WeightCache(BRANDS_LIST, BRANDS_WEIGHTS)
@@ -379,10 +380,12 @@ class TransactionGenerator:
         valor = self._calculate_value(is_fraud, fraud_type, mcc_info, customer_profile, tx_type)
 
         # ── Channel / Bank ────────────────────────────────────────────────
+        # Conditioned on tx_type: WITHDRAWAL cannot happen via WEB_BANKING,
+        # PIX is overwhelmingly MOBILE_APP, etc — see CHANNEL_WEIGHTS_BY_TYPE.
         if self.use_profiles and customer_profile:
-            canal = get_channel_for_profile(customer_profile)
+            canal = get_channel_for_profile(customer_profile, tx_type)
         else:
-            canal = self._channel_cache.sample()
+            canal = self._channel_cache_by_type.get(tx_type, self._channel_cache).sample()
         banco_destino = self._bank_cache.sample()
 
         # ── Build base transaction dict ───────────────────────────────────
@@ -555,11 +558,11 @@ class TransactionGenerator:
         # Geolocation
         lat, lon = self._get_geolocation(customer_state, is_fraud, location_cluster)
 
-        # Channel (profile-aware)
+        # Channel (profile-aware, conditioned on tx_type — see CHANNEL_WEIGHTS_BY_TYPE)
         if self.use_profiles and customer_profile:
-            canal = get_channel_for_profile(customer_profile)
+            canal = get_channel_for_profile(customer_profile, tx_type)
         else:
-            canal = self._channel_cache.sample()
+            canal = self._channel_cache_by_type.get(tx_type, self._channel_cache).sample()
 
         # Bank destination
         banco_destino = self._bank_cache.sample()
@@ -941,14 +944,23 @@ class TransactionGenerator:
             new_amount = profile_avg * mult
             tx['amount'] = round(new_amount, 2)
 
-        # NEW BENEFICIARY: a strong tendency, never a certainty.
+        # NEW BENEFICIARY: uma tendência forte, nunca uma certeza.
         #
-        # This used to be an unconditional True for the flagged fraud types,
-        # which made `new_beneficiary` a perfect marker for them. Invoice
-        # redirection and account-takeover scams routinely reuse a counterparty
-        # the victim already pays — that is precisely what makes them hard.
+        # Isto era um True incondicional para os tipos marcados, o que fazia de
+        # `new_beneficiary` um marcador perfeito. Golpe de boleto e ATO
+        # reaproveitam contraparte que a vítima já paga — é o que os torna
+        # difíceis.
+        #
+        # A análise de sensibilidade mostrou que este ramo NUNCA executa:
+        # nenhum dos 25 padrões define a chave booleana `new_beneficiary`, os 25
+        # definem `new_beneficiary_prob`, que o FraudEnricher consome. Mantido
+        # apenas por compatibilidade caso algum padrão volte a usar o booleano,
+        # e agora lendo a probabilidade DO PRÓPRIO PADRÃO em vez de uma constante
+        # global — senão um padrão que voltasse a usar o booleano perderia
+        # silenciosamente a sua calibração específica.
         if characteristics.get('new_beneficiary', False):
-            tx['new_beneficiary'] = random.random() < _FRAUD_NEW_BENEFICIARY_PROB
+            _p = characteristics.get('new_beneficiary_prob', 0.82)
+            tx['new_beneficiary'] = random.random() < _p
             # Different destination bank for transfers
             if tx.get('destination_bank'):
                 tx['destination_bank'] = self._bank_cache.sample()

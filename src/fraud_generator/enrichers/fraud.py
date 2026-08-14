@@ -490,11 +490,25 @@ class FraudEnricher:
             tx["amount"] = round(base * random.uniform(lo_m, hi_m) * age_mult * noise_mult, 2)
 
         # ── New beneficiary & destination account age ─────────────────────
+        # Quando o padrão define new_beneficiary_prob, o resultado do sorteio
+        # precisa ser gravado nos dois sentidos. Antes só o True era escrito;
+        # um sorteio perdido deixava o campo None, e os enrichers a jusante
+        # (session.py / session_context.py) tratam None como "ainda não
+        # decidido" e sorteiam de novo com a taxa genérica de fraude (0.40-
+        # 0.45), sem olhar a probabilidade do padrão específico. Isso somava
+        # dois sorteios independentes — P(True) = 1-(1-p)(1-p_fallback) —
+        # e inflava qualquer padrão com new_beneficiary_prob baixo (ex.
+        # CARTAO_CLONADO, 0.25 → efetivo ~0.56) para perto da taxa genérica,
+        # apagando a diferenciação por tipo que o comentário abaixo descreve.
+        # Gravar o False explicitamente faz o sorteio do padrão valer sozinho.
         new_ben_prob = characteristics.get("new_beneficiary_prob")
-        if new_ben_prob is not None and random.random() < new_ben_prob:
-            tx["new_beneficiary"] = True
-            if tx.get("destination_bank"):
-                tx["destination_bank"] = bag.bank_cache.sample()
+        if new_ben_prob is not None:
+            if random.random() < new_ben_prob:
+                tx["new_beneficiary"] = True
+                if tx.get("destination_bank"):
+                    tx["destination_bank"] = bag.bank_cache.sample()
+            else:
+                tx["new_beneficiary"] = False
 
         # Destination account age: PIX/social fraud goes to brand-new mule accounts.
         # This field is read by build_context_for_fraud via tx dict — must be set here

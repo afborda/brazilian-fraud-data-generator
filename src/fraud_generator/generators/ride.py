@@ -514,8 +514,16 @@ class RideGenerator:
         ride['payment_dispute_flag'] = rng.random() < _rate("ride.legit_dispute_prob")
 
         # Desvio quase sempre pequeno, mas raramente zero exato — o zero
-        # cravado era o que tornava `> 0` um separador perfeito.
-        ride['route_deviation_km'] = round(abs(rng.gauss(0, 0.8)), 2)
+        # cravado era o que tornava `> 0` um separador perfeito. Uma cauda rara
+        # de desvio GRANDE também é real e faltava: obra, bloqueio de via ou
+        # engarrafamento que força uma rota bem mais longa que a pedida — sem
+        # ela, `route_deviation_km` do legítimo nunca passava de ~3,4 km e
+        # qualquer corrida de DESTINATION_DISPARITY (ver `_apply_fraud_fields`)
+        # ficava quase inteiramente fora desse alcance.
+        if rng.random() < _rate("ride.legit_large_deviation_prob"):
+            ride['route_deviation_km'] = round(abs(rng.gauss(6.0, 3.0)), 2)
+        else:
+            ride['route_deviation_km'] = round(abs(rng.gauss(0, 0.8)), 2)
 
         ride['new_device_first_ride'] = rng.random() < _rate("ride.legit_new_device_prob")
 
@@ -572,11 +580,25 @@ class RideGenerator:
             ride['payment_dispute_flag'] = random.random() < _rate("ride.chargeback_dispute_prob")
 
         elif fraud_type == 'DESTINATION_DISPARITY':
-            # Rota realizada difere da pedida.
+            # Rota realizada difere da pedida. A versão anterior multiplicava
+            # distance_km por um fator sempre >= 0.35x, sempre acima da cauda
+            # curta do baseline legítimo (abs(N(0, 0.8)), raramente > 3km) —
+            # medido: 97,65% da fraude caía inteiramente fora do alcance
+            # legítimo, quase um separador perfeito isolado (route_deviation_km
+            # > 3.43 capturava 97,65% de DESTINATION_DISPARITY com 100% de
+            # precisão num teste isolado do tipo). Uma fração agora fica com
+            # desvio discreto — golpe morno ou tentativa abortada, ainda
+            # dentro do que trânsito comum explicaria — simétrico à cauda
+            # grande que _apply_legit_ride_fields ganhou para o lado legítimo.
             base_dist = ride.get('distance_km', 5.0)
-            ride['route_deviation_km'] = round(
-                max(ride['route_deviation_km'], base_dist * random.uniform(0.35, 4.0)), 2
-            )
+            if random.random() < _rate("ride.destination_disparity_mild_share"):
+                ride['route_deviation_km'] = round(
+                    max(ride['route_deviation_km'], abs(random.gauss(0, 1.5))), 2
+                )
+            else:
+                ride['route_deviation_km'] = round(
+                    max(ride['route_deviation_km'], base_dist * random.uniform(0.35, 4.0)), 2
+                )
 
         elif fraud_type == 'ACCOUNT_TAKEOVER_RIDE':
             # Aparelho novo na primeira corrida após a tomada de conta — comum,

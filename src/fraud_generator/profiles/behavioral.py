@@ -511,12 +511,43 @@ def get_mcc_for_profile(profile_name: str) -> str:
     return random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
 
 
-def get_channel_for_profile(profile_name: str) -> str:
-    """Get a weighted random channel for a profile."""
+def get_channel_for_profile(profile_name: str, tx_type: Optional[str] = None) -> str:
+    """Get a weighted random channel for a profile, constrained by transaction type.
+
+    `tx_type` matters more than the profile: a customer's digital fondness
+    decides whether they *prefer* app or web, but it cannot make WITHDRAWAL
+    happen over WEB_BANKING — that channel/type pair does not exist in the
+    real product. When `tx_type` is given, the profile's channel weights are
+    intersected with `get_channel_weights_for_type(tx_type)` (channels the
+    type forbids get weight 0) and renormalized; a profile with no signal
+    left after that (e.g. it only lists a channel the type excludes) falls
+    back to the type's own table. Omitting `tx_type` keeps the old
+    profile-only behaviour, for callers that decide channel before type.
+    """
+    from ..config.transactions import (
+        CHANNELS_LIST, CHANNELS_WEIGHTS, get_channel_weights_for_type,
+    )
+
+    if tx_type is not None:
+        type_weights = get_channel_weights_for_type(tx_type)
+        profile = PROFILES.get(profile_name)
+        profile_weights = profile.channel_preferences if profile else None
+        if profile_weights:
+            combined = {
+                ch: w * profile_weights.get(ch, 0.0)
+                for ch, w in type_weights.items()
+            }
+            if sum(combined.values()) <= 0:
+                combined = type_weights
+        else:
+            combined = type_weights
+        choices = list(combined.keys())
+        weights = list(combined.values())
+        return random.choices(choices, weights=weights)[0]
+
     cache = _profile_channel_caches.get(profile_name)
     if cache:
         return cache.sample()
-    from ..config.transactions import CHANNELS_LIST, CHANNELS_WEIGHTS
     return random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
 
 

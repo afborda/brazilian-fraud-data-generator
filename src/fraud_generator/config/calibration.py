@@ -37,6 +37,16 @@ touching code::
 
 `report()` prints the current table with provenance, which is what should go in
 front of a buyer asking how the data was calibrated.
+
+## O que NÃO mora aqui
+
+Probabilidades por tipo de fraude ficam em `config/fraud_patterns.py`, junto do
+padrão que as usa — `new_beneficiary_prob` é o exemplo. Uma entrada global para
+isso chegou a existir aqui e a análise de sensibilidade mostrou que ela não
+afetava nada: os 25 padrões usam a chave por padrão, e o ramo que lia a global
+estava atrás de um `if` nunca verdadeiro. Uma taxa listada aqui que não muda a
+saída é pior que nenhuma, porque promete um controle que não existe — daí o
+teste `test_every_rate_is_referenced_in_src`.
 """
 
 from __future__ import annotations
@@ -115,12 +125,6 @@ _RATES: Dict[str, Rate] = {
         "em ~2:1, que é o regime de um time de antifraude: a maioria dos alertas é "
         "falso positivo.",
     ),
-    "fraud.new_beneficiary_prob": Rate(
-        0.82, ESTIMATE,
-        "Probabilidade de a fraude pagar contraparte inédita, para os tipos marcados. "
-        "Abaixo de 1.0 porque golpe de boleto e ATO reaproveitam contraparte que a "
-        "vítima já paga — é o que os torna difíceis.",
-    ),
     # ── Grafo de contrapartes ────────────────────────────────────────────
     "counterparty.one_off_share_legit": Rate(
         0.18, ESTIMATE,
@@ -186,6 +190,21 @@ _RATES: Dict[str, Rate] = {
         0.80, ESTIMATE,
         "Corrida fantasma sem avaliação do motorista. Corrida legítima sem "
         "avaliação é comum — o passageiro simplesmente não avalia.",
+    ),
+    "ride.legit_large_deviation_prob": Rate(
+        0.02, ESTIMATE,
+        "Corrida legítima com desvio de rota grande — obra, bloqueio de via, "
+        "engarrafamento que força uma rota bem mais longa que a pedida. Sem "
+        "essa cauda, route_deviation_km do legítimo nunca passava de ~3,4 km "
+        "e isolava DESTINATION_DISPARITY quase por completo.",
+    ),
+    "ride.destination_disparity_mild_share": Rate(
+        0.30, ESTIMATE,
+        "Fração de DESTINATION_DISPARITY com desvio discreto — golpe morno "
+        "ou tentativa abortada, ainda dentro do que trânsito comum "
+        "explicaria — em vez de sempre um múltiplo grande da distância "
+        "pedida. Mesmo raciocínio de fraud.low_and_slow_share aplicado a "
+        "este campo especificamente.",
     ),
     "mule.p_legit": Rate(
         0.009, ESTIMATE,
