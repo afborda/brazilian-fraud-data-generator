@@ -42,6 +42,74 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ---
 
+## v4.23.0 — Ride-share (2026-08-14)
+
+O domínio de corridas — 11 padrões de fraude, um terço do produto — não tinha
+recebido nenhuma das correções de vazamento. Estava exatamente como antes da
+auditoria.
+
+### Estado anterior, medido em 223.696 corridas
+
+Os cinco campos de fraude eram constantes na classe legítima (`nunique() == 1`),
+então qualquer desvio do default significava fraude por construção:
+
+| Regra | Precisão | Recall |
+|---|---|---|
+| `route_deviation_km > 0` | 100,0000% | 19,46% |
+| `promo_abuse_group NOT NULL` | 100,0000% | 14,04% |
+| `refund_count_30d > 0` | 100,0000% | 8,58% |
+| `payment_dispute_flag = True` | 100,0000% | 6,86% |
+| `new_device_first_ride = True` | 100,0000% | 5,28% |
+| **união** | **100,0000%** | **40,36%** |
+
+### Correções
+
+- **`_apply_legit_ride_fields()`** (novo) — corrida legítima passa a receber os
+  cinco campos com dispersão real. Reembolso legítimo existe (motorista não
+  apareceu, corrida cancelada, cobrança duplicada); contestação de cartão
+  legítima existe; desvio de rota quase nunca é exatamente zero (trânsito,
+  obra, atalho); troca de celular acontece; e campanha promocional agrupa
+  passageiros de verdade — `group_id` não nulo indica participação em campanha,
+  não abuso dela.
+- **`_apply_fraud_fields()`** — passa a partir do mesmo baseline legítimo antes
+  de aplicar o desvio do padrão. Sem isso, um `REFUND_ABUSE` sairia com
+  `route_deviation_km = 0.0` exato e, com o legítimo agora variando, esse zero
+  viraria marcador de fraude — o vazamento invertido.
+- Os desvios viraram probabilísticos e sobrepostos. `refund_count_30d` usa
+  exponencial em vez de piso rígido em 3 (passageiro legítimo azarado chega a
+  3, abusador cuidadoso fica em 2); `GPS_SPOOFING` usa log-normal em vez de
+  `uniform(2, 15)`, que deixava as duas pontas exclusivas; `PAYMENT_CHARGEBACK`
+  abre contestação em 72% e não sempre; `GHOST_RIDE` deixa `driver_rating`
+  nulo em 80% — corrida legítima sem avaliação é comum.
+- A combinação de campos por tipo deixou de ser única, o que tornava o
+  `fraud_type` multiclasse recuperável por consulta de tabela.
+
+### Resultado
+
+| Regra | Precisão antes | Precisão depois |
+|---|---|---|
+| `route_deviation_km > 0` | 100,00% | 1,53% |
+| `refund_count_30d > 0` | 100,00% | 3,04% |
+| `payment_dispute_flag` | 100,00% | 16,27% |
+| `new_device_first_ride` | 100,00% | 3,56% |
+| `promo_abuse_group NOT NULL` | 100,00% | 5,07% |
+
+Únicos na classe legítima: de 1 para 2–318 conforme o campo.
+
+### Alerta registrado, não maquiado
+
+A AUC multivariada das corridas foi de 0.766 para **0.688**, abaixo do piso de
+0.75 da faixa alvo. Ou a contaminação ficou agressiva demais, ou o domínio de
+corridas tem menos sinal genuíno que o bancário — o feature set usado na medição
+é ad-hoc, não existe um oficial para corridas como `ml/features.py` é para
+transações.
+
+**As taxas não foram ajustadas para bater o número.** As 7 novas entradas em
+`config/calibration.py` levam o comentário `MEDIÇÃO PENDENTE`. Ajustar até a AUC
+cair na faixa seria exatamente o erro que a auditoria apontou.
+
+---
+
 ## v4.22.0 — Paridade de Saída e Calibração (2026-08-13)
 
 Fecha as três pendências registradas na v4.21.0.

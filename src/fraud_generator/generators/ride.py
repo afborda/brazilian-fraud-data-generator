@@ -41,6 +41,7 @@ from ..config.rideshare import (
 )
 from ..config.weather import generate_weather, get_surge_impact
 from ..config.geography import CIDADES_POR_ESTADO
+from ..config.calibration import rate as _rate
 
 
 # =============================================================================
@@ -236,6 +237,20 @@ def get_average_speed(hour: int) -> float:
 # =============================================================================
 # RIDE GENERATOR CLASS
 # =============================================================================
+
+
+def _promo_bucket_hash(bucket: int) -> str:
+    """Stable 12-char id for a promotional campaign bucket.
+
+    Legitimate campaigns and abuse rings share the same id namespace on
+    purpose: the presence of a group id says a rider is in some campaign, not
+    that they are defrauding it. What separates the two is the behaviour inside
+    the group, which is what a detector should have to learn.
+    """
+    import hashlib as _hl
+
+    return _hl.sha256(f"campaign::{bucket}".encode()).hexdigest()[:12]
+
 
 class RideGenerator:
     """
@@ -445,7 +460,13 @@ class RideGenerator:
             'temperature': temperature,
             'is_fraud': is_fraud,
             'fraud_type': fraud_type,
-            # \u2500\u2500 T5: ride-share fraud fields \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n            'promo_abuse_group': None,
+            # \u2500\u2500 T5: ride-share fraud fields \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n            # Estes cinco campos são preenchidos para AS DUAS classes logo
+            # abaixo. Eram constantes fixas no ramo legítimo (None/0/False/0.0),
+            # o que dava `nunique() == 1` e fazia qualquer desvio do default
+            # significar fraude: medido em 223.696 corridas, a união de cinco
+            # comparações triviais capturava 40,36% das fraudes com precisão
+            # 100,0000%. Ver `_apply_legit_ride_fields`.
+            'promo_abuse_group': None,
             'refund_count_30d': 0,
             'payment_dispute_flag': False,
             'route_deviation_km': 0.0,
@@ -455,6 +476,53 @@ class RideGenerator:
         # ── T5: populate fraud-specific field values ─────────────────────────
         if is_fraud and fraud_type:
             ride = self._apply_fraud_fields(ride, fraud_type, passenger_id)
+        else:
+            ride = self._apply_legit_ride_fields(ride, passenger_id)
+
+        return ride
+
+    def _apply_legit_ride_fields(self, ride: dict, passenger_id: str) -> dict:
+        """Give an ordinary ride the same fields fraud carries, with real spread.
+
+        Every value below happens to ordinary passengers:
+
+        * reembolso — motorista não apareceu, corrida cancelada, cobrança em
+          duplicidade. A maioria dos passageiros tem zero no mês, uma minoria
+          tem um ou dois;
+        * contestação de cartão — cobrança que o titular não reconhece, disputa
+          familiar sobre o cartão, erro de tarifa dinâmica;
+        * desvio de rota — trânsito, obra, bloqueio, motorista pegando atalho.
+          Quase nunca é exatamente zero na prática;
+        * primeiro uso de um aparelho — troca de celular, formatação, login no
+          tablet;
+        * grupo de promoção — campanhas legítimas agrupam passageiros de
+          verdade (cupom de bairro, parceria com evento). Um `group_id` não
+          nulo não pode significar abuso por si só.
+        """
+        rng = random
+
+        # Poisson-ish: maioria em 0, cauda curta. Reembolso legítimo existe.
+        r = rng.random()
+        if r < _rate("ride.legit_refund_zero_share"):
+            refunds = 0
+        elif r < 0.985:
+            refunds = 1
+        else:
+            refunds = rng.randint(2, 3)
+        ride['refund_count_30d'] = refunds
+
+        ride['payment_dispute_flag'] = rng.random() < _rate("ride.legit_dispute_prob")
+
+        # Desvio quase sempre pequeno, mas raramente zero exato — o zero
+        # cravado era o que tornava `> 0` um separador perfeito.
+        ride['route_deviation_km'] = round(abs(rng.gauss(0, 0.8)), 2)
+
+        ride['new_device_first_ride'] = rng.random() < _rate("ride.legit_new_device_prob")
+
+        # ~6% das corridas legítimas pertencem a alguma campanha promocional.
+        if rng.random() < _rate("ride.legit_promo_group_share"):
+            bucket = rng.randint(0, 40)
+            ride['promo_abuse_group'] = f"PROMO_{_promo_bucket_hash(bucket)}"
 
         return ride
 
@@ -466,38 +534,55 @@ class RideGenerator:
     ) -> dict:
         """T5: Populate ride-fraud-specific fields based on fraud type.
 
-        Each T5 pattern sets a distinct combination of indicator fields so that
-        ML models can identify the correct fraud pattern.
+        Structure matters here. This used to write only the fields each pattern
+        cared about, leaving the rest at their constant defaults — so a
+        REFUND_ABUSE record carried `route_deviation_km = 0.0` exactly, and once
+        the legitimate class stopped being constant that zero would have become
+        a *fraud* marker. Every fraud record therefore starts from the same
+        ordinary baseline as a legitimate one and only then receives its shift.
+
+        The shifts are probabilistic and overlap the ordinary distribution:
+        a pattern that always set the same combination of fields made
+        `fraud_type` recoverable by table lookup, which is the multiclass
+        version of the same defect.
         """
         import hashlib as _hl
+
+        # Baseline: a fraudulent ride is an ordinary ride first.
+        ride = self._apply_legit_ride_fields(ride, passenger_id)
 
         if fraud_type == 'PROMO_ABUSE':
             # Stable group_id derived from passenger so same account cluster appears together
             h = _hl.sha256(passenger_id.encode()).hexdigest()[:12]
             ride['promo_abuse_group'] = f"PROMO_{h}"
-            # Account used 1-3 times and abandoned (low refund, no dispute)
-            ride['refund_count_30d'] = 0
-            ride['payment_dispute_flag'] = False
+            # Conta usada 1-3 vezes e abandonada. Mantém o reembolso do
+            # baseline: abusador de promoção às vezes também pede reembolso.
 
         elif fraud_type == 'REFUND_ABUSE':
-            # Passenger has reported issues 3-9 times in last 30 days
-            ride['refund_count_30d'] = random.randint(3, 9)
-            ride['payment_dispute_flag'] = False
+            # Reclamação recorrente. O piso de 3 não se sustenta: um passageiro
+            # legítimo azarado chega a 3, e um abusador cuidadoso fica em 2.
+            ride['refund_count_30d'] = max(
+                ride['refund_count_30d'], 1 + int(random.expovariate(1 / 3.2))
+            )
 
         elif fraud_type == 'PAYMENT_CHARGEBACK':
-            # Stolen card: ride completes then pasenger/card-owner disputes
-            ride['payment_dispute_flag'] = True
-            # Card cycling: every 3-5 rides before chargeback
-            ride['refund_count_30d'] = 0
+            # Cartão roubado: a corrida completa e depois é contestada. Não é
+            # certeza — parte dos chargebacks fraudulentos nunca é aberta pelo
+            # titular, e o padrão só aparece na corrida seguinte.
+            ride['payment_dispute_flag'] = random.random() < _rate("ride.chargeback_dispute_prob")
 
         elif fraud_type == 'DESTINATION_DISPARITY':
-            # Route realized differs 2-5× from requested
+            # Rota realizada difere da pedida.
             base_dist = ride.get('distance_km', 5.0)
-            ride['route_deviation_km'] = round(base_dist * random.uniform(1.5, 4.0), 2)
+            ride['route_deviation_km'] = round(
+                max(ride['route_deviation_km'], base_dist * random.uniform(0.35, 4.0)), 2
+            )
 
         elif fraud_type == 'ACCOUNT_TAKEOVER_RIDE':
-            # New device used for first ride after account takeover
-            ride['new_device_first_ride'] = True
+            # Aparelho novo na primeira corrida após a tomada de conta — comum,
+            # não universal: parte dos ATO usa sessão já ativa no aparelho da
+            # própria vítima.
+            ride['new_device_first_ride'] = random.random() < _rate("ride.ato_new_device_prob")
             # Takeover followed immediately by ride — short acceptance window
             if ride.get('accept_datetime') and ride.get('request_datetime'):
                 from datetime import timedelta as _td
@@ -506,13 +591,23 @@ class RideGenerator:
                 ride['wait_time_minutes'] = random.randint(1, 5)
 
         elif fraud_type == 'GPS_SPOOFING':
-            # Reported route shorter than actual (spoofed coordinates)
-            ride['route_deviation_km'] = round(random.uniform(2.0, 15.0), 2)
+            # Coordenadas forjadas. Log-normal em vez de uniform(2, 15): o piso
+            # de 2 km deixava a faixa [0, 2] exclusiva do legítimo, e o teto de
+            # 15 deixava tudo acima exclusivo da fraude — dois cortes limpos.
+            ride['route_deviation_km'] = round(
+                max(ride['route_deviation_km'], random.lognormvariate(1.1, 0.9)), 2
+            )
 
         elif fraud_type == 'GHOST_RIDE':
-            # No real passenger — driver fakes the ride
-            ride['driver_rating'] = None   # No real rating
-            ride['passenger_rating'] = random.choices([5], weights=[100])[0]  # Auto-5 by script
+            # Sem passageiro real — o motorista simula a corrida.
+            # `driver_rating = None` era exclusivo desta classe: corrida
+            # legítima sem avaliação é comum (o passageiro simplesmente não
+            # avalia), então a ausência sozinha não pode identificar fraude.
+            if random.random() < _rate("ride.ghost_no_rating_prob"):
+                ride['driver_rating'] = None
+            # Nota 5 automática por script — mas passageiro real também dá 5.
+            if random.random() < 0.85:
+                ride['passenger_rating'] = 5
 
         return ride
 

@@ -140,6 +140,47 @@ _RATES: Dict[str, Rate] = {
         0.28, ESTIMATE,
         "Demais tipos de fraude com destino sinalizado como mula.",
     ),
+    # ── Ride-share ───────────────────────────────────────────────────────
+    # MEDIÇÃO PENDENTE: com estas taxas a AUC multivariada das corridas mede
+    # ~0.69 num feature set ad-hoc, abaixo do piso de 0.75 da faixa alvo. Ou a
+    # contaminação está agressiva demais, ou o domínio de corridas tem menos
+    # sinal genuíno que o bancário. Não foram ajustadas para bater o número —
+    # precisam de referência real ou de um feature set oficial de corridas.
+    "ride.legit_refund_zero_share": Rate(
+        0.93, ESTIMATE,
+        "Passageiros sem nenhum reembolso no mês. Reembolso legítimo existe — "
+        "motorista não apareceu, corrida cancelada, cobrança duplicada.",
+    ),
+    "ride.legit_dispute_prob": Rate(
+        0.004, ESTIMATE,
+        "Contestação de cartão em corrida legítima: cobrança não reconhecida "
+        "pelo titular, disputa familiar sobre o cartão, erro de tarifa dinâmica.",
+    ),
+    "ride.legit_new_device_prob": Rate(
+        0.03, ESTIMATE,
+        "Primeira corrida num aparelho por troca de celular, formatação ou "
+        "login em tablet.",
+    ),
+    "ride.legit_promo_group_share": Rate(
+        0.06, ESTIMATE,
+        "Corridas legítimas dentro de alguma campanha promocional. Um group_id "
+        "não nulo indica participação em campanha, não abuso dela.",
+    ),
+    "ride.chargeback_dispute_prob": Rate(
+        0.72, ESTIMATE,
+        "Fraude de chargeback em que o titular efetivamente abre a contestação. "
+        "Parte nunca é aberta, e parte só aparece na corrida seguinte.",
+    ),
+    "ride.ato_new_device_prob": Rate(
+        0.75, ESTIMATE,
+        "Tomada de conta que estreia aparelho novo. Parte dos ATO opera de "
+        "sessão já ativa no aparelho da própria vítima.",
+    ),
+    "ride.ghost_no_rating_prob": Rate(
+        0.80, ESTIMATE,
+        "Corrida fantasma sem avaliação do motorista. Corrida legítima sem "
+        "avaliação é comum — o passageiro simplesmente não avalia.",
+    ),
     "mule.p_legit": Rate(
         0.004, ESTIMATE,
         "Transferência legítima cujo destino consta em lista de mula. Lista de mula "
