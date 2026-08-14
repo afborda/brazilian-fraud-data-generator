@@ -42,6 +42,61 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ---
 
+## v4.25.0 — TSTR de Verdade (2026-08-14)
+
+`tools/tstr_benchmark.py` se chamava "Train Synthetic, Test Real" e rodava
+`StratifiedKFold` sobre um único CSV sintético — treinava em sintético e testava
+em sintético. Não havia dado real em nenhum ponto do fluxo, então a ferramenta
+era **estruturalmente incapaz** de detectar falha de transferência, que é a
+única coisa que TSTR existe para medir. Aprovava com `if auc > 0.85` e incluía
+`fraud_score` entre as features.
+
+### Reescrito
+
+Três medições sobre as colunas que os dois datasets compartilham:
+
+| | o que é |
+|---|---|
+| **TRTR** | treina no real, testa no real — o teto |
+| **TSTR** | treina no sintético, testa no real — a pergunta do produto |
+| **TSTS** | treina e testa no sintético — diagnóstico |
+
+O real é dividido **uma vez** e a mesma metade de teste avalia TRTR e TSTR,
+senão a comparação não seria pareada. `gap = TRTR − TSTR`.
+
+### O veredito reprova nos dois extremos
+
+- `gap > 0.15` — o modelo não transfere.
+- `gap < 0.02` com menos de 6 features alinhadas — bom demais para ser verdade.
+  Critério do próprio `TSTR_FRAUD_ROADMAP.md` do projeto: *"Gap = 0% com 2
+  features indica bug ou overfitting"*. Com poucas colunas em comum, igualar o
+  dado real quase sempre significa que a mesma informação vazou dos dois lados.
+
+### Sem `--real`, recusa
+
+Não cai para cross-validation. Sai com código 2 e explica por que substituir o
+dado real pelo próprio sintético não é uma aproximação — é a medição errada.
+
+Campos derivados do rótulo (`fraud_score`, `fraud_risk_score`, `fraud_labels`,
+`card_test_phase`, …) e identificadores de alta cardinalidade são excluídos do
+espaço de features por construção, não por lista manual.
+
+### Verificação
+
+Rodado contra um proxy com distribuições deliberadamente diferentes:
+TRTR 0.894/0.899, TSTR 0.796/0.777, TSTS 0.976/0.975, gap 0.110 — aprovado. O
+TSTS bem acima do TSTR é o diagnóstico funcionando: indica estrutura no
+sintético que o alvo não tem.
+
+**O proxy usado no teste é ele próprio sintético.** Serve para exercitar a
+ferramenta, não como medição de qualidade — isso continua dependendo de um
+dataset real.
+
+13 testes novos. `docs/02_GUIA_GERACAO.md` documentava o fluxo antigo e
+anunciava "AUC gap = 0.0%" vindo dele; corrigido, com nota histórica.
+
+---
+
 ## v4.24.0 — Nota Côncava (2026-08-14)
 
 Fecha a última peça da inversão da métrica: a fórmula da nota A+→F em si, que
