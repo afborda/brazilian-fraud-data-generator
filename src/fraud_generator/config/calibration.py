@@ -133,12 +133,18 @@ _RATES: Dict[str, Rate] = {
     ),
     # ── Marcadores de destino ────────────────────────────────────────────
     "mule.p_fraud_cashout_types": Rate(
-        0.62, ESTIMATE,
-        "Fraude cujo dinheiro sai por conta-laranja, entre os tipos de cash-out.",
+        0.14, ESTIMATE,
+        "Fraude de cash-out cujo destino JÁ CONSTA em lista de mula no momento "
+        "da transação. Não é a fração que usa laranja — essa é a maioria — mas a "
+        "fração já conhecida. Lista de mula é indicador atrasado: a conta entra "
+        "depois que a fraude é reportada. Valor anterior (0,62) dava lift de "
+        "180x sobre o legítimo e fazia o campo virar a feature dominante: se um "
+        "banco soubesse o destino em 62% dos casos no ato, a fraude estaria "
+        "resolvida.",
     ),
     "mule.p_fraud_other_types": Rate(
-        0.28, ESTIMATE,
-        "Demais tipos de fraude com destino sinalizado como mula.",
+        0.06, ESTIMATE,
+        "Demais tipos de fraude com destino já listado como mula.",
     ),
     # ── Ride-share ───────────────────────────────────────────────────────
     # MEDIÇÃO PENDENTE: com estas taxas a AUC multivariada das corridas mede
@@ -182,7 +188,7 @@ _RATES: Dict[str, Rate] = {
         "avaliação é comum — o passageiro simplesmente não avalia.",
     ),
     "mule.p_legit": Rate(
-        0.004, ESTIMATE,
+        0.009, ESTIMATE,
         "Transferência legítima cujo destino consta em lista de mula. Lista de mula "
         "tem falso positivo — conta alugada e depois vendida, conta compartilhada. "
         "Sem essa taxa o campo volta a ser rótulo.",

@@ -637,11 +637,18 @@ def test_fraud_quality(records: List[Dict]) -> Dict:
         score += 2.0
     elif fraud_type_entropy > 0.6:
         score += 1.0
-    if auc_result and auc_result.get('auc_roc', 0) > 0.8:
-        score += 3.0
-    elif auc_result and auc_result.get('auc_roc', 0) > 0.65:
-        score += 2.0
-    elif not auc_result:
+    # Separabilidade: pontuação CÔNCAVA, com máximo dentro da faixa realista.
+    #
+    # Isto era monotônico em AUC — `> 0.8` valia 3.0 sem teto, então AUC 1.0
+    # pontuava igual a 0.81 e mais que 0.79. Para dado sintético de fraude isso
+    # é o contrário do certo: AUC perto de 1.0 significa que o gerador escreveu
+    # o rótulo em alguma coluna, e um modelo treinado nesse dado não transfere
+    # para produção. A nota premiava exatamente o defeito que deveria reprovar.
+    auc_flags: List[str] = []
+    if auc_result:
+        auc_points, auc_flags = _score_separability(auc_result)
+        score += auc_points
+    else:
         score += 1.5  # partial credit if can't compute
 
     return {
@@ -658,21 +665,157 @@ def test_fraud_quality(records: List[Dict]) -> Dict:
         'score_separation': score_separation,
         'amount_separation': amount_separation,
         'ml_separability': auc_result,
+        'separability_flags': auc_flags,
         'passed': rate_ok and len(fraud_types) >= 5,
     }
 
 
-def _compute_auc(records: List[Dict]) -> Optional[Dict]:
-    """Compute AUC-ROC using basic features."""
-    features = []
-    labels = []
+
+# Faixa realista de separabilidade para fraude. Fora dela o dado não serve:
+# abaixo, não há sinal para aprender; acima, o sinal é o próprio rótulo.
+# Fonte dos limiares: tools/analyze_batch.py EXTERNAL_BENCHMARKS
+# (Fraud Detection Handbook), mantidos idênticos para o portão e a nota
+# concordarem.
+REALISTIC_AUC_BAND = (0.75, 0.92)
+AUC_HARD_CEILING = 0.97
+SEPARABILITY_MAX_POINTS = 3.0
+
+
+def _score_separability(auc_result: Dict) -> Tuple[float, List[str]]:
+    """Pontuação côncava da separabilidade, com bandeiras de diagnóstico.
+
+    Retorna (pontos, bandeiras). Pontos vão de 0 a SEPARABILITY_MAX_POINTS, com
+    máximo dentro de REALISTIC_AUC_BAND e queda para os dois lados:
+
+        AUC 0.50 → 0.0   (sinal nenhum)
+        AUC 0.75 → 3.0   (piso da faixa)
+        AUC 0.85 → 3.0   (centro)
+        AUC 0.92 → 3.0   (teto da faixa)
+        AUC 0.97 → 0.6   (quase trivial)
+        AUC 1.00 → 0.0   (rótulo escrito numa coluna)
+
+    A flag `too_easy` que `ml/evaluator.py` já produzia por tipo de fraude era
+    calculada e nunca lida por ninguém — nenhum caminho de código a ligava à
+    nota. Aqui ela vira penalidade multiplicativa.
+    """
+    auc = float(auc_result.get('auc_roc', 0.0) or 0.0)
+    lo, hi = REALISTIC_AUC_BAND
+    flags: List[str] = []
+
+    if lo <= auc <= hi:
+        points = SEPARABILITY_MAX_POINTS
+    elif auc < lo:
+        # Decai linearmente até 0 no acaso (0.5).
+        points = SEPARABILITY_MAX_POINTS * max(0.0, (auc - 0.5) / (lo - 0.5))
+        flags.append(f'too_hard: AUC {auc:.4f} abaixo de {lo}')
+    else:
+        # Decai de forma acentuada até 0 em 1.0: separabilidade trivial é um
+        # defeito, não um resultado intermediário.
+        points = SEPARABILITY_MAX_POINTS * max(0.0, (1.0 - auc) / (1.0 - hi)) ** 2
+        if auc > AUC_HARD_CEILING:
+            points = 0.0
+            flags.append(
+                f'too_easy: AUC {auc:.4f} acima do teto {AUC_HARD_CEILING} — '
+                f'fraude trivialmente separável, vazamento de rótulo provável'
+            )
+        else:
+            flags.append(f'too_easy: AUC {auc:.4f} acima de {hi}')
+
+    # Penalidade por tipo de fraude sinalizado como trivial pelo evaluator.
+    per_type = auc_result.get('per_type') or {}
+    trivial_types = [
+        name for name, info in per_type.items()
+        if isinstance(info, dict) and float(info.get('auc_roc', 0) or 0) > AUC_HARD_CEILING
+    ]
+    if trivial_types:
+        points *= max(0.0, 1.0 - 0.25 * len(trivial_types))
+        flags.append(
+            f'{len(trivial_types)} tipo(s) com AUC > {AUC_HARD_CEILING}: '
+            + ', '.join(sorted(trivial_types)[:6])
+        )
+
+    return round(points, 3), flags
+
+
+
+def _auc_per_fraud_type(records: List[Dict], min_examples: int = 60) -> Dict[str, Dict]:
+    """AUC-ROC por tipo de fraude, cada tipo contra toda a base legítima.
+
+    Existe para que a penalidade de separabilidade trivial em
+    `_score_separability` tenha o que ler. Sem isto, um batch com AUC global
+    saudável poderia esconder tipos individuais em 1.0 — que foi exatamente o
+    caso do `train_metrics_v4.json`, com 21 de 25 tipos em AUC exatamente 1.0
+    enquanto a nota global era A+.
+
+    Tipos com menos de *min_examples* são ignorados: a AUC fica instável demais
+    para justificar uma penalidade.
+    """
+    if not HAS_SKLEARN:
+        return {}
+
+    legit = [r for r in records if not r.get('is_fraud')]
+    if len(legit) < 200:
+        return {}
+
+    by_type: Dict[str, List[Dict]] = defaultdict(list)
+    for r in records:
+        if r.get('is_fraud') and r.get('fraud_type'):
+            by_type[str(r['fraud_type'])].append(r)
+
+    out: Dict[str, Dict] = {}
+    for ftype, rows in by_type.items():
+        if len(rows) < min_examples:
+            continue
+        subset = rows + legit
+        auc_res = _compute_auc_core(subset)
+        if auc_res is not None:
+            out[ftype] = {'auc_roc': auc_res, 'n_examples': len(rows)}
+    return out
+
+
+def _compute_auc_core(records: List[Dict]) -> Optional[float]:
+    """AUC-ROC bruta de um subconjunto, sem o relatório completo."""
+    features, labels = _feature_matrix(records)
+    if features is None or len(set(labels)) < 2 or sum(labels) < 20:
+        return None
+    X, y = np.array(features), np.array(labels)
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.3, random_state=42, stratify=y
+        )
+    except ValueError:
+        return None
+    clf = GradientBoostingClassifier(
+        n_estimators=60, max_depth=3, random_state=42, subsample=0.8
+    )
+    clf.fit(X_train, y_train)
+    return round(float(roc_auc_score(y_test, clf.predict_proba(X_test)[:, 1])), 4)
+
+
+# Ordem canônica das features do benchmark. Espelhada por FEATURE_NAMES abaixo;
+# há um guard em _compute_auc que falha se as duas divergirem.
+#
+# fraud_score e fraud_risk_score NÃO entram: o gerador os deriva do rótulo, e
+# nenhum banco os tem antes de rodar o próprio modelo. Alimentá-los aqui fazia
+# a AUC do benchmark medir a força do vazamento — mesma correção já aplicada em
+# ml/features.py.
+BENCHMARK_FEATURE_NAMES = [
+    'amount', 'velocity_24h', 'accumulated_24h', 'velocity_z_score',
+    'device_age_days', 'bot_confidence', 'distance_last_km', 'hours_inactive',
+    'unusual_time', 'new_beneficiary', 'vpn_active', 'emulator',
+    'impossible_travel', 'sim_swap', 'active_call', 'recipient_mule',
+]
+
+
+def _feature_matrix(records: List[Dict]) -> Tuple[Optional[List[List[float]]], List[int]]:
+    """Build the (features, labels) pair shared by every AUC computation here."""
+    features: List[List[float]] = []
+    labels: List[int] = []
 
     for r in records:
         try:
             feat = [
                 float(r.get('amount', 0)),
-                float(r.get('fraud_score', 0)),
-                float(r.get('fraud_risk_score', 0)),
                 float(r.get('velocity_transactions_24h', 0)),
                 float(r.get('accumulated_amount_24h', 0)),
                 float(r.get('customer_velocity_z_score', 0)),
@@ -694,7 +837,13 @@ def _compute_auc(records: List[Dict]) -> Optional[Dict]:
         except (TypeError, ValueError):
             continue
 
-    if len(features) < 100 or sum(labels) < 10:
+    return (features or None), labels
+
+
+def _compute_auc(records: List[Dict]) -> Optional[Dict]:
+    """Compute AUC-ROC using basic features."""
+    features, labels = _feature_matrix(records)
+    if features is None or len(features) < 100 or sum(labels) < 10:
         return None
 
     X = np.array(features)
@@ -713,13 +862,13 @@ def _compute_auc(records: List[Dict]) -> Optional[Dict]:
     auc = roc_auc_score(y_test, y_prob)
     ap = average_precision_score(y_test, y_prob)
 
-    feature_names = [
-        'amount', 'fraud_score', 'fraud_risk_score', 'velocity_24h',
-        'accumulated_24h', 'velocity_z_score', 'device_age_days',
-        'bot_confidence', 'distance_last_km', 'hours_inactive',
-        'unusual_time', 'new_beneficiary', 'vpn_active', 'emulator',
-        'impossible_travel', 'sim_swap', 'active_call', 'recipient_mule',
-    ]
+    feature_names = BENCHMARK_FEATURE_NAMES
+    if len(feature_names) != X.shape[1]:
+        raise AssertionError(
+            f'feature_names ({len(feature_names)}) fora de sincronia com o '
+            f'vetor de features ({X.shape[1]}) — as importâncias sairiam '
+            f'atribuídas ao nome errado'
+        )
     importances = clf.feature_importances_
     top_features = sorted(
         zip(feature_names, importances), key=lambda x: -x[1]
@@ -728,6 +877,7 @@ def _compute_auc(records: List[Dict]) -> Optional[Dict]:
     return {
         'auc_roc': round(float(auc), 4),
         'average_precision': round(float(ap), 4),
+        'per_type': _auc_per_fraud_type(records),
         'test_size': len(y_test),
         'test_fraud_count': int(y_test.sum()),
         'top_features': {name: round(float(imp), 4) for name, imp in top_features},

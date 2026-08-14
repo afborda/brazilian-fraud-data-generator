@@ -42,6 +42,64 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 
 ---
 
+## v4.24.0 — Nota Côncava (2026-08-14)
+
+Fecha a última peça da inversão da métrica: a fórmula da nota A+→F em si, que
+nunca tinha sido tocada.
+
+### A nota deixa de ser monotônica em AUC
+
+`benchmarks/data_quality_benchmark.py` dava +3.0 para qualquer AUC acima de
+0.80, sem teto — AUC 1.0 pontuava igual a 0.81 e mais que 0.79. Nova função
+`_score_separability()`, côncava, com máximo na faixa 0.75–0.92:
+
+| AUC | Pontos |
+|---|---|
+| 0.50 | 0.00 |
+| 0.70 | 2.40 |
+| 0.75–0.92 | 3.00 |
+| 0.95 | 1.17 |
+| 0.97 | 0.42 |
+| 0.9991 | **0.00** |
+
+### A flag `too_easy` finalmente é consumida
+
+`ml/evaluator.py` produzia `too_easy` por tipo de fraude desde a v4.18 e
+**nenhum caminho de código a lia**. Agora `_auc_per_fraud_type()` calcula a AUC
+de cada tipo contra toda a base legítima e vira penalidade multiplicativa, e as
+bandeiras saem em `separability_flags` no JSON. Verificado com dados reais:
+BOLETO_FALSO (0.9937) e MULA_FINANCEIRA (0.9907) são flagrados.
+
+### A AUC do benchmark também era alimentada com vazamento
+
+`_compute_auc()` incluía `fraud_score` e `fraud_risk_score` — as duas features
+removidas de `ml/features.py` na v4.19. A lista `feature_names` foi extraída
+para `BENCHMARK_FEATURE_NAMES` com guard que falha se divergir do vetor: durante
+esta mudança os dois ficaram fora de sincronia e as importâncias saíam
+atribuídas ao nome da feature seguinte.
+
+### Correções de causa encontradas pela nova medição
+
+- **`enrichers/geo.py`** — a anomalia geográfica valia para 30% de TODA fraude,
+  sem olhar o tipo. Golpe do PIX, falsa central e WhatsApp clonado têm a VÍTIMA
+  transferindo do próprio celular, em casa: não há salto geográfico. Nova tabela
+  `_GEO_ANOMALY_PROB` por tipo (2% para engenharia social, 22–28% para ATO e
+  credential stuffing, 40% para operação distribuída).
+  `distance_from_last_km`: razão fraude/legítimo de **22,1x → 3,9x**.
+- **`mule.p_*`** — `recipient_is_mule` a 62% na fraude contra 0,4% no legítimo
+  dava lift de 180x e virava a feature dominante. Lista de mula é indicador
+  atrasado: a conta entra depois que a fraude é reportada. Se um banco soubesse
+  o destino em 62% dos casos no ato, a fraude estaria resolvida. Recalibrado
+  para 14%/0,9% — lift de 16x.
+- **`_apply_decoy_profile`** — teto de 6 traços subiu para 8. Com 6, o
+  `fraud_risk_score` legítimo não passava de 98 e `> 98` isolava fraude com
+  precisão 100% sobre 16% dos registros. Um decoy com a silhueta completa
+  precisa conseguir cravar 100.
+
+Zero separadores perfeitos mantido. Portão de CI aprovado. 333 testes.
+
+---
+
 ## v4.23.0 — Ride-share (2026-08-14)
 
 O domínio de corridas — 11 padrões de fraude, um terço do produto — não tinha

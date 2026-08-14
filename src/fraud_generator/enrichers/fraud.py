@@ -213,9 +213,15 @@ def _apply_decoy_profile(tx: Dict[str, Any]) -> None:
         # A burst: paying several suppliers, splitting a bill, month-end runs.
         lambda: tx.__setitem__("velocity_transactions_24h", random.randint(9, 26)),
     ]
-    # Between three and six traits — enough to look alarming, varied enough
-    # that "decoy" is not itself a pattern.
-    for trait in random.sample(traits, random.randint(3, min(6, len(traits)))):
+    # Três a oito traços. O teto era seis, e isso deixava um resíduo: o
+    # `fraud_risk_score` do legítimo nunca acumulava sinais suficientes para
+    # passar de 98, então `fraud_risk_score > 98` isolava fraude com precisão
+    # 100% sobre ~16% dos registros. Um decoy com a silhueta completa precisa
+    # conseguir cravar 100 — é exatamente o caso "parece fraude e não é" que o
+    # decoy existe para representar, e o alerta que um analista de verdade abre
+    # e fecha como falso positivo.
+    n_traits = random.randint(3, len(traits))
+    for trait in random.sample(traits, n_traits):
         trait()
 
 
