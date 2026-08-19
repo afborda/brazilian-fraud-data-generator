@@ -56,7 +56,7 @@ def parse_size(size_str: str) -> int:
         Size in bytes
     """
     size_str = size_str.upper().strip()
-    
+
     units = {
         'B': 1,
         'KB': 1024,
@@ -64,12 +64,12 @@ def parse_size(size_str: str) -> int:
         'GB': 1024 ** 3,
         'TB': 1024 ** 4,
     }
-    
+
     for unit, multiplier in sorted(units.items(), key=lambda x: -len(x[0])):
         if size_str.endswith(unit):
             value = float(size_str[:-len(unit)])
             return int(value * multiplier)
-    
+
     # Assume bytes if no unit
     return int(size_str)
 

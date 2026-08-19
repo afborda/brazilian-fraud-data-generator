@@ -21,6 +21,7 @@ if _src not in _sys.path:
 from fraud_generator.generators import TransactionGenerator
 from fraud_generator.exporters import get_exporter
 from fraud_generator.utils import CustomerIndex, DeviceIndex, CustomerSessionState
+from fraud_generator.utils.ground_truth import ground_truth_path
 from fraud_generator.cli.constants import STREAM_FLUSH_EVERY
 from fraud_generator.profiles.behavioral import PROFILES
 # T1: usa pesos trimodais do módulo de sazonalidade
@@ -106,6 +107,7 @@ def worker_generate_batch(args: tuple) -> str:
     exporter = get_exporter(format_name, **exporter_kwargs)
 
     output_path = os.path.join(output_dir, f"transactions_{batch_id:05d}{exporter.extension}")
+    gt_path = ground_truth_path(output_path)
     days_span = max(1, (end_date - start_date).days)
     sessions: Dict[str, CustomerSessionState] = {}
 
@@ -119,8 +121,9 @@ def worker_generate_batch(args: tuple) -> str:
     _timestamps = _sorted_timestamps(num_transactions, _date_list, _date_weights)
 
     if format_name == "jsonl":
-        with open(output_path, "wb") as fh:
+        with open(output_path, "wb") as fh, open(gt_path, "wb") as gt_fh:
             buffer = []
+            gt_buffer = []
             for i in range(num_transactions):
                 customer, device = random.choices(pairs, weights=_pair_weights, k=1)[0]
                 timestamp = _timestamps[i]
@@ -147,6 +150,15 @@ def worker_generate_batch(args: tuple) -> str:
                 tx['distance_from_last_km'] = _dist
                 session.add_transaction(tx, timestamp)
 
+                # Ground truth (multiclass label, chain linkage, report delay,
+                # card-test phase, attack-cluster id) rides in a companion
+                # file — see utils/ground_truth.py — not in the main record.
+                ground_truth = tx.pop("_ground_truth", None)
+                if ground_truth is not None:
+                    gt_buffer.append((
+                        json.dumps(_clean_ground_truth(ground_truth), ensure_ascii=False, separators=(",", ":")) + "\n"
+                    ).encode("utf-8"))
+
                 record = exporter._clean_record(tx) if hasattr(exporter, "_clean_record") else tx
                 line_bytes = (
                     json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
@@ -159,12 +171,18 @@ def worker_generate_batch(args: tuple) -> str:
                 if len(buffer) >= 1_000:
                     fh.writelines(buffer)
                     buffer.clear()
+                if len(gt_buffer) >= 1_000:
+                    gt_fh.writelines(gt_buffer)
+                    gt_buffer.clear()
                 if i > 0 and i % STREAM_FLUSH_EVERY == 0:
                     fh.flush()
             if buffer:
                 fh.writelines(buffer)
+            if gt_buffer:
+                gt_fh.writelines(gt_buffer)
     else:
         transactions = []
+        ground_truths = []
         for i in range(num_transactions):
             customer, device = random.choices(pairs, weights=_pair_weights, k=1)[0]
             timestamp = _timestamps[i]
@@ -190,8 +208,16 @@ def worker_generate_batch(args: tuple) -> str:
             tx['is_impossible_travel'] = _is_imp
             tx['distance_from_last_km'] = _dist
             session.add_transaction(tx, timestamp)
+            ground_truth = tx.pop("_ground_truth", None)
+            if ground_truth is not None:
+                ground_truths.append(ground_truth)
             transactions.append(tx)
         exporter.export_batch(transactions, output_path)
+        with open(gt_path, "w", encoding="utf-8") as gt_fh:
+            for ground_truth in ground_truths:
+                gt_fh.write(
+                    json.dumps(_clean_ground_truth(ground_truth), ensure_ascii=False, separators=(",", ":")) + "\n"
+                )
 
     return output_path
 
@@ -216,6 +242,21 @@ def _activity_weight(customer) -> float:
     else:
         base = 40.0
     return max(0.05, base * random.lognormvariate(0.0, 0.6))
+
+
+_GT_KEEP_ALWAYS = frozenset({"transaction_id", "is_fraud"})
+
+
+def _clean_ground_truth(record: Dict) -> Dict:
+    """Drop None-valued keys except the join/label anchors.
+
+    ~98% of records carry no forensic detail (the fields only fire for a
+    handful of fraud sub-types), so writing every key on every line would
+    roughly double the companion file's size for no informational gain.
+    `transaction_id` and `is_fraud` stay even when falsy so every row is
+    still joinable and evaluable.
+    """
+    return {k: v for k, v in record.items() if v is not None or k in _GT_KEEP_ALWAYS}
 
 
 def _sorted_timestamps(n: int, date_list, date_weights) -> list:

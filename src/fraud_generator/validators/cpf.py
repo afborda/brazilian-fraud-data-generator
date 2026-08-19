@@ -26,14 +26,14 @@ def calculate_check_digits(cpf_base: str) -> Tuple[int, int]:
     """
     if len(cpf_base) != 9 or not cpf_base.isdigit():
         raise ValueError("CPF base must be exactly 9 digits")
-    
+
     # Calculate first check digit (10th digit)
     # Multiply each of the 9 digits by weights 10, 9, 8, 7, 6, 5, 4, 3, 2
     weights_first = [10, 9, 8, 7, 6, 5, 4, 3, 2]
     sum_first = sum(int(d) * w for d, w in zip(cpf_base, weights_first))
     remainder_first = sum_first % 11
     first_digit = 0 if remainder_first < 2 else 11 - remainder_first
-    
+
     # Calculate second check digit (11th digit)
     # Multiply each of the 10 digits (9 base + first check) by weights 11, 10, 9, 8, 7, 6, 5, 4, 3, 2
     cpf_with_first = cpf_base + str(first_digit)
@@ -41,7 +41,7 @@ def calculate_check_digits(cpf_base: str) -> Tuple[int, int]:
     sum_second = sum(int(d) * w for d, w in zip(cpf_with_first, weights_second))
     remainder_second = sum_second % 11
     second_digit = 0 if remainder_second < 2 else 11 - remainder_second
-    
+
     return first_digit, second_digit
 
 
@@ -75,16 +75,16 @@ def generate_valid_cpf(formatted: bool = False) -> str:
         # Avoid invalid patterns (all same digits)
         if len(set(cpf_base)) > 1:
             break
-    
+
     # Calculate valid check digits
     first_digit, second_digit = calculate_check_digits(cpf_base)
-    
+
     # Build complete CPF
     cpf = cpf_base + str(first_digit) + str(second_digit)
-    
+
     if formatted:
         return format_cpf(cpf)
-    
+
     return cpf
 
 
@@ -101,7 +101,7 @@ def format_cpf(cpf: str) -> str:
     cpf_clean = ''.join(filter(str.isdigit, cpf))
     if len(cpf_clean) != 11:
         raise ValueError("CPF must have exactly 11 digits")
-    
+
     return f"{cpf_clean[:3]}.{cpf_clean[3:6]}.{cpf_clean[6:9]}-{cpf_clean[9:]}"
 
 
@@ -140,27 +140,27 @@ def validate_cpf(cpf: str) -> bool:
     """
     # Remove formatting
     cpf_clean = unformat_cpf(cpf)
-    
+
     # Check length
     if len(cpf_clean) != 11:
         return False
-    
+
     # Check if all digits are the same (invalid)
     if len(set(cpf_clean)) == 1:
         return False
-    
+
     # Check if only digits
     if not cpf_clean.isdigit():
         return False
-    
+
     # Extract base and check digits
     cpf_base = cpf_clean[:9]
     provided_check = cpf_clean[9:]
-    
+
     # Calculate expected check digits
     first_digit, second_digit = calculate_check_digits(cpf_base)
     expected_check = str(first_digit) + str(second_digit)
-    
+
     return provided_check == expected_check
 
 
@@ -199,9 +199,9 @@ def generate_cpf_from_state(state_code: str, formatted: bool = False) -> str:
         'SP': 8,
         'PR': 9, 'SC': 9,
     }
-    
+
     region_digit = STATE_TO_REGION.get(state_code.upper(), random.randint(0, 9))
-    
+
     # Generate first 8 random digits
     while True:
         first_8 = ''.join(str(random.randint(0, 9)) for _ in range(8))
@@ -209,14 +209,14 @@ def generate_cpf_from_state(state_code: str, formatted: bool = False) -> str:
         # Avoid invalid patterns
         if len(set(cpf_base)) > 1:
             break
-    
+
     # Calculate valid check digits
     first_digit, second_digit = calculate_check_digits(cpf_base)
     cpf = cpf_base + str(first_digit) + str(second_digit)
-    
+
     if formatted:
         return format_cpf(cpf)
-    
+
     return cpf
 
 
@@ -231,24 +231,24 @@ if __name__ == '__main__':
     # Quick validation test
     print("🔍 CPF Validator Test")
     print("=" * 40)
-    
+
     # Generate and validate random CPFs
     for i in range(5):
         cpf = generate_valid_cpf()
         cpf_formatted = format_cpf(cpf)
         is_valid = validate_cpf(cpf)
         print(f"Generated: {cpf_formatted} | Valid: {is_valid}")
-    
+
     print()
-    
+
     # Test state-specific CPFs
     print("State-specific CPFs:")
     for state in ['SP', 'RJ', 'MG', 'RS', 'BA']:
         cpf = generate_cpf_from_state(state, formatted=True)
         print(f"  {state}: {cpf}")
-    
+
     print()
-    
+
     # Test invalid CPFs
     print("Invalid CPF tests:")
     invalid_cpfs = ['11111111111', '12345678900', '00000000000', 'invalid']

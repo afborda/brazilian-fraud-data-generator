@@ -21,20 +21,20 @@ class StdoutConnection(ConnectionProtocol):
         conn.send({'transaction_id': '123', 'valor': 100.0})
         conn.close()
     """
-    
+
     name = "Standard Output"
-    
+
     def __init__(self):
         self.pretty = False
         self.output = sys.stdout
         self._connected = False
         self._count = 0
-    
+
     @classmethod
     def is_available(cls) -> bool:
         """Always available - no dependencies."""
         return True
-    
+
     def connect(
         self,
         pretty: bool = False,
@@ -52,7 +52,7 @@ class StdoutConnection(ConnectionProtocol):
         self.output = output or sys.stdout
         self._connected = True
         self._count = 0
-    
+
     def send(
         self,
         data: Dict[str, Any],
@@ -69,20 +69,20 @@ class StdoutConnection(ConnectionProtocol):
         """
         if not self._connected:
             raise RuntimeError("Not connected. Call connect() first.")
-        
+
         try:
             if self.pretty:
                 output = json.dumps(data, indent=2, default=str, ensure_ascii=False)
             else:
                 output = json.dumps(data, default=str, ensure_ascii=False)
-            
+
             print(output, file=self.output)
             self._count += 1
             return True
         except Exception as e:
             print(f"❌ Stdout error: {e}", file=sys.stderr)
             return False
-    
+
     def close(self) -> None:
         """Close the connection."""
         if self.output and self.output != sys.stdout:
@@ -91,7 +91,7 @@ class StdoutConnection(ConnectionProtocol):
             except Exception:
                 pass
         self._connected = False
-    
+
     @property
     def count(self) -> int:
         """Number of records sent."""

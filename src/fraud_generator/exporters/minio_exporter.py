@@ -97,13 +97,13 @@ def retry_with_exponential_backoff(
     """
     delay = initial_delay
     last_exception = None
-    
+
     for attempt in range(max_retries + 1):
         try:
             return func()
         except exceptions as e:
             last_exception = e
-            
+
             if attempt < max_retries:
                 # Exponential backoff with jitter
                 sleep_time = min(delay, max_delay)
@@ -112,7 +112,7 @@ def retry_with_exponential_backoff(
             else:
                 # Last attempt failed, raise the exception
                 raise last_exception
-    
+
     # Should never reach here, but for safety
     raise last_exception if last_exception else RuntimeError("Retry failed")
 
@@ -127,10 +127,10 @@ class MinIOExporter(ExporterProtocol):
     - Automatic bucket creation
     - Multiple formats: JSONL, CSV, Parquet
     """
-    
+
     SUPPORTED_FORMATS = ('jsonl', 'csv', 'parquet')
     SUPPORTED_COMPRESSIONS = ('zstd', 'snappy', 'gzip', 'brotli', 'none')
-    
+
     def __init__(
         self,
         endpoint_url: str = None,
@@ -166,18 +166,18 @@ class MinIOExporter(ExporterProtocol):
                 "boto3 is required for MinIO export. "
                 "Install it with: pip install boto3"
             )
-        
+
         # Validate format
         if output_format not in self.SUPPORTED_FORMATS:
             raise ValueError(f"Unsupported format: {output_format}. Supported: {self.SUPPORTED_FORMATS}")
-        
+
         # Check Parquet dependencies
         if output_format == 'parquet' and not is_minio_parquet_available():
             raise ImportError(
                 "pyarrow and pandas are required for Parquet export. "
                 "Install with: pip install pyarrow pandas"
             )
-        
+
         self._output_format = output_format
         self.compression = compression if compression != 'none' else None
         self.jsonl_compress = jsonl_compress if jsonl_compress != 'none' else None
@@ -195,11 +195,11 @@ class MinIOExporter(ExporterProtocol):
         self.prefix = prefix.strip('/')
         self.partition_by_date = partition_by_date
         self.region = region
-        
+
         # Handle secure URL
         if self.endpoint_url.startswith("https://"):
             secure = True
-        
+
         # Initialize S3 client
         self.client = boto3.client(
             's3',
@@ -209,10 +209,10 @@ class MinIOExporter(ExporterProtocol):
             config=Config(signature_version='s3v4'),
             region_name=self.region,
         )
-        
+
         # Track if bucket was verified
         self._bucket_verified = False
-    
+
     @property
     def extension(self) -> str:
         extensions = {'jsonl': '.jsonl', 'csv': '.csv', 'parquet': '.parquet'}
@@ -226,17 +226,17 @@ class MinIOExporter(ExporterProtocol):
             elif self.jsonl_compress == 'snappy':
                 ext += '.snappy'
         return ext
-    
+
     @property
     def format_name(self) -> str:
         names = {'jsonl': 'MinIO (JSONL)', 'csv': 'MinIO (CSV)', 'parquet': 'MinIO (Parquet)'}
         return names[self._output_format]
-    
+
     def _ensure_bucket(self):
         """Create bucket if it doesn't exist."""
         if self._bucket_verified:
             return
-        
+
         try:
             self.client.head_bucket(Bucket=self.bucket)
         except ClientError as e:
@@ -251,9 +251,9 @@ class MinIOExporter(ExporterProtocol):
                         raise
             else:
                 raise
-        
+
         self._bucket_verified = True
-    
+
     def _get_object_key(self, filename: str) -> str:
         """
         Build full object key with optional date partitioning.
@@ -265,19 +265,19 @@ class MinIOExporter(ExporterProtocol):
             Full object key (e.g., "raw/transactions/2025/12/05/transactions_00001.jsonl")
         """
         parts = [self.prefix] if self.prefix else []
-        
+
         if self.partition_by_date:
             date_path = datetime.now().strftime("%Y/%m/%d")
             parts.append(date_path)
-        
+
         parts.append(filename)
-        
+
         return '/'.join(parts)
-    
+
     def ensure_directory(self, output_path: str) -> None:
         """For MinIO, just ensure bucket exists."""
         self._ensure_bucket()
-    
+
     def _flatten_dict(
         self,
         d: Dict[str, Any],
@@ -293,7 +293,7 @@ class MinIOExporter(ExporterProtocol):
             else:
                 items.append((new_key, v))
         return dict(items)
-    
+
     def _export_jsonl(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
         """Export data as JSONL format with optional compression (OTIMIZAÇÃO 2.1)."""
         if append:
@@ -301,7 +301,7 @@ class MinIOExporter(ExporterProtocol):
                 response = self.client.get_object(Bucket=self.bucket, Key=object_key)
                 # Handle decompression if needed
                 body_bytes = response['Body'].read()
-                
+
                 if self._compressor is not None:
                     # Decompress using appropriate algorithm
                     existing_content = self._compressor.decompress(body_bytes).decode('utf-8')
@@ -311,24 +311,24 @@ class MinIOExporter(ExporterProtocol):
                         existing_content = f.read()
                 else:
                     existing_content = body_bytes.decode('utf-8')
-                    
+
                 existing_lines = existing_content.strip().split('\n') if existing_content.strip() else []
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchKey':
                     existing_lines = []
                 else:
                     raise
-            
+
             new_lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':')) for record in data]
             all_lines = existing_lines + new_lines
             body_str = '\n'.join(all_lines) + '\n'
         else:
             lines = [json.dumps(record, ensure_ascii=False, separators=(',', ':'), default=str) for record in data]
             body_str = '\n'.join(lines) + '\n'
-        
+
         # OTIMIZAÇÃO 2.1: Compress body using CompressionHandler if enabled
         body_bytes = body_str.encode('utf-8')
-        
+
         if self._compressor is not None:
             body = self._compressor.compress(body_bytes)
             content_type = 'application/octet-stream'  # Generic binary for compressed data
@@ -337,55 +337,55 @@ class MinIOExporter(ExporterProtocol):
             body = body_bytes
             content_type = 'application/x-ndjson'
             content_encoding = None
-        
+
         # OTIMIZAÇÃO 1.5: Retry upload with exponential backoff
         def upload_jsonl():
             extra_args = {'ContentType': content_type}
             if content_encoding:
                 extra_args['ContentEncoding'] = content_encoding
-            
+
             self.client.put_object(
                 Bucket=self.bucket,
                 Key=object_key,
                 Body=body,  # Already bytes
                 **extra_args,
             )
-        
+
         retry_with_exponential_backoff(
             upload_jsonl,
             max_retries=3,
             exceptions=(ClientError, Exception)
         )
         return len(data)
-    
+
     def _export_csv(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
         """Export data as CSV format."""
         if not data:
             return 0
-        
+
         # Flatten nested dicts
         flat_data = [self._flatten_dict(record) for record in data]
-        
+
         # Get all columns
         all_columns = set()
         for record in flat_data:
             all_columns.update(record.keys())
         columns = sorted(all_columns)
-        
+
         # Write to buffer
         buffer = io.StringIO()
         writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction='ignore')
-        
+
         if not append:
             writer.writeheader()
-        
+
         for record in flat_data:
             writer.writerow(record)
-        
+
         # Convert to bytes and use streaming upload (avoids memory copy)
         csv_bytes = io.BytesIO(buffer.getvalue().encode('utf-8'))
         csv_bytes.seek(0)
-        
+
         # OTIMIZAÇÃO 1.5: Retry upload with exponential backoff
         def upload_csv():
             csv_bytes.seek(0)  # Reset position before each retry
@@ -395,30 +395,30 @@ class MinIOExporter(ExporterProtocol):
                 object_key,
                 ExtraArgs={'ContentType': 'text/csv'},
             )
-        
+
         retry_with_exponential_backoff(
             upload_csv,
             max_retries=3,
             exceptions=(ClientError, Exception)
         )
         return len(data)
-    
+
     def _export_parquet(self, data: List[Dict[str, Any]], object_key: str, append: bool = False) -> int:
         """Export data as Parquet format."""
         if not data:
             return 0
-        
+
         # Flatten nested dicts
         flat_data = [self._flatten_dict(record) for record in data]
-        
+
         # Convert to pandas DataFrame
         df = pd.DataFrame(flat_data)
-        
+
         # IMPORTANTE: Manter timestamp como STRING para compatibilidade com Spark
         # NÃO converter para datetime porque isso causa inconsistência de schema entre partições
         # Spark pode ter problemas quando alguns arquivos têm timestamp como string e outros como INT64
         # A conversão para timestamp será feita na camada Bronze do pipeline
-        
+
         # Garantir que colunas timestamp sejam SEMPRE strings (formato ISO8601)
         for col in df.columns:
             if 'timestamp' in col.lower() or 'date' in col.lower() or col.endswith('_at'):
@@ -428,10 +428,10 @@ class MinIOExporter(ExporterProtocol):
                 else:
                     # Já é string, garantir formato consistente
                     df[col] = df[col].astype(str)
-        
+
         # Convert to PyArrow Table - todas as colunas timestamp são strings
         table = pa.Table.from_pandas(df, preserve_index=False)
-        
+
         # Write to buffer with Spark-compatible settings
         buffer = io.BytesIO()
         pq.write_table(
@@ -443,7 +443,7 @@ class MinIOExporter(ExporterProtocol):
             version='2.4',  # Formato compatível com Spark 3.x
         )
         buffer.seek(0)
-        
+
         # OTIMIZAÇÃO 1.5: Use streaming upload with retry (avoids memory copy)
         def upload_parquet():
             buffer.seek(0)  # Reset position before each retry
@@ -453,14 +453,14 @@ class MinIOExporter(ExporterProtocol):
                 object_key,
                 ExtraArgs={'ContentType': 'application/octet-stream'},
             )
-        
+
         retry_with_exponential_backoff(
             upload_parquet,
             max_retries=3,
             exceptions=(ClientError, Exception)
         )
         return len(data)
-    
+
     def export_batch(
         self,
         data: List[Dict[str, Any]],
@@ -479,19 +479,19 @@ class MinIOExporter(ExporterProtocol):
             Number of records exported
         """
         self._ensure_bucket()
-        
+
         # Extract filename from path if full path provided
         if '/' in output_path:
             filename = os.path.basename(output_path)
         else:
             filename = output_path
-        
+
         # Ensure correct extension
         base_name = filename.rsplit('.', 1)[0] if '.' in filename else filename
         filename = f"{base_name}{self.extension}"
-        
+
         object_key = self._get_object_key(filename)
-        
+
         # Export based on format
         if self._output_format == 'jsonl':
             return self._export_jsonl(data, object_key, append)
@@ -501,7 +501,7 @@ class MinIOExporter(ExporterProtocol):
             return self._export_parquet(data, object_key, append)
         else:
             raise ValueError(f"Unsupported format: {self._output_format}")
-    
+
     def export_stream(
         self,
         data_iterator: Iterator[Dict[str, Any]],
@@ -515,22 +515,22 @@ class MinIOExporter(ExporterProtocol):
         Each chunk becomes a separate file.
         """
         self._ensure_bucket()
-        
+
         filename_base = os.path.basename(output_path).rsplit('.', 1)[0]
         total_count = 0
         batch_num = 0
         batch = []
-        
+
         for record in data_iterator:
             batch.append(record)
-            
+
             if len(batch) >= batch_size:
                 chunk_filename = f"{filename_base}_{batch_num:05d}.jsonl"
                 self.export_batch(batch, chunk_filename)
                 total_count += len(batch)
                 batch = []
                 batch_num += 1
-        
+
         # Write remaining records
         if batch:
             if batch_num == 0:
@@ -539,29 +539,29 @@ class MinIOExporter(ExporterProtocol):
                 chunk_filename = f"{filename_base}_{batch_num:05d}.jsonl"
             self.export_batch(batch, chunk_filename)
             total_count += len(batch)
-        
+
         return total_count
-    
+
     def export_single(self, record: Dict[str, Any], output_path: str, append: bool = True) -> None:
         """Export a single record to MinIO."""
         self.export_batch([record], output_path, append=append)
-    
+
     def get_full_path(self, filename: str) -> str:
         """Get full S3/MinIO URL for a file."""
         object_key = self._get_object_key(filename)
         return f"s3://{self.bucket}/{object_key}"
-    
+
     def list_objects(self, prefix: str = None) -> List[str]:
         """List objects in bucket with optional prefix."""
         self._ensure_bucket()
-        
+
         search_prefix = prefix or self.prefix
-        
+
         response = self.client.list_objects_v2(
             Bucket=self.bucket,
             Prefix=search_prefix,
         )
-        
+
         return [obj['Key'] for obj in response.get('Contents', [])]
 
 
@@ -571,7 +571,7 @@ class MinIOStreamWriter:
     
     Use this when generating large files to avoid memory accumulation.
     """
-    
+
     def __init__(
         self,
         exporter: MinIOExporter,
@@ -592,34 +592,34 @@ class MinIOStreamWriter:
         self._buffer = []
         self._part_num = 0
         self._total_written = 0
-    
+
     def write(self, record: Dict[str, Any]) -> None:
         """Add record to buffer, flush if needed."""
         self._buffer.append(record)
-        
+
         if len(self._buffer) >= self.buffer_size:
             self._flush_buffer()
-    
+
     def _flush_buffer(self) -> None:
         """Upload buffer to MinIO as a part file."""
         if not self._buffer:
             return
-        
+
         part_filename = f"{self.filename.rsplit('.', 1)[0]}_part{self._part_num:05d}.jsonl"
         self.exporter.export_batch(self._buffer, part_filename)
-        
+
         self._total_written += len(self._buffer)
         self._buffer = []
         self._part_num += 1
-    
+
     def close(self) -> int:
         """Flush remaining buffer and return total records written."""
         self._flush_buffer()
         return self._total_written
-    
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         return False

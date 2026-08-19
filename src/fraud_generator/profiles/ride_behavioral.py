@@ -38,40 +38,40 @@ class RideBehavioralProfile:
     """
     name: str
     description: str
-    
+
     # Preferred apps with weights
     preferred_apps: Dict[str, int]
-    
+
     # Preferred categories with weights
     preferred_categories: Dict[str, int]
-    
+
     # Rides per week range
     rides_per_week: Tuple[int, int]
-    
+
     # Preferred hours for rides (24h format)
     preferred_hours: List[int]
-    
+
     # Preferred days of week (0=Monday, 6=Sunday)
     preferred_days: List[int]
-    
+
     # Preferred POI types for pickup
     preferred_pickup_pois: Dict[str, int]
-    
+
     # Preferred POI types for dropoff
     preferred_dropoff_pois: Dict[str, int]
-    
+
     # Maximum acceptable surge multiplier (will cancel if higher)
     max_acceptable_surge: float
-    
+
     # Tip probability (0.0 to 1.0)
     tip_probability: float
-    
+
     # Tip percentage range (of final fare)
     tip_percentage_range: Tuple[float, float]
-    
+
     # Price sensitivity (higher = more likely to cancel on high prices)
     price_sensitivity: float = 1.0
-    
+
     # Fraud susceptibility (higher = more likely target)
     fraud_susceptibility: float = 1.0
 
@@ -119,7 +119,7 @@ RIDE_PROFILES: Dict[str, RideBehavioralProfile] = {
         price_sensitivity=1.2,  # Somewhat price sensitive
         fraud_susceptibility=0.8,  # Low fraud risk
     ),
-    
+
     RideProfileType.OCCASIONAL_USER.value: RideBehavioralProfile(
         name="occasional_user",
         description="Usuário ocasional: 2-4x/semana, shoppings, lazer, horários variados",
@@ -160,7 +160,7 @@ RIDE_PROFILES: Dict[str, RideBehavioralProfile] = {
         price_sensitivity=1.0,
         fraud_susceptibility=1.0,
     ),
-    
+
     RideProfileType.FREQUENT_TRAVELER.value: RideBehavioralProfile(
         name="frequent_traveler",
         description="Viajante frequente: aeroportos, hotéis, categorias comfort+",
@@ -198,7 +198,7 @@ RIDE_PROFILES: Dict[str, RideBehavioralProfile] = {
         price_sensitivity=0.5,  # Less price sensitive
         fraud_susceptibility=1.2,  # Higher value target
     ),
-    
+
     RideProfileType.NIGHTLIFE.value: RideBehavioralProfile(
         name="nightlife",
         description="Vida noturna: sex-dom 22h-04h, bares, baladas, aceita surge alto",
@@ -237,7 +237,7 @@ RIDE_PROFILES: Dict[str, RideBehavioralProfile] = {
         price_sensitivity=0.7,  # Less sensitive when partying
         fraud_susceptibility=1.5,  # Higher risk due to late hours
     ),
-    
+
     RideProfileType.BUSINESS.value: RideBehavioralProfile(
         name="business",
         description="Executivo: horário comercial, categorias premium, gorjeta alta",
@@ -276,7 +276,7 @@ RIDE_PROFILES: Dict[str, RideBehavioralProfile] = {
         price_sensitivity=0.3,  # Not price sensitive
         fraud_susceptibility=1.3,  # High value target
     ),
-    
+
     RideProfileType.ECONOMY_FOCUSED.value: RideBehavioralProfile(
         name="economy_focused",
         description="Econômico: sempre Pop/UberX, sensível a preço, sem gorjeta",
@@ -386,7 +386,7 @@ def get_ride_profile_for_customer(customer_profile: Optional[str]) -> RideProfil
         ride_profiles = CUSTOMER_TO_RIDE_PROFILE[customer_profile]
         chosen = random.choice(ride_profiles)
         return RideProfileType(chosen)
-    
+
     # No mapping found, return random
     return assign_random_ride_profile()
 
@@ -406,7 +406,7 @@ def assign_random_ride_profile() -> RideProfileType:
         RideProfileType.BUSINESS,
         RideProfileType.ECONOMY_FOCUSED,
     ]
-    
+
     # Weights based on expected population distribution
     weights = [
         25,  # DAILY_COMMUTER - common
@@ -416,7 +416,7 @@ def assign_random_ride_profile() -> RideProfileType:
         10,  # BUSINESS - less common
         10,  # ECONOMY_FOCUSED - moderate
     ]
-    
+
     return random.choices(profiles, weights=weights, k=1)[0]
 
 
@@ -433,7 +433,7 @@ def get_preferred_app_for_profile(profile_name: str) -> str:
     profile = RIDE_PROFILES.get(profile_name)
     if not profile:
         return 'UBER'
-    
+
     apps = list(profile.preferred_apps.keys())
     weights = list(profile.preferred_apps.values())
     return random.choices(apps, weights=weights, k=1)[0]
@@ -452,7 +452,7 @@ def get_preferred_category_for_profile(profile_name: str) -> str:
     profile = RIDE_PROFILES.get(profile_name)
     if not profile:
         return 'UberX'
-    
+
     categories = list(profile.preferred_categories.keys())
     weights = list(profile.preferred_categories.values())
     return random.choices(categories, weights=weights, k=1)[0]
@@ -471,7 +471,7 @@ def get_preferred_hour_for_profile(profile_name: str) -> int:
     profile = RIDE_PROFILES.get(profile_name)
     if not profile or not profile.preferred_hours:
         return random.randint(6, 23)
-    
+
     return random.choice(profile.preferred_hours)
 
 
@@ -488,7 +488,7 @@ def should_tip_for_profile(profile_name: str) -> bool:
     profile = RIDE_PROFILES.get(profile_name)
     if not profile:
         return random.random() < 0.15  # Default 15%
-    
+
     return random.random() < profile.tip_probability
 
 
@@ -505,7 +505,7 @@ def get_tip_percentage_for_profile(profile_name: str) -> float:
     profile = RIDE_PROFILES.get(profile_name)
     if not profile:
         return random.uniform(0.10, 0.15)
-    
+
     return random.uniform(*profile.tip_percentage_range)
 
 
@@ -523,5 +523,5 @@ def should_accept_surge_for_profile(profile_name: str, surge: float) -> bool:
     profile = RIDE_PROFILES.get(profile_name)
     if not profile:
         return surge <= 2.0  # Default max
-    
+
     return surge <= profile.max_acceptable_surge

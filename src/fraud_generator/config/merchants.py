@@ -186,3 +186,73 @@ def get_merchants_for_mcc(mcc_code: str) -> list:
 def get_risk_level(mcc_code: str) -> str:
     """Get risk level for a given MCC code."""
     return MCC_CODES.get(mcc_code, {}).get('risk', 'medium')
+
+
+# ─── Catálogo global de estabelecimentos ─────────────────────────────────────
+# `merchant_id` era um token aleatório (`MERCH_%06d`) sorteado por transação,
+# sem nenhuma relação com `merchant_name`. Medido em 264k transações:
+#
+#   * 57.601 merchant_id distintos, com média de 1,49 clientes por id;
+#   * 36,5% dos ids mapeavam para mais de um nome — o mesmo id servia
+#     Crunchyroll, Pacheco e Sam's Club;
+#   * "Carrefour" aparecia com 642 ids diferentes.
+#
+# Com isso, toda feature de nível de estabelecimento (taxa histórica de fraude
+# do merchant, ticket médio, novidade do merchant) é impossível, e a recorrência
+# de merchant — que alimenta `new_beneficiary` — nunca acontece.
+#
+# O catálogo cria estabelecimentos estáveis: um id identifica uma loja, com nome
+# e MCC fixos, compartilhada por milhares de clientes. Marcas maiores recebem
+# mais lojas, e a amostragem é Zipf, então poucos estabelecimentos concentram a
+# maior parte do volume — como no varejo real.
+
+# Lojas por marca conforme a posição da marca na lista do MCC (a primeira é a
+# maior). Uma rede nacional tem centenas de lojas; um comércio local tem uma.
+def _stores_for_rank(rank: int) -> int:
+    return max(1, int(48 / (rank + 1)))
+
+
+def _build_merchant_catalog() -> dict:
+    """Build {mcc: (ids, names, weights)} once at import time."""
+    catalog: dict = {}
+    for mcc, names in MERCHANTS_BY_MCC.items():
+        ids: list = []
+        store_names: list = []
+        weights: list = []
+        seq = 0
+        for rank, name in enumerate(names):
+            n_stores = _stores_for_rank(rank)
+            # Peso da marca decai com a posição; dentro da marca, as lojas
+            # dividem esse peso de forma aproximadamente uniforme.
+            brand_weight = 1.0 / (rank + 1) ** 0.9
+            per_store = brand_weight / n_stores
+            for _ in range(n_stores):
+                seq += 1
+                ids.append(f"M{mcc}{seq:05d}")
+                store_names.append(name)
+                weights.append(per_store)
+        catalog[mcc] = (ids, store_names, weights)
+    return catalog
+
+
+MERCHANT_CATALOG = _build_merchant_catalog()
+
+# Total de estabelecimentos no catálogo (útil para testes e diagnóstico)
+MERCHANT_CATALOG_SIZE = sum(len(v[0]) for v in MERCHANT_CATALOG.values())
+
+
+def pick_merchant(mcc_code: str, rng=None) -> tuple:
+    """Return (merchant_id, merchant_name) for an MCC, weighted by popularity.
+
+    The same id always carries the same name and MCC, and is shared across
+    customers — which is what makes merchant-level aggregates meaningful.
+    """
+    import random as _r
+
+    r = rng or _r
+    entry = MERCHANT_CATALOG.get(mcc_code)
+    if not entry:
+        return (f"M{mcc_code}00001", "Local Merchant")
+    ids, names, weights = entry
+    idx = r.choices(range(len(ids)), weights=weights, k=1)[0]
+    return (ids[idx], names[idx])

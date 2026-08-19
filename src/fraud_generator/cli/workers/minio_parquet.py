@@ -41,6 +41,11 @@ def worker_upload_parquet_transactions(args: tuple) -> str:
         bucket_name, object_prefix, compression,
     ) = args
 
+    # Investigation-only fields are collected here and uploaded as a companion
+    # object rather than travelling in the transaction record — see
+    # utils/ground_truth.py. Same batch number, so the two join on
+    # transaction_id.
+    ground_truth: list = []
     transactions = generate_transaction_batch(
         batch_id=batch_id,
         num_transactions=num_transactions,
@@ -51,6 +56,7 @@ def worker_upload_parquet_transactions(args: tuple) -> str:
         fraud_rate=fraud_rate,
         use_profiles=use_profiles,
         seed=seed,
+        ground_truth_sink=ground_truth,
     )
 
     flat_data = [_flatten(tx) for tx in transactions]
@@ -65,11 +71,38 @@ def worker_upload_parquet_transactions(args: tuple) -> str:
         object_key = _object_key(object_prefix, f"transactions_{batch_id:05d}.parquet")
         _upload(local_path, bucket_name, object_key, minio_endpoint,
                 minio_access_key, minio_secret_key)
+
+        if ground_truth:
+            _upload_ground_truth(
+                ground_truth, batch_id, compression, object_prefix, bucket_name,
+                minio_endpoint, minio_access_key, minio_secret_key,
+            )
         return f"transactions_{batch_id:05d}.parquet"
     finally:
         os.remove(local_path)
         del df, transactions, flat_data
         gc.collect()
+
+
+def _upload_ground_truth(records, batch_id, compression, object_prefix, bucket_name,
+                         minio_endpoint, minio_access_key, minio_secret_key) -> None:
+    """Upload the companion ground-truth object for a transactions batch."""
+    import pandas as pd  # imported lazily, like the callers do
+
+    gt_df = pd.DataFrame(records)
+    gt_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".parquet")
+    gt_path = gt_tmp.name
+    gt_tmp.close()
+    try:
+        gt_df.to_parquet(gt_path, engine="pyarrow", compression=compression, index=False)
+        _upload(
+            gt_path, bucket_name,
+            _object_key(object_prefix, f"fraud_ground_truth_{batch_id:05d}.parquet"),
+            minio_endpoint, minio_access_key, minio_secret_key,
+        )
+    finally:
+        os.remove(gt_path)
+        del gt_df
 
 
 def worker_upload_parquet_rides(args: tuple) -> str:

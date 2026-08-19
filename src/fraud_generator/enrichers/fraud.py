@@ -8,13 +8,14 @@ Only runs when bag.is_fraud is True and bag.fraud_type is set.
 import random
 import hashlib as _hl
 import uuid as _uuid
-from datetime import timedelta as _td
+from datetime import datetime as _dt, timedelta as _td
 from typing import Any, Dict, Optional
 
 from .base import EnricherProtocol, GeneratorBag, is_plan
 from ..utils.overlap import beta_score, lognormal_days, two_class
+from ..config.calibration import rate as _rate
 from ..config.merchants import get_mcc_info
-from ..config.geography import ESTADOS_BR, ESTADOS_LIST
+from ..config.geography import ESTADOS_BR, ESTADOS_LIST, ESTADOS_WEIGHTS
 from ..config.fraud_patterns import get_fraud_pattern, get_time_window_for_anomaly
 from ..config.pix import (
     MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS,
@@ -175,7 +176,74 @@ def _get_bot_signature(fraud_type: str, buf) -> tuple:
 
 # Share of fraud records that skip the velocity burst entirely and keep the
 # velocity their session actually produced ("low and slow" fraud).
-_LOW_AND_SLOW_SHARE = 0.32
+_LOW_AND_SLOW_SHARE = _rate("fraud.low_and_slow_share")
+
+# Share of legitimate records generated as decoys — see _apply_decoy_profile.
+# Sized so decoys outnumber real fraud roughly 2:1, which is the regime a
+# production antifraud team actually works in: most alerts are false.
+_DECOY_SHARE = _rate("fraud.decoy_share")
+
+
+def _apply_decoy_profile(tx: Dict[str, Any]) -> None:
+    """Give a legitimate record several suspicious traits at once.
+
+    Each decoy picks a random subset of the fraud silhouette rather than the
+    whole thing, so decoys do not become their own separable cluster. The
+    record stays is_fraud=False and carries no fraud_type: ground truth is
+    unaffected, only the difficulty is.
+
+    Values are written directly; every downstream enricher fills these fields
+    with `setdefault` / `is None` guards, so the decoy's choices survive.
+    """
+    traits = [
+        # Recently acquired device — someone who just replaced their phone.
+        lambda: tx.__setitem__("device_age_days", lognormal_days(median=25, sigma=0.9, hi=2555)),
+        # Paying a counterparty whose account is new — a freshly-opened digital
+        # account or a supplier that just migrated banks.
+        lambda: tx.__setitem__("dest_account_age_days", lognormal_days(median=20, sigma=0.9, hi=7300)),
+        lambda: tx.__setitem__("destination_account_age_days", lognormal_days(median=25, sigma=1.0, hi=7300)),
+        # A newly registered company (Brazil opens MEIs by the million).
+        lambda: tx.__setitem__("destination_company_age_days", lognormal_days(median=50, sigma=0.9, hi=14600)),
+        # Detector noise: accessibility tooling, corporate RPA, a rushed user.
+        lambda: tx.__setitem__("bot_confidence_score", round(beta_score(3.0, 3.5), 3)),
+        # First payment to this counterparty.
+        lambda: tx.__setitem__("new_beneficiary", True),
+        # Late-night activity: shift workers, insomniacs, other time zones.
+        lambda: _shift_to_night(tx),
+        # A burst: paying several suppliers, splitting a bill, month-end runs.
+        lambda: tx.__setitem__("velocity_transactions_24h", random.randint(9, 26)),
+    ]
+    # Três a oito traços. O teto era seis, e isso deixava um resíduo: o
+    # `fraud_risk_score` do legítimo nunca acumulava sinais suficientes para
+    # passar de 98, então `fraud_risk_score > 98` isolava fraude com precisão
+    # 100% sobre ~16% dos registros. Um decoy com a silhueta completa precisa
+    # conseguir cravar 100 — é exatamente o caso "parece fraude e não é" que o
+    # decoy existe para representar, e o alerta que um analista de verdade abre
+    # e fecha como falso positivo.
+    n_traits = random.randint(3, len(traits))
+    for trait in random.sample(traits, n_traits):
+        trait()
+
+
+def _shift_to_night(tx: Dict[str, Any]) -> None:
+    """Move a record into the small hours and keep unusual_time consistent.
+
+    TemporalEnricher runs before this one, so the flag it already wrote has to
+    be corrected rather than left stale.
+    """
+    ts = tx.get("timestamp")
+    hour = random.choice([0, 1, 2, 3, 4, 23])
+    if isinstance(ts, str):
+        try:
+            parsed = _dt.fromisoformat(ts)
+            tx["timestamp"] = parsed.replace(hour=hour).isoformat()
+        except ValueError:
+            return
+    elif hasattr(ts, "replace"):
+        tx["timestamp"] = ts.replace(hour=hour)
+    else:
+        return
+    tx["unusual_time"] = hour < 6 or hour >= 22
 
 
 # ── Two-class samplers with overlap ──────────────────────────────────────────
@@ -235,8 +303,8 @@ def _sample_bot_score(is_fraud: bool, fraud_type: Optional[str] = None) -> float
             is_fraud,
             legit=_ordinary,
             fraud=_automated,
-            legit_contamination=0.05,
-            fraud_contamination=0.22,
+            legit_contamination=_rate("bot_score.legit_contamination"),
+            fraud_contamination=_rate("bot_score.fraud_contamination"),
         ),
         3,
     )
@@ -253,8 +321,8 @@ def _sample_company_age(is_fraud: bool) -> int:
         is_fraud,
         legit=lambda: lognormal_days(median=1400, sigma=1.1, lo=1, hi=14600),
         fraud=lambda: lognormal_days(median=45, sigma=0.9, lo=1, hi=14600),
-        legit_contamination=0.10,   # MEI aberto há pouco recebendo pagamento
-        fraud_contamination=0.28,   # laranja usando empresa estabelecida
+        legit_contamination=_rate("company_age.legit_contamination"),
+        fraud_contamination=_rate("company_age.fraud_contamination"),
     )
 
 
@@ -265,8 +333,8 @@ def _sample_dest_account_age(is_fraud: bool, fraud_type: Optional[str] = None) -
         is_fraud,
         legit=lambda: lognormal_days(median=900, sigma=1.2, lo=0, hi=7300),
         fraud=lambda: lognormal_days(median=fresh_median, sigma=1.0, lo=0, hi=7300),
-        legit_contamination=0.09,   # conta digital aberta hoje já recebe PIX
-        fraud_contamination=0.30,   # conta-laranja comprada, antiga
+        legit_contamination=_rate("dest_account_age.legit_contamination"),
+        fraud_contamination=_rate("dest_account_age.fraud_contamination"),
     )
 
 
@@ -299,6 +367,20 @@ class FraudEnricher:
 
     def enrich(self, tx: Dict[str, Any], bag: GeneratorBag) -> None:
         if not bag.is_fraud or not bag.fraud_type:
+            # Decoy: a legitimate record carrying the whole fraud silhouette.
+            #
+            # Contaminating each field independently is not enough — a model can
+            # still separate on the *combination*, because no legitimate record
+            # ever shows several suspicious values at once. Real traffic does:
+            # someone travelling, on a phone bought that week, paying a new
+            # supplier at 1am, from an account opened last month.
+            #
+            # Decoys are labelled is_fraud=False and never appear in
+            # fraud_type/fraud_labels, so ground truth stays exact.
+            is_decoy = random.random() < _DECOY_SHARE
+            if is_decoy:
+                _apply_decoy_profile(tx)
+
             # Legitimate verification transfers. Sending R$0.01-5.00 to check a
             # PIX key before the real payment is routine in Brazil, and a
             # legitimate merchant refund can be tiny too. Without them the
@@ -344,6 +426,36 @@ class FraudEnricher:
             # `IS NOT NULL` alone recovered 61% of the label. It is now written
             # for both classes at the same point in the pipeline.
             tx.setdefault("dest_account_age_days", _sample_dest_account_age(False))
+            # velocity_burst_id: grouping several transactions that land close
+            # together in time isn't inherently fraudulent — a business owner
+            # or MEI running contas-a-pagar/payroll pays a batch of suppliers
+            # back-to-back and produces exactly the same burst shape as
+            # MICRO_BURST_VELOCITY does for fraud. Only the profile and rate
+            # differ, so the field can't stay fraud-exclusive.
+            if bag.customer_profile in ("business_owner", "micro_empreendedor") and random.random() < 0.05:
+                tx["velocity_burst_id"] = str(_uuid.uuid4())
+                # A batch-payment day (contas a pagar, folha) genuinely
+                # produces a high same-day transaction count for these
+                # profiles. Left to SessionEnricher, velocity_transactions_24h
+                # is always derived from the customer's actual simulated
+                # session — and across a finite date range that emergent
+                # count topped out at 32 for every legit record, while only
+                # fraud's HIGH-velocity branch could ever set the field
+                # directly. That asymmetry (fraud can be set directly to any
+                # value; legit is 100% session-derived) made
+                # `velocity_transactions_24h > 32` and
+                # `customer_velocity_z_score > 28` (which SessionEnricher
+                # derives from it) 100%-precision separators — not because
+                # real batch-payment days can't reach that volume, but
+                # because the simulation had no direct path to represent one.
+                # SessionEnricher only fills the field `if ... is None`, so
+                # setting it here directly (like the fraud branch already
+                # does for HIGH/MEDIUM/LOW velocity) is the symmetric fix.
+                tx["velocity_transactions_24h"] = lognormal_days(
+                    median=20, sigma=0.55, lo=8, hi=80, rng=random
+                )
+            else:
+                tx.setdefault("velocity_burst_id", None)
             return
 
         fraud_type = bag.fraud_type
@@ -378,11 +490,25 @@ class FraudEnricher:
             tx["amount"] = round(base * random.uniform(lo_m, hi_m) * age_mult * noise_mult, 2)
 
         # ── New beneficiary & destination account age ─────────────────────
+        # Quando o padrão define new_beneficiary_prob, o resultado do sorteio
+        # precisa ser gravado nos dois sentidos. Antes só o True era escrito;
+        # um sorteio perdido deixava o campo None, e os enrichers a jusante
+        # (session.py / session_context.py) tratam None como "ainda não
+        # decidido" e sorteiam de novo com a taxa genérica de fraude (0.40-
+        # 0.45), sem olhar a probabilidade do padrão específico. Isso somava
+        # dois sorteios independentes — P(True) = 1-(1-p)(1-p_fallback) —
+        # e inflava qualquer padrão com new_beneficiary_prob baixo (ex.
+        # CARTAO_CLONADO, 0.25 → efetivo ~0.56) para perto da taxa genérica,
+        # apagando a diferenciação por tipo que o comentário abaixo descreve.
+        # Gravar o False explicitamente faz o sorteio do padrão valer sozinho.
         new_ben_prob = characteristics.get("new_beneficiary_prob")
-        if new_ben_prob is not None and random.random() < new_ben_prob:
-            tx["new_beneficiary"] = True
-            if tx.get("destination_bank"):
-                tx["destination_bank"] = bag.bank_cache.sample()
+        if new_ben_prob is not None:
+            if random.random() < new_ben_prob:
+                tx["new_beneficiary"] = True
+                if tx.get("destination_bank"):
+                    tx["destination_bank"] = bag.bank_cache.sample()
+            else:
+                tx["new_beneficiary"] = False
 
         # Destination account age: PIX/social fraud goes to brand-new mule accounts.
         # This field is read by build_context_for_fraud via tx dict — must be set here
@@ -445,7 +571,21 @@ class FraudEnricher:
         location_anomaly = characteristics.get("location_anomaly", "NONE")
         if location_anomaly == "HIGH":
             current_state = tx.get("customer_state", "SP")
-            diff_state = random.choice([s for s in ESTADOS_LIST if s != current_state])
+            # Uniform choice among all 27 states/DF over-represents sparsely
+            # populated ones (Acre, Rondônia...) relative to how rarely any
+            # real customer — fraud victim or not — is ever there. Legit
+            # geolocations follow the real population distribution
+            # (ESTADOS_WEIGHTS), so a uniform draw here put anomalous fraud
+            # locations in the far west far more often than any legit
+            # customer's coordinates ever land there:
+            # `geolocation_lon < -63.9792` (west of virtually all legit
+            # traffic) identified fraud with 100% precision. Weighting by the
+            # same population weights fixes the cause, not just the symptom —
+            # an anomalous-location fraud is likelier to look like Rio de
+            # Janeiro than Acre, same as real traffic is.
+            _candidates = [(s, w) for s, w in zip(ESTADOS_LIST, ESTADOS_WEIGHTS) if s != current_state]
+            _cand_states, _cand_weights = zip(*_candidates)
+            diff_state = random.choices(_cand_states, weights=_cand_weights, k=1)[0]
             info = ESTADOS_BR.get(diff_state, ESTADOS_BR["SP"])
             tx["geolocation_lat"] = round(info["lat"] + random.uniform(-0.5, 0.5), 6)
             tx["geolocation_lon"] = round(info["lon"] + random.uniform(-0.5, 0.5), 6)

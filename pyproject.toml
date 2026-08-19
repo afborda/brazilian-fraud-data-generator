@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fraud-generator"
-version = "4.20.0"
+version = "4.26.0"
 description = "Synthetic fraud data generator for Brazilian banking, PIX and ride-share systems"
 requires-python = ">=3.10"
 dependencies = [

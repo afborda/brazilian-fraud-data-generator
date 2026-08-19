@@ -41,7 +41,7 @@ class Device:
     emulator_detected: bool = False          # Android/iOS emulator
     vpn_active: bool = False
     ip_type: Optional[str] = None            # RESIDENTIAL | DATACENTER | VPN | TOR
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary suitable for JSON serialization."""
         return {
@@ -60,18 +60,18 @@ class Device:
             'vpn_active': self.vpn_active,
             'ip_type': self.ip_type,
         }
-    
+
     def to_json(self) -> str:
         """Convert to JSON string."""
         return json.dumps(self.to_dict(), ensure_ascii=False)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Device':
         """Create Device from dictionary."""
         first_use = data.get('first_use')
         if isinstance(first_use, str):
             first_use = date.fromisoformat(first_use)
-        
+
         return cls(
             device_id=data['device_id'],
             customer_id=data['customer_id'],

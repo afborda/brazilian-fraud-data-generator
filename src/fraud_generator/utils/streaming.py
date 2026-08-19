@@ -98,9 +98,10 @@ class CustomerSessionState:
         self._favorite_merchants: List[tuple] = []   # (merchant_id, merchant_name, mcc_code)
         self._favorite_ids: set = set()
         self._FAVORITE_MAX = 8
-        # T4: device consistency — first 2 devices seen become "primary"; others are anomalies
-        self._primary_devices: set = set()
-        self._PRIMARY_MAX = 2
+        # Devices this customer has EVER used — never pruned. Mirrors
+        # `_merchants_ever`; see `is_new_device` for why this replaced the
+        # capped "primary devices" set.
+        self._devices_ever: set = set()
         # Pro+: 30d extended window — (timestamp, amount, device_id, merchant_id)
         self._transactions_30d: deque = deque()
         # Last activity, kept outside every window. Inactivity is unbounded by
@@ -113,6 +114,11 @@ class CustomerSessionState:
         self._last_seen_ts: Optional[datetime] = None
         self._last_seen_lat: Optional[float] = None
         self._last_seen_lon: Optional[float] = None
+        # Merchants/counterparties this customer has EVER paid — never pruned.
+        # "New beneficiary" means never seen before, not "not seen in the last
+        # 24h": _merchant_counts is decremented by _prune_old, so a merchant
+        # paid last week counted as new again.
+        self._merchants_ever: set = set()
 
     def _prune_old(self, current_time: datetime) -> None:
         """Remove transactions older than 24h (24h window) and 30d (extended window)."""
@@ -158,6 +164,7 @@ class CustomerSessionState:
 
         if merchant_id:
             self._merchant_counts[merchant_id] = self._merchant_counts.get(merchant_id, 0) + 1
+            self._merchants_ever.add(merchant_id)
             # T4: accumulate favorites from first _FAVORITE_MAX distinct merchants
             if (
                 merchant_id not in self._favorite_ids
@@ -169,9 +176,7 @@ class CustomerSessionState:
                 self._favorite_ids.add(merchant_id)
         if device_id:
             self._device_counts[device_id] = self._device_counts.get(device_id, 0) + 1
-            # T4: first _PRIMARY_MAX distinct devices become "primary"
-            if len(self._primary_devices) < self._PRIMARY_MAX:
-                self._primary_devices.add(device_id)
+            self._devices_ever.add(device_id)
 
     def get_velocity_window(self, current_time: datetime, hours: float) -> int:
         """Count transactions in the last `hours` window (Pro+ extended velocity)."""
@@ -219,14 +224,22 @@ class CustomerSessionState:
         return _random.choice(self._favorite_merchants)
 
     def is_new_device(self, device_id: Optional[str]) -> bool:
-        """T4: True when device_id is not one of the customer's primary devices.
+        """Has this customer never used this device before?
 
-        Returns False (not anomalous) when fewer than 2 primaries have been
-        accumulated, so first-time customers don't trigger a false signal.
+        Reads `_devices_ever`, which is never pruned — same fix as
+        `is_new_merchant`/`_merchants_ever`. It used to read `_primary_devices`,
+        a set capped at the first 2 distinct devices seen (`_PRIMARY_MAX`);
+        once that cap was hit the set stopped growing, so a customer's 3rd (or
+        later) device was reported "new" on every single transaction forever —
+        the 500th use of an 18-month-old phone still set
+        device_new_for_customer=True. `config/device.py` gives up to
+        `max_devices=3` per customer (2-3 for young_digital/subscription_heavy
+        profiles), so this hit roughly a third of legitimate customers
+        (measured: 34.3% have >=3 devices), not an edge case.
         """
-        if not device_id or len(self._primary_devices) < 1:
+        if not device_id:
             return False
-        return device_id not in self._primary_devices
+        return device_id not in self._devices_ever
 
     def get_velocity(self, current_time: datetime) -> int:
         """Transactions in last 24h."""
@@ -239,10 +252,18 @@ class CustomerSessionState:
         return round(self._accumulated_amount, 2)
 
     def is_new_merchant(self, merchant_id: Optional[str]) -> bool:
-        """Is this a new merchant for customer within 24h window?"""
+        """Has this customer never paid this merchant/counterparty before?
+
+        Reads `_merchants_ever`, which is never pruned. It used to read
+        `_merchant_counts`, which `_prune_old` decrements as transactions leave
+        the 24h window — so a merchant paid last week counted as new again. At
+        a realistic ~1.7 transactions/day a customer has one or two records
+        inside any 24h window, which pinned `new_beneficiary` near 100% of
+        legitimate traffic (real: 5-15%) and made the field useless as a signal.
+        """
         if not merchant_id:
             return False
-        return merchant_id not in self._merchant_counts
+        return merchant_id not in self._merchants_ever
 
     def get_last_transaction_minutes_ago(self, current_time: datetime) -> Optional[int]:
         """Minutes since the customer's last transaction, at any distance in the past.
@@ -279,10 +300,14 @@ class CustomerSessionState:
         elapsed time is at least 5 minutes and the distance exceeds what a
         commercial flight could cover.  Returns (is_impossible: bool, distance_km: float).
         """
-        if not self._transactions or lat is None or lon is None:
+        if lat is None or lon is None:
             return False, 0.0
-        last_ts, _amt, _mid, last_lat, last_lon, _did = self._transactions[-1]
-        if last_lat is None or last_lon is None:
+        # Uses the unpruned last-seen marker, not the 24h deque: a customer who
+        # transacted 30h ago in another state is exactly the case this check
+        # exists for, and reading the pruned window made it invisible.
+        last_ts = self._last_seen_ts
+        last_lat, last_lon = self._last_seen_lat, self._last_seen_lon
+        if last_ts is None or last_lat is None or last_lon is None:
             return False, 0.0
         dist_km = haversine_distance(last_lat, last_lon, lat, lon)
         elapsed_min = (current_time - last_ts).total_seconds() / 60.0
@@ -346,7 +371,7 @@ def create_driver_index(driver_dict: Dict[str, Any]) -> DriverIndex:
     active_apps = driver_dict.get('active_apps', [])
     if isinstance(active_apps, list):
         active_apps = tuple(active_apps)
-    
+
     return DriverIndex(
         driver_id=driver_dict['driver_id'],
         operating_state=driver_dict.get('operating_state', 'SP'),
@@ -360,7 +385,7 @@ def create_ride_index(ride_dict: Dict[str, Any]) -> RideIndex:
     # Handle nested pickup_location
     pickup_location = ride_dict.get('pickup_location', {})
     city = pickup_location.get('city', '') if isinstance(pickup_location, dict) else ''
-    
+
     return RideIndex(
         ride_id=ride_dict['ride_id'],
         driver_id=ride_dict.get('driver_id', ''),
@@ -377,7 +402,7 @@ class BatchGenerator:
     Generates data in batches, keeping only lightweight indexes
     in memory for customer/device/driver references.
     """
-    
+
     def __init__(
         self,
         batch_size: int = 10000,
@@ -395,56 +420,56 @@ class BatchGenerator:
         self.customer_index: List[CustomerIndex] = []
         self.device_index: List[DeviceIndex] = []
         self.driver_index: List[DriverIndex] = []
-    
+
     def add_customer_index(self, index: CustomerIndex) -> None:
         """Add a customer index to the reference list."""
         self.customer_index.append(index)
-        
+
         # Memory management: if too many, sample down
         if len(self.customer_index) > self.max_memory_items:
             self.customer_index = random.sample(
                 self.customer_index,
                 self.max_memory_items // 2
             )
-    
+
     def add_device_index(self, index: DeviceIndex) -> None:
         """Add a device index to the reference list."""
         self.device_index.append(index)
-        
+
         if len(self.device_index) > self.max_memory_items:
             self.device_index = random.sample(
                 self.device_index,
                 self.max_memory_items // 2
             )
-    
+
     def add_driver_index(self, index: DriverIndex) -> None:
         """Add a driver index to the reference list."""
         self.driver_index.append(index)
-        
+
         if len(self.driver_index) > self.max_memory_items:
             self.driver_index = random.sample(
                 self.driver_index,
                 self.max_memory_items // 2
             )
-    
+
     def get_random_customer(self) -> Optional[CustomerIndex]:
         """Get a random customer from the index."""
         if not self.customer_index:
             return None
         return random.choice(self.customer_index)
-    
+
     def get_random_device(self, customer_id: Optional[str] = None) -> Optional[DeviceIndex]:
         """Get a random device, optionally for a specific customer."""
         if not self.device_index:
             return None
-        
+
         if customer_id:
             customer_devices = [d for d in self.device_index if d.customer_id == customer_id]
             if customer_devices:
                 return random.choice(customer_devices)
-        
+
         return random.choice(self.device_index)
-    
+
     def get_random_driver(
         self,
         state: Optional[str] = None,
@@ -462,39 +487,39 @@ class BatchGenerator:
         """
         if not self.driver_index:
             return None
-        
+
         candidates = self.driver_index
-        
+
         if state:
             candidates = [d for d in candidates if d.operating_state == state]
-        
+
         if city and candidates:
             city_candidates = [d for d in candidates if d.operating_city == city]
             if city_candidates:
                 candidates = city_candidates
-        
+
         if not candidates:
             # Fallback to any driver
             return random.choice(self.driver_index)
-        
+
         return random.choice(candidates)
-    
+
     def get_drivers_by_state(self, state: str) -> List[DriverIndex]:
         """Get drivers from a specific state."""
         return [d for d in self.driver_index if d.operating_state == state]
-    
+
     def get_drivers_by_app(self, app: str) -> List[DriverIndex]:
         """Get drivers who use a specific app."""
         return [d for d in self.driver_index if app in d.active_apps]
-    
+
     def get_customers_by_state(self, state: str) -> List[CustomerIndex]:
         """Get customers from a specific state."""
         return [c for c in self.customer_index if c.state == state]
-    
+
     def get_customers_by_profile(self, profile: str) -> List[CustomerIndex]:
         """Get customers with a specific profile."""
         return [c for c in self.customer_index if c.profile == profile]
-    
+
     def clear(self) -> None:
         """Clear all indexes to free memory."""
         self.customer_index.clear()
@@ -553,23 +578,23 @@ def estimate_memory_usage(num_customers: int, num_devices_per_customer: float = 
     # Full object sizes (approximate)
     FULL_CUSTOMER_SIZE = 800  # bytes
     FULL_DEVICE_SIZE = 300  # bytes
-    
+
     # Index sizes
     INDEX_CUSTOMER_SIZE = 80  # bytes
     INDEX_DEVICE_SIZE = 50  # bytes
-    
+
     num_devices = int(num_customers * num_devices_per_customer)
-    
+
     full_memory = (
         num_customers * FULL_CUSTOMER_SIZE +
         num_devices * FULL_DEVICE_SIZE
     )
-    
+
     index_memory = (
         num_customers * INDEX_CUSTOMER_SIZE +
         num_devices * INDEX_DEVICE_SIZE
     )
-    
+
     return {
         'full_approach': {
             'bytes': full_memory,
@@ -588,7 +613,7 @@ class ProgressTracker:
     Track and display progress for batch data generation.
     Shows percentage, speed, ETA, and output location.
     """
-    
+
     def __init__(
         self,
         total: int,
@@ -617,7 +642,7 @@ class ProgressTracker:
         self.start_time = None
         self._last_print_len = 0
         self._started = False
-    
+
     def start(self):
         """Start the progress tracker."""
         import time
@@ -625,7 +650,7 @@ class ProgressTracker:
         self.current = 0
         self._started = True
         self._print_header()
-    
+
     def _print_header(self):
         """Print the initial header."""
         print(f"\n   📊 {self.description}")
@@ -633,7 +658,7 @@ class ProgressTracker:
             print(f"   📂 Salvando em: {self.output_path}")
         print(f"   🎯 Total: {self.total:,} {self.unit}")
         print()
-    
+
     def update(self, n: int = 1) -> None:
         """
         Update progress by n items.
@@ -647,7 +672,7 @@ class ProgressTracker:
         self.current += n
         if self.show_bar:
             self._print_progress()
-    
+
     def _format_duration(self, seconds: float) -> str:
         """Format seconds to human-readable duration."""
         if seconds < 60:
@@ -658,18 +683,18 @@ class ProgressTracker:
         else:
             hours = seconds / 3600
             return f"{hours:.1f}h"
-    
+
     def _print_progress(self):
         """Print current progress with ETA."""
         import time
         import sys
-        
+
         if self.total == 0:
             return
-        
+
         elapsed = time.time() - self.start_time if self.start_time else 0
         percentage = (self.current / self.total) * 100
-        
+
         # Calculate speed and ETA
         if elapsed > 0 and self.current > 0:
             speed = self.current / elapsed
@@ -680,12 +705,12 @@ class ProgressTracker:
         else:
             eta_str = "calculando..."
             speed_str = "-"
-        
+
         # Build progress bar
         bar_width = 25
         filled = int(bar_width * self.current / self.total)
         bar = "█" * filled + "░" * (bar_width - filled)
-        
+
         # Build status line
         status = (
             f"\r   [{bar}] {percentage:5.1f}% | "
@@ -693,12 +718,12 @@ class ProgressTracker:
             f"⚡ {speed_str}/s | "
             f"ETA: {eta_str}"
         )
-        
+
         # Clear previous line and print new status
         padding = " " * max(0, self._last_print_len - len(status))
         print(status + padding, end='', flush=True)
         self._last_print_len = len(status)
-    
+
     def finish(self, show_summary: bool = True):
         """
         Complete the progress and optionally print final summary.
@@ -707,15 +732,15 @@ class ProgressTracker:
             show_summary: Whether to print the completion summary
         """
         import time
-        
+
         if not self._started:
             return
-        
+
         elapsed = time.time() - self.start_time if self.start_time else 0
-        
+
         # Move to new line
         print()
-        
+
         if show_summary:
             # Calculate final stats
             if elapsed > 0 and self.current > 0:
@@ -723,19 +748,19 @@ class ProgressTracker:
                 speed_str = f"{speed:.1f}"
             else:
                 speed_str = "-"
-            
+
             print(f"   ✅ Concluído: {self.current:,} {self.unit} em {self._format_duration(elapsed)}")
             print(f"   ⚡ Velocidade média: {speed_str} {self.unit}/s")
             if self.output_path:
                 print(f"   💾 Dados salvos em: {self.output_path}")
-    
+
     @property
     def progress(self) -> float:
         """Get progress as percentage."""
         if self.total == 0:
             return 100.0
         return (self.current / self.total) * 100
-    
+
     @property
     def elapsed_time(self) -> float:
         """Get elapsed time in seconds."""
@@ -743,7 +768,7 @@ class ProgressTracker:
         if self.start_time is None:
             return 0.0
         return time.time() - self.start_time
-    
+
     @property
     def eta(self) -> float:
         """Get estimated time remaining in seconds."""
@@ -754,6 +779,6 @@ class ProgressTracker:
         speed = self.current / elapsed
         remaining = self.total - self.current
         return remaining / speed if speed > 0 else 0.0
-    
+
     def __str__(self) -> str:
         return f"{self.description}: {self.current:,}/{self.total:,} ({self.progress:.1f}%)"

@@ -48,7 +48,7 @@ class ParquetExporter(ExporterProtocol):
     
     Requires: pip install pyarrow pandas
     """
-    
+
     def __init__(
         self,
         compression: str = 'zstd',
@@ -72,18 +72,18 @@ class ParquetExporter(ExporterProtocol):
                 "pandas is required for Parquet export. "
                 "Install with: pip install pandas"
             )
-        
+
         self.compression = compression
         self.row_group_size = row_group_size
-    
+
     @property
     def extension(self) -> str:
         return '.parquet'
-    
+
     @property
     def format_name(self) -> str:
         return 'Parquet'
-    
+
     def _flatten_dict(
         self,
         d: Dict[str, Any],
@@ -99,7 +99,7 @@ class ParquetExporter(ExporterProtocol):
             else:
                 items.append((new_key, v))
         return dict(items)
-    
+
     def export_batch(
         self,
         data: List[Dict[str, Any]],
@@ -110,22 +110,22 @@ class ParquetExporter(ExporterProtocol):
         import pandas as pd
         import pyarrow as pa
         import pyarrow.parquet as pq
-        
+
         self.ensure_directory(output_path)
-        
+
         if not data:
             return 0
-        
+
         # Flatten nested dictionaries
         flat_data = [self._flatten_dict(record) for record in data]
-        
+
         # Create DataFrame
         df = pd.DataFrame(flat_data)
-        
+
         # Convert to PyArrow Table - usando timestamp_as_object=True para evitar ns
         # e depois convertemos para string para compatibilidade com Spark
         table = pa.Table.from_pandas(df, preserve_index=False)
-        
+
         # Converter timestamps de nanosegundos para microsegundos (compatível com Spark)
         new_schema = []
         new_columns = []
@@ -140,9 +140,9 @@ class ParquetExporter(ExporterProtocol):
             else:
                 new_schema.append(field)
                 new_columns.append(col)
-        
+
         table = pa.table(dict(zip(table.column_names, new_columns)), schema=pa.schema(new_schema))
-        
+
         if append:
             # For append, we need to read existing and concatenate
             try:
@@ -159,7 +159,7 @@ class ParquetExporter(ExporterProtocol):
                 table = pa.concat_tables([existing_table, table])
             except FileNotFoundError:
                 pass  # File doesn't exist, will create new
-        
+
         # Write Parquet file
         pq.write_table(
             table,
@@ -167,13 +167,13 @@ class ParquetExporter(ExporterProtocol):
             compression=self.compression,
             row_group_size=self.row_group_size
         )
-        
+
         return len(data)
-    
+
     def _convert_timestamps_to_micros(self, table):
         """Convert timestamp columns from nanoseconds to microseconds for Spark compatibility."""
         import pyarrow as pa
-        
+
         new_schema = []
         new_columns = []
         for i, field in enumerate(table.schema):
@@ -186,9 +186,9 @@ class ParquetExporter(ExporterProtocol):
             else:
                 new_schema.append(field)
                 new_columns.append(col)
-        
+
         return pa.table(dict(zip(table.column_names, new_columns)), schema=pa.schema(new_schema))
-    
+
     def export_stream(
         self,
         data_iterator: Iterator[Dict[str, Any]],
@@ -199,23 +199,23 @@ class ParquetExporter(ExporterProtocol):
         import pandas as pd
         import pyarrow as pa
         import pyarrow.parquet as pq
-        
+
         self.ensure_directory(output_path)
-        
+
         total_count = 0
         writer = None
         schema = None
-        
+
         try:
             batch = []
             for record in data_iterator:
                 batch.append(self._flatten_dict(record))
-                
+
                 if len(batch) >= batch_size:
                     df = pd.DataFrame(batch)
                     table = pa.Table.from_pandas(df, preserve_index=False)
                     table = self._convert_timestamps_to_micros(table)
-                    
+
                     if writer is None:
                         schema = table.schema
                         writer = pq.ParquetWriter(
@@ -223,17 +223,17 @@ class ParquetExporter(ExporterProtocol):
                             schema,
                             compression=self.compression
                         )
-                    
+
                     writer.write_table(table)
                     total_count += len(batch)
                     batch = []
-            
+
             # Write remaining records
             if batch:
                 df = pd.DataFrame(batch)
                 table = pa.Table.from_pandas(df, preserve_index=False)
                 table = self._convert_timestamps_to_micros(table)
-                
+
                 if writer is None:
                     schema = table.schema
                     writer = pq.ParquetWriter(
@@ -241,14 +241,14 @@ class ParquetExporter(ExporterProtocol):
                         schema,
                         compression=self.compression
                     )
-                
+
                 writer.write_table(table)
                 total_count += len(batch)
-        
+
         finally:
             if writer is not None:
                 writer.close()
-        
+
         return total_count
 
 
@@ -259,7 +259,7 @@ class ParquetPartitionedExporter(ParquetExporter):
     Useful for very large datasets that benefit from
     partition-based querying (e.g., by date or estado).
     """
-    
+
     def __init__(
         self,
         partition_cols: List[str] = None,
@@ -274,11 +274,11 @@ class ParquetPartitionedExporter(ParquetExporter):
         """
         super().__init__(compression=compression)
         self.partition_cols = partition_cols or []
-    
+
     @property
     def format_name(self) -> str:
         return 'Partitioned Parquet'
-    
+
     def export_batch(
         self,
         data: List[Dict[str, Any]],
@@ -289,22 +289,22 @@ class ParquetPartitionedExporter(ParquetExporter):
         import pandas as pd
         import pyarrow as pa
         import pyarrow.parquet as pq
-        
+
         self.ensure_directory(output_path)
-        
+
         if not data:
             return 0
-        
+
         # Flatten nested dictionaries
         flat_data = [self._flatten_dict(record) for record in data]
-        
+
         # Create DataFrame
         df = pd.DataFrame(flat_data)
-        
+
         # Convert to PyArrow Table and fix timestamps for Spark compatibility
         table = pa.Table.from_pandas(df, preserve_index=False)
         table = self._convert_timestamps_to_micros(table)
-        
+
         # Write partitioned dataset
         pq.write_to_dataset(
             table,
@@ -313,5 +313,5 @@ class ParquetPartitionedExporter(ParquetExporter):
             compression=self.compression,
             existing_data_behavior='overwrite_or_ignore' if append else 'delete_matching'
         )
-        
+
         return len(data)

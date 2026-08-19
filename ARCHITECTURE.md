@@ -164,7 +164,7 @@ All runners implement `BaseRunner(ABC)`:
 
 ```
 Phase 1 — Customers & Devices   → customers.jsonl, devices.jsonl
-Phase 2 — Transactions           → transactions_00000.jsonl …
+Phase 2 — Transactions           → transactions_00000.jsonl … (+ fraud_ground_truth_00000.jsonl, §10)
 Phase 3 — Drivers                → drivers.jsonl
 Phase 4 — Rides                  → rides_00000.jsonl …
 ```
@@ -379,6 +379,43 @@ class ExporterProtocol(ABC):
 | `DatabaseExporter` | SQLite / PG | Batched INSERT via SQLAlchemy |
 | `MinIOExporter` | Any → S3 | Wraps other exporters + boto3 upload |
 
+### Ground-truth companion file (local batch mode only)
+
+Since v4.21.0, `cli/workers/tx_worker.py` writes a second file per batch —
+`fraud_ground_truth_NNNNN.jsonl`, next to `transactions_NNNNN.{ext}` — carrying
+the fields that only ever describe an *investigation's conclusion*, not
+something observable when the transaction happened: `fraud_labels` (multiclass
+taxonomy), `fraud_chain_id` / `fraud_chain_role`, `fraud_reported_days_after`,
+`credential_breach_days_before`, `card_test_phase`, and
+`distributed_attack_group`. `utils/ground_truth.py` defines the field list and
+`split_ground_truth()`/`ground_truth_path()` helpers.
+
+```
+tx_generator.generate(...) → tx["_ground_truth"] = {transaction_id, is_fraud,
+                                                      fraud_type, <7 fields>}
+worker loop → tx.pop("_ground_truth") → written to fraud_ground_truth_NNNNN.jsonl
+                                          (None-valued keys stripped except
+                                          transaction_id/is_fraud)
+            → remaining tx            → written to transactions_NNNNN.{ext} as usual
+```
+
+Rows in both files share `transaction_id` 1:1, so a join reunites them. Why
+`is_fraud`/`fraud_type` are **duplicated** into the companion file rather than
+removed from the main one: unlike the 7 fields above, they are already
+excluded from the ML feature set (`ml/features.py`) — the actual leakage
+vector — and they are the base supervised label the product exists to
+provide ("Generates labeled datasets", `CLAUDE.md`). Stripping them from the
+transaction record would break every consumer that expects a labeled dataset
+(tests, `ml/`, `tools/analyze_batch.py`, benchmarks) without closing a
+leakage path the ML pipeline doesn't have.
+
+**Known gap:** only the local file-based batch path (`tx_worker.py`) writes
+the companion file. `cli/workers/batch_gen.py` (MinIO/S3 batch upload) and
+`utils/parallel.py` (live streaming via `stream.py`) both pop and discard
+`_ground_truth` instead — a nested dict has no safe representation in a
+Parquet/S3 upload or a live event, and neither runner had an established
+side-channel to extend. `is_fraud`/`fraud_type` stay inline in both paths.
+
 ---
 
 ## 11. Connections (Streaming)
@@ -449,6 +486,18 @@ DriverIndex(driver_id, state, lat, lon, apps, ...)
 ### `CustomerSessionState`
 
 Maintains per-customer mutable state across multiple transaction records in the same worker run (last transaction timestamp, fraud velocity counter, merchant history).
+
+Two kinds of state coexist and must not be confused: a **24h/30d rolling
+window** (`_transactions`/`_transactions_30d` deques, pruned by
+`_prune_old`) for velocity/accumulated-amount features, and **unbounded
+lifetime markers** (`_last_seen_ts`, `_merchants_ever`, `_devices_ever`) for
+"has this ever happened before" questions. Every accessor that answers a
+lifetime question must read a lifetime marker, not the pruned window — three
+past bugs (`get_last_transaction_minutes_ago`, `is_new_merchant`,
+`check_impossible_travel`) and a fourth (`is_new_device`, fixed in v4.21.0)
+all turned out to be a lifetime question answered from windowed or
+capped-size state, which is indistinguishable from the label after a few
+weeks of simulated time.
 
 ---
 

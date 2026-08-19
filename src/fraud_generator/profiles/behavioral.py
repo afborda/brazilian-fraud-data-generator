@@ -39,34 +39,34 @@ class BehavioralProfile:
     """
     name: str
     description: str
-    
+
     # Age range (for customer generation)
     age_range: Tuple[int, int]
-    
+
     # Income multiplier (relative to base income)
     income_multiplier: Tuple[float, float]
-    
+
     # Preferred transaction types with weights
     transaction_types: Dict[str, int]
-    
+
     # Preferred MCCs with weights
     preferred_mccs: Dict[str, int]
-    
+
     # Channel preferences with weights
     channel_preferences: Dict[str, int]
-    
+
     # Typical transaction frequency (transactions per month)
     monthly_tx_frequency: Tuple[int, int]
-    
+
     # Typical transaction value range (BRL)
     typical_value_range: Tuple[float, float]
-    
+
     # Preferred hours for transactions (24h format)
     preferred_hours: List[int]
-    
+
     # Weekend activity multiplier (1.0 = same as weekday)
     weekend_multiplier: float = 1.0
-    
+
     # Fraud susceptibility (higher = more likely target)
     fraud_susceptibility: float = 1.0
 
@@ -104,7 +104,7 @@ PROFILES: Dict[str, BehavioralProfile] = {
         weekend_multiplier=1.3,
         fraud_susceptibility=1.2,  # More susceptible to phishing/social engineering
     ),
-    
+
     ProfileType.TRADITIONAL_SENIOR.value: BehavioralProfile(
         name="traditional_senior",
         description="Traditional senior: 55+ years, prefers branch/ATM, cautious",
@@ -140,7 +140,7 @@ PROFILES: Dict[str, BehavioralProfile] = {
         weekend_multiplier=0.6,  # Less active on weekends
         fraud_susceptibility=1.5,  # More susceptible to phone scams
     ),
-    
+
     ProfileType.BUSINESS_OWNER.value: BehavioralProfile(
         name="business_owner",
         description="Business owner: 30-55 years, high volume, suppliers and services",
@@ -177,7 +177,7 @@ PROFILES: Dict[str, BehavioralProfile] = {
         weekend_multiplier=0.4,  # Less business activity on weekends
         fraud_susceptibility=1.3,  # Targeted by business fraud
     ),
-    
+
     ProfileType.HIGH_SPENDER.value: BehavioralProfile(
         name="high_spender",
         description="High net worth: 30-60 years, luxury, travel, high average ticket",
@@ -212,7 +212,7 @@ PROFILES: Dict[str, BehavioralProfile] = {
         weekend_multiplier=1.5,  # More leisure spending on weekends
         fraud_susceptibility=1.4,  # High value target
     ),
-    
+
     ProfileType.SUBSCRIPTION_HEAVY.value: BehavioralProfile(
         name="subscription_heavy",
         description="Digital subscriber: 22-45 years, many recurring subscriptions",
@@ -244,7 +244,7 @@ PROFILES: Dict[str, BehavioralProfile] = {
         weekend_multiplier=1.2,
         fraud_susceptibility=1.1,
     ),
-    
+
     ProfileType.FAMILY_PROVIDER.value: BehavioralProfile(
         name="family_provider",
         description="Family provider: 30-55 years, supermarket, pharmacy, education",
@@ -511,12 +511,43 @@ def get_mcc_for_profile(profile_name: str) -> str:
     return random.choices(MCC_LIST, weights=MCC_WEIGHTS)[0]
 
 
-def get_channel_for_profile(profile_name: str) -> str:
-    """Get a weighted random channel for a profile."""
+def get_channel_for_profile(profile_name: str, tx_type: Optional[str] = None) -> str:
+    """Get a weighted random channel for a profile, constrained by transaction type.
+
+    `tx_type` matters more than the profile: a customer's digital fondness
+    decides whether they *prefer* app or web, but it cannot make WITHDRAWAL
+    happen over WEB_BANKING — that channel/type pair does not exist in the
+    real product. When `tx_type` is given, the profile's channel weights are
+    intersected with `get_channel_weights_for_type(tx_type)` (channels the
+    type forbids get weight 0) and renormalized; a profile with no signal
+    left after that (e.g. it only lists a channel the type excludes) falls
+    back to the type's own table. Omitting `tx_type` keeps the old
+    profile-only behaviour, for callers that decide channel before type.
+    """
+    from ..config.transactions import (
+        CHANNELS_LIST, CHANNELS_WEIGHTS, get_channel_weights_for_type,
+    )
+
+    if tx_type is not None:
+        type_weights = get_channel_weights_for_type(tx_type)
+        profile = PROFILES.get(profile_name)
+        profile_weights = profile.channel_preferences if profile else None
+        if profile_weights:
+            combined = {
+                ch: w * profile_weights.get(ch, 0.0)
+                for ch, w in type_weights.items()
+            }
+            if sum(combined.values()) <= 0:
+                combined = type_weights
+        else:
+            combined = type_weights
+        choices = list(combined.keys())
+        weights = list(combined.values())
+        return random.choices(choices, weights=weights)[0]
+
     cache = _profile_channel_caches.get(profile_name)
     if cache:
         return cache.sample()
-    from ..config.transactions import CHANNELS_LIST, CHANNELS_WEIGHTS
     return random.choices(CHANNELS_LIST, weights=CHANNELS_WEIGHTS)[0]
 
 
@@ -558,7 +589,7 @@ def get_transaction_value_for_profile(
     Considers both profile preferences and MCC typical values.
     """
     profile = PROFILES.get(profile_name)
-    
+
     if not profile:
         # Log-normal calibrado pelo range MCC (sem pile-up nos limites)
         valor_min, valor_max = mcc_value_range
@@ -589,7 +620,7 @@ def get_monthly_transactions_for_profile(profile_name: str) -> int:
     profile = PROFILES.get(profile_name)
     if not profile:
         return random.randint(20, 60)
-    
+
     min_tx, max_tx = profile.monthly_tx_frequency
     return random.randint(min_tx, max_tx)
 
@@ -599,6 +630,6 @@ def should_transact_on_weekend(profile_name: str) -> bool:
     profile = PROFILES.get(profile_name)
     if not profile:
         return random.random() < 0.5
-    
+
     # Higher multiplier = more weekend activity
     return random.random() < (profile.weekend_multiplier / 2)

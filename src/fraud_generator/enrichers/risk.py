@@ -16,6 +16,16 @@ from ..config.transactions import REFUSAL_REASONS
 from ..generators.session_context import build_context_for_fraud
 from ..generators.correlations import match_fraud_rule
 from ..generators.score import compute_fraud_risk_score, score_breakdown
+from ..config.calibration import rate as _rate
+
+
+# Fraud types whose money leaves through a mule account. Kept here rather than
+# inline so the list is greppable alongside the other fraud-type groupings.
+_MULE_CASHOUT_TYPES = frozenset({
+    "PIX_GOLPE", "ENGENHARIA_SOCIAL", "LAVAGEM_DINHEIRO", "FRAUDE_QR_CODE",
+    "BOLETO_FALSO", "WHATSAPP_CLONE", "CONTA_TOMADA", "MULA_FINANCEIRA",
+    "FALSA_CENTRAL_TELEFONICA", "SEQUESTRO_RELAMPAGO",
+})
 
 
 class RiskEnricher:
@@ -53,6 +63,11 @@ class RiskEnricher:
                 # 20%: borderline (35-60) — falsos positivos realistas
                 #  8%: alto risco legítimo (60-80) — compra incomum, viagem
                 #  2%: muito alto (80-95) — atividade atípica mas legítima
+                # O teto de 95 nesta última faixa dava int() máximo 94, então
+                # `fraud_score > 94` isolava fraude com precisão 100% sobre ~16%
+                # dos registros. Um antifraude legado crava 100 em cliente
+                # legítimo de vez em quando — é o falso positivo que existe em
+                # qualquer operação real.
                 r = buf.next_float()
                 if r < 0.70:
                     fraud_score = int(buf.next_uniform(0, 35))
@@ -61,7 +76,7 @@ class RiskEnricher:
                 elif r < 0.98:
                     fraud_score = int(buf.next_uniform(60, 80))
                 else:
-                    fraud_score = int(buf.next_uniform(80, 95))
+                    fraud_score = int(buf.next_uniform(80, 101))
 
             tx["status"] = status
             tx["fraud_score"] = fraud_score
@@ -134,11 +149,28 @@ class RiskEnricher:
 
         tx["fraud_ring_id"] = ring_id
         tx["ring_role"] = ring_role
-        tx["recipient_is_mule"] = (
-            ring_role in ("orchestrator", "recruiter")
-            and tx.get("type") in ("PIX", "TED")
-            and is_fraud
-        ) if ring_id else False
+
+        # recipient_is_mule describes the DESTINATION, so tying it to ring
+        # membership of the *sender* made it fire 21 times in 268k records —
+        # effectively a dead column. Cashing out through a mule account is the
+        # norm in Brazilian PIX fraud, not a rare ring event.
+        #
+        # A small legitimate rate is deliberate: the flag is what an antifraud
+        # system believes about the destination, and mule lists carry false
+        # positives (an account that was rented out and later sold, a shared
+        # account). Without that, the field is a label again.
+        if tx.get("type") in ("PIX", "TED"):
+            if is_fraud:
+                p_mule = (
+                    _rate("mule.p_fraud_cashout_types")
+                    if fraud_type in _MULE_CASHOUT_TYPES
+                    else _rate("mule.p_fraud_other_types")
+                )
+            else:
+                p_mule = _rate("mule.p_legit")
+            tx["recipient_is_mule"] = buf.next_float() < p_mule
+        else:
+            tx["recipient_is_mule"] = False
 
         # ── Team+: enhanced mule graph structure ──────────────────────────
         is_team_plus = is_plan(bag.license, "team", "enterprise")

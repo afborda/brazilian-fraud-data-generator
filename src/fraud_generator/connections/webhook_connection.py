@@ -21,9 +21,9 @@ class WebhookConnection(ConnectionProtocol):
         conn.send({'transaction_id': '123', 'valor': 100.0})
         conn.close()
     """
-    
+
     name = "HTTP Webhook"
-    
+
     def __init__(self):
         self.session = None
         self.url = None
@@ -33,7 +33,7 @@ class WebhookConnection(ConnectionProtocol):
         self.max_workers = 10
         self._executor = None
         self._connected = False
-    
+
     @classmethod
     def is_available(cls) -> bool:
         """Check if requests is installed."""
@@ -42,7 +42,7 @@ class WebhookConnection(ConnectionProtocol):
             return True
         except ImportError:
             return False
-    
+
     def connect(
         self,
         url: str,
@@ -67,14 +67,14 @@ class WebhookConnection(ConnectionProtocol):
                 "requests is not installed. "
                 "Install with: pip install requests"
             )
-        
+
         import requests
-        
+
         self.url = url
         self.method = method.upper()
         self.timeout = timeout
         self.max_workers = max_workers
-        
+
         # Default headers
         self.headers = {
             'Content-Type': 'application/json',
@@ -82,15 +82,15 @@ class WebhookConnection(ConnectionProtocol):
         }
         if headers:
             self.headers.update(headers)
-        
+
         # Create session for connection pooling
         self.session = requests.Session()
         self.session.headers.update(self.headers)
-        
+
         # Thread pool for async requests
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._connected = True
-    
+
     def send(
         self,
         data: Dict[str, Any],
@@ -111,9 +111,9 @@ class WebhookConnection(ConnectionProtocol):
         """
         if not self._connected:
             raise RuntimeError("Not connected. Call connect() first.")
-        
+
         target_url = url or self.url
-        
+
         try:
             response = self.session.request(
                 method=self.method,
@@ -125,7 +125,7 @@ class WebhookConnection(ConnectionProtocol):
         except Exception as e:
             print(f"❌ Webhook error: {e}")
             return False
-    
+
     def send_batch(
         self,
         records: List[Dict[str, Any]],
@@ -142,12 +142,12 @@ class WebhookConnection(ConnectionProtocol):
         """
         if not self._connected:
             raise RuntimeError("Not connected. Call connect() first.")
-        
+
         futures = []
         for record in records:
             future = self._executor.submit(self.send, record)
             futures.append(future)
-        
+
         success_count = 0
         for future in as_completed(futures):
             try:
@@ -155,9 +155,9 @@ class WebhookConnection(ConnectionProtocol):
                     success_count += 1
             except Exception:
                 pass
-        
+
         return success_count
-    
+
     def close(self) -> None:
         """Close the HTTP session and thread pool."""
         if self._executor:

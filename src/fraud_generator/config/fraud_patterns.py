@@ -642,7 +642,7 @@ def get_fraud_pattern(fraud_type: str) -> FraudPattern:
     """
     if fraud_type not in FRAUD_PATTERNS:
         raise KeyError(f"Unknown fraud type: {fraud_type}. Available: {FRAUD_TYPES_LIST}")
-    
+
     return FRAUD_PATTERNS[fraud_type]
 
 
@@ -666,11 +666,28 @@ def get_anomaly_multiplier(anomaly_level: AnomalyLevel) -> float:
 
 
 # Time windows for time anomaly
+#
+# Auditoria de separabilidade (camada 1) achou que LOW e MEDIUM contradiziam os
+# próprios comentários dos padrões que os usam. 11 tipos de fraude marcam
+# time_anomaly='LOW' com comentários como "Horário normal" (ENGENHARIA_SOCIAL,
+# 28% de prevalência — o tipo mais comum) ou "Horário comercial" (BOLETO_FALSO,
+# FALSA_CENTRAL_TELEFONICA), mas a janela antiga (22h-2h) é tão noturna quanto
+# HIGH. 7 tipos marcam MEDIUM com "Pode ser qualquer hora" / "Urgência:
+# qualquer hora" (CARTAO_CLONADO, PIX_GOLPE — juntos 39% de prevalência), mas a
+# janela antiga (20h-4h) exclui o dia inteiro. Como LOW+MEDIUM cobrem ~82% da
+# prevalência de fraude e ambos colapsavam na mesma faixa madrugada de HIGH,
+# `unusual_time` saía com AUC univariada de 0.885 (odds ratio 60x) — não por
+# fraude ser majoritariamente noturna, mas porque a janela de horário ignorava
+# o rótulo que o próprio autor do padrão escreveu ao lado dela.
+#
+# Corrigido para bater com o texto do comentário de cada nível, não com um
+# alvo de AUC:
 TIME_ANOMALY_WINDOWS = {
-    'NONE': list(range(6, 22)),      # Normal: 6h-22h
-    'LOW': list(range(22, 24)) + list(range(0, 2)),  # Slightly late: 22h-2h
-    'MEDIUM': list(range(20, 24)) + list(range(0, 4)),  # Late: 20h-4h
-    'HIGH': list(range(22, 24)) + list(range(0, 5)),    # Very late: 22h-5h (madrugada)
+    'NONE': list(range(6, 22)),      # Normal: 6h-22h — mantém o horário do perfil do cliente, sem override
+    'LOW': list(range(6, 23)),       # "Horário normal"/"comercial" — dia inteiro, uniforme
+    'MEDIUM': list(range(0, 24)),    # "Pode ser qualquer hora" — literalmente qualquer hora
+    'HIGH': list(range(22, 24)) + list(range(0, 5)),    # Madrugada — inalterado: ATO/RAT/sequestro relâmpago
+                                                          # com vítima dormindo é fenômeno real, não artefato
 }
 
 

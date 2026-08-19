@@ -173,7 +173,7 @@ def get_season(month: int) -> str:
         Season name in Portuguese (verao, outono, inverno, primavera)
     """
     month = month % 12 or 12  # Handle 0 as December
-    
+
     if month in (12, 1, 2):
         return 'verao'
     elif month in (3, 4, 5):
@@ -195,7 +195,7 @@ def _get_weather_condition(rain_probability: float) -> str:
         Weather condition string
     """
     roll = random.random()
-    
+
     # Adjust thresholds based on rain probability
     if roll > rain_probability:
         # No rain
@@ -232,27 +232,27 @@ def generate_weather(state: str, dt: Optional[datetime] = None) -> Dict[str, Any
     """
     if dt is None:
         dt = datetime.now()
-    
+
     # Get region and season
     region = get_region_for_state(state)
     season = get_season(dt.month)
-    
+
     # Get rain probability for region/month
     rain_prob = PROB_CHUVA_POR_MES.get(region, PROB_CHUVA_POR_MES['SUDESTE']).get(dt.month, 0.3)
-    
+
     # Adjust rain probability by time of day (afternoon storms are common)
     hour = dt.hour
     if 14 <= hour <= 18:
         rain_prob = min(1.0, rain_prob * 1.3)  # 30% more likely in afternoon
     elif 0 <= hour <= 6:
         rain_prob = rain_prob * 0.7  # 30% less likely at night
-    
+
     # Generate condition
     condition = _get_weather_condition(rain_prob)
-    
+
     # Get temperature range for region/season
     temp_range = TEMP_POR_REGIAO.get(region, TEMP_POR_REGIAO['SUDESTE']).get(season, (20, 30))
-    
+
     # Adjust temperature by time of day
     base_temp = random.uniform(temp_range[0], temp_range[1])
     if 6 <= hour <= 9:
@@ -267,18 +267,18 @@ def generate_weather(state: str, dt: Optional[datetime] = None) -> Dict[str, Any
     else:
         # Night - coolest
         temperature = base_temp * 0.85
-    
+
     # Clamp temperature to reasonable range
     temperature = max(temp_range[0] - 5, min(temp_range[1] + 5, temperature))
-    
+
     # Reduce temperature if raining
     if condition in ('RAIN', 'HEAVY_RAIN', 'STORM'):
         temperature -= random.uniform(2, 5)
-    
+
     # Get surge impact
     weather_info = WEATHER_CONDITIONS.get(condition, WEATHER_CONDITIONS['CLEAR'])
     surge_impact = weather_info['surge_impact']
-    
+
     return {
         'condition': condition,
         'condition_desc': weather_info['desc'],

@@ -48,8 +48,17 @@ def generate_transaction_batch(
     fraud_rate: float,
     use_profiles: bool,
     seed: Optional[int],
+    ground_truth_sink: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Return a list of transaction dicts generated in memory."""
+    """Return a list of transaction dicts generated in memory.
+
+    Args:
+        ground_truth_sink: When given, investigation-only fields are appended
+            here (one record per transaction) instead of being discarded, so
+            the caller can write the companion object described in
+            `utils/ground_truth.py`. Defaults to None to keep the previous
+            behaviour for callers that have nowhere to put them.
+    """
     worker_seed = (seed + batch_id * 12_345) if seed is not None else (
         batch_id * 12_345 + int(time.time() * 1000) % 10_000
     )
@@ -94,6 +103,13 @@ def generate_transaction_batch(
             session_state=session,
         )
         session.add_transaction(tx, ts)
+        # Investigation-only fields ride in a companion object rather than in
+        # the transaction record — see utils/ground_truth.py. When no sink is
+        # supplied they are dropped, because a nested dict would break the
+        # Parquet/JSONL upload; callers that want them pass a list.
+        ground_truth = tx.pop("_ground_truth", None)
+        if ground_truth_sink is not None and ground_truth is not None:
+            ground_truth_sink.append(ground_truth)
         result.append(tx)
     return result
 

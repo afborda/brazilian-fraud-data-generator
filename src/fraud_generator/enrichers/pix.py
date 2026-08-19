@@ -9,6 +9,7 @@ For PIX transactions the 7 BACEN core fields + TPRD3 Fase-2 fields are filled.
 """
 
 import hashlib
+import random
 from typing import Any, Dict
 
 from .base import EnricherProtocol, GeneratorBag
@@ -17,9 +18,13 @@ from ..config.pix import (
     TIPO_CONTA_LIST, TIPO_CONTA_WEIGHTS,
     HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS,
     generate_end_to_end_id,
+    counterparty_hash,
     MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS,
+    MOTIVO_DEVOLUCAO_LEGIT_LIST, MOTIVO_DEVOLUCAO_LEGIT_WEIGHTS,
 )
 from ..validators.cpf import generate_valid_cpf
+
+
 
 
 class PIXEnricher:
@@ -67,6 +72,14 @@ class PIXEnricher:
             e2e_id = generate_end_to_end_id(ispb_pag, ts_str, seq)
             customer_id = tx.get("customer_id", "")
             customer_cpf = tx.get("_customer_cpf")  # internal key, stripped later
+            _cp_hash = counterparty_hash(customer_id, bag.is_fraud)
+
+            # The session tracks recurrence through merchant_id, and
+            # new_beneficiary is is_new_merchant(merchant_id). For a P2P
+            # transfer the counterparty *is* the beneficiary, so point them at
+            # the same key — otherwise every PIX carries a fresh merchant_id
+            # and new_beneficiary is True 97% of the time.
+            tx.setdefault("merchant_id", f"CP_{_cp_hash[:16]}")
 
             tx.update({
                 "end_to_end_id": e2e_id,
@@ -77,19 +90,31 @@ class PIXEnricher:
                 "holder_type_recebedor": buf.next_weighted("holder", HOLDER_TYPE_LIST, HOLDER_TYPE_WEIGHTS),
                 "modalidade_iniciacao": buf.next_weighted("modalidade", MODALIDADE_INICIACAO_LIST, MODALIDADE_INICIACAO_WEIGHTS),
                 "cpf_hash_pagador": hashlib.sha256((customer_cpf or customer_id).encode()).hexdigest(),
-                "cpf_hash_recebedor": hashlib.sha256(generate_valid_cpf().encode()).hexdigest(),
+                "cpf_hash_recebedor": _cp_hash,
                 "pacs_status": buf.next_weighted("pacs_status", ["ACSC", "RJCT", "PDNG"], [92, 6, 2]),
                 "is_devolucao": False,
                 "motivo_devolucao_med": None,
             })
 
-        # TPRD3: MED devolution — 30% of fraud PIX transactions
-        if (
-            bag.is_fraud
-            and tx.get("is_devolucao") is False
-            and buf.next_float() < 0.30
-        ):
-            tx["is_devolucao"] = True
-            tx["motivo_devolucao_med"] = buf.next_weighted(
-                "motivo_devolucao", MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS
-            )
+        # TPRD3: MED devolution. `motivo_devolucao_med` used to be non-null
+        # exclusively when bag.is_fraud — a perfect leak, but a devolution by
+        # itself doesn't prove fraud. Two of the four BACEN reasons (BE08
+        # operational error, REFU recipient refusal) carry no fraud claim: a
+        # PIX sent to the wrong key, a duplicate payment, or a merchant
+        # declining an unexpected transfer produce the exact same
+        # is_devolucao=True / motivo_devolucao_med fields on a transaction
+        # nobody disputes as fraud. FR01/MD06 (the golpe-specific reasons)
+        # stay exclusive to the fraud branch.
+        if bag.is_fraud:
+            if tx.get("is_devolucao") is False and buf.next_float() < 0.30:
+                tx["is_devolucao"] = True
+                tx["motivo_devolucao_med"] = buf.next_weighted(
+                    "motivo_devolucao", MOTIVO_DEVOLUCAO_LIST, MOTIVO_DEVOLUCAO_WEIGHTS
+                )
+        else:
+            if tx.get("is_devolucao") is False and buf.next_float() < 0.015:
+                tx["is_devolucao"] = True
+                tx["motivo_devolucao_med"] = buf.next_weighted(
+                    "motivo_devolucao_legit",
+                    MOTIVO_DEVOLUCAO_LEGIT_LIST, MOTIVO_DEVOLUCAO_LEGIT_WEIGHTS,
+                )

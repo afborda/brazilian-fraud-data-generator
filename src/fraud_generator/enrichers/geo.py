@@ -27,14 +27,48 @@ _CLUSTER_NAMES = ("HOME", "WORK", "SHOPPING", "OTHER", "OCCASIONAL")
 _KNOWN_LOCATION_KM = 2.0
 
 
+
+# Probabilidade de a transação sair de outro estado, por tipo de fraude.
+# Ver o comentário em _pick_location para o porquê de não ser uniforme.
+_GEO_ANOMALY_PROB: dict = {
+    # Vítima operando o próprio aparelho, na própria cidade: sem deslocamento.
+    "PIX_GOLPE": 0.02,
+    "ENGENHARIA_SOCIAL": 0.02,
+    "FALSA_CENTRAL_TELEFONICA": 0.02,
+    "WHATSAPP_CLONE": 0.03,
+    "GOLPE_INVESTIMENTO": 0.03,
+    "BOLETO_FALSO": 0.03,
+    "FRAUDE_QR_CODE": 0.04,
+    "SEQUESTRO_RELAMPAGO": 0.02,
+    "EMPRESTIMO_FRAUDULENTO": 0.05,
+    # Atacante remoto, mas boa parte usa proxy residencial na cidade da vítima
+    # para não disparar a regra de geolocalização.
+    "CONTA_TOMADA": 0.22,
+    "CREDENTIAL_STUFFING": 0.28,
+    "CARTAO_CLONADO": 0.20,
+    "FRAUDE_APLICATIVO": 0.18,
+    "SIM_SWAP": 0.15,
+    "MAO_FANTASMA": 0.06,   # RAT no aparelho da própria vítima
+    "PHISHING_BANCARIO": 0.20,
+    # Operações distribuídas de propósito.
+    "DISTRIBUTED_VELOCITY": 0.40,
+    "CARD_TESTING": 0.35,
+    "COMPRA_TESTE": 0.35,
+    "MULA_FINANCEIRA": 0.12,
+}
+
+_GEO_ANOMALY_DEFAULT = 0.10
+
+
 class GeoEnricher:
     """
     Fills geolocation_lat, geolocation_lon, codigo_ibge_municipio and
     municipio_nome using real IBGE municipality centroids.
 
     Logic:
-    - Fraud with HIGH location anomaly (30% chance): random different state,
-      municipality selected by population weight within that state.
+    - Fraud with a location anomaly (probability per fraud type — see
+      _GEO_ANOMALY_PROB): random different state, municipality selected by
+      population weight within that state.
     - Legitimate (or fraud without anomaly) + location_cluster: cluster-weighted.
     - Normal path: municipality centroid (±0.05°) from customer's state.
 
@@ -81,8 +115,21 @@ class GeoEnricher:
         location_cluster = getattr(bag, "location_cluster", None)
         estado_cache = bag.estado_cache
 
-        # Fraud: HIGH location anomaly → completely different state
-        if is_fraud and buf.next_float() < 0.3:
+        # Anomalia geográfica: só faz sentido quando o atacante opera de outro
+        # lugar. Isto valia para 30% de TODA fraude, independente do tipo, e o
+        # efeito era grande: `distance_from_last_km` saía com mediana de 15 km
+        # no legítimo contra 337 km na fraude — 22× — e virava a feature mais
+        # importante do benchmark, com 31,7% da importância.
+        #
+        # Golpe do PIX, falsa central, WhatsApp clonado e engenharia social em
+        # geral têm a VÍTIMA fazendo a transferência, do celular dela, em casa.
+        # Não há salto geográfico nenhum. Quem se desloca é ATO, credential
+        # stuffing e clonagem de cartão, onde o atacante está de fato noutro
+        # lugar — e mesmo aí, boa parte usa proxy residencial na cidade da
+        # vítima justamente para não disparar a regra de geolocalização.
+        fraud_type = getattr(bag, "fraud_type", None)
+        anomaly_prob = _GEO_ANOMALY_PROB.get(fraud_type, _GEO_ANOMALY_DEFAULT)
+        if is_fraud and buf.next_float() < anomaly_prob:
             diff_state = estado_cache.sample()
             municipio  = pick_municipio(diff_state, rng)
             lat = round(municipio.lat + buf.next_uniform(-0.05, 0.05), 6)

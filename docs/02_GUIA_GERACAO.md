@@ -285,11 +285,31 @@ python check_schema.py
 ### TSTR Benchmark (Train Synthetic, Test Real)
 
 ```bash
-# Treina modelos em dados sintéticos, testa em dados reais
-python tools/tstr_benchmark.py
+# Treina no sintético, testa no real. Os dois arquivos são obrigatórios.
+python tools/tstr_benchmark.py \
+    --synthetic ./data/transactions_00000.jsonl \
+    --real ./referencia_real.csv \
+    --gate
 ```
 
-Resultados: AUC gap = 0.0% nos modelos LR, RF e XGBoost.
+Saem três medições, e o que importa é a diferença entre elas:
+
+| | o que é |
+|---|---|
+| **TRTR** | treina no real, testa no real — o teto |
+| **TSTR** | treina no sintético, testa no real — a pergunta |
+| **TSTS** | treina e testa no sintético — diagnóstico |
+
+`gap = TRTR − TSTR`. O veredito reprova **nos dois extremos**: gap acima de 0,15
+significa que o modelo não transfere; gap perto de zero com poucas features
+alinhadas significa que o número não é crível — é o critério do próprio
+`TSTR_FRAUD_ROADMAP.md`, que trata "gap = 0% com 2 features" como indício de bug
+ou vazamento dos dois lados.
+
+> **Nota histórica.** A versão anterior deste comando rodava sem `--real`: fazia
+> cross-validation sobre o próprio arquivo sintético e chamava o resultado de
+> TSTR. O "AUC gap = 0.0%" que esta seção anunciava vinha desse fluxo e não media
+> transferência nenhuma. Sem `--real` o comando agora recusa e explica por quê.
 
 ---
 

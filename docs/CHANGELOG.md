@@ -38,6 +38,601 @@ Este documento detalha a evolução do projeto desde a v1.0 até a v4.0, incluin
 | v4.17 | **README** | README reescrito, agent-ia/ removido, tools/ criado, docs/README.md criado | 2026-04-01 |
 | v4.17.1 | **Auditoria** | Remoção de docs sensíveis, workflows privados, fix Dockerfile key | 2026-04-01 |
 | v4.18.0 | **ML Quality Lab** | Pacote ml/ (LightGBM adversarial), tools/analyze_batch.py, tools/train_ml.py, fixes enrichers (odd_hours, dest_account_age_days, log-normal noise), README com pipeline e benchmarks | 2026-04-13 |
+| v4.21.0 | **Camada 2: Fechamento** | Quarto caso do bug de janela curta (`is_new_device`), separação de ground truth em arquivo próprio, últimos 3 separadores de precisão 100% eliminados | 2026-08-13 |
+
+---
+
+### Análise de sensibilidade das taxas (adendo)
+
+Sweep completo: cada taxa movida +50% isoladamente, com regeração e medição da
+AUC. 16 taxas de transação, 7 de ride-share, ~90s cada.
+
+**Transações — ranking por |ΔAUC|:**
+
+| taxa | ΔAUC |
+|---|---|
+| `fraud.low_and_slow_share` | −0.0162 |
+| `dest_account_age.fraud_contamination` | −0.0113 |
+| `counterparty.one_off_share_legit` | −0.0084 |
+| `counterparty.one_off_share_fraud` | −0.0076 |
+| `fraud.decoy_share` | −0.0065 |
+| `dest_account_age.legit_contamination` | −0.0059 |
+| `bot_score.legit_contamination` | −0.0054 |
+| `device_age.fraud_contamination` | −0.0048 |
+| `bot_score.fraud_contamination` | −0.0033 |
+| `device_age.legit_contamination` | −0.0018 |
+| `company_age.*`, `mule.p_*` (5 taxas) | 0.0000 |
+
+**Ride-share:** a maior alavanca é `ride.legit_refund_zero_share` com +0.0196,
+e isso levando a taxa a 1,0 — o extremo de nenhum passageiro legítimo jamais
+pedir reembolso. Calibração não move o ride-share: confirma que o problema é
+lacuna de instrumentação, não de taxa.
+
+**Cinco taxas com efeito exatamente zero** não são bug: `destination_company_age_days`
+e `recipient_is_mule` não estão no feature set oficial de `ml/features.py`.
+Elas afetam o dado entregue e a AUC do benchmark, só não esta métrica.
+
+### Bug encontrado pela análise: taxa morta no registro
+
+`fraud.new_beneficiary_prob` dava delta **exatamente** zero até a 16ª casa
+decimal — o dado gerado saía idêntico. Investigado: o único ramo que lia a
+constante estava atrás de `if characteristics.get('new_beneficiary')`, e
+**nenhum dos 25 padrões define essa chave booleana** — os 25 definem
+`new_beneficiary_prob`, consumida pelo `FraudEnricher`.
+
+A taxa foi removida do registro e o ramo passa a ler a probabilidade do próprio
+padrão. Uma taxa listada que não muda a saída é pior que taxa nenhuma: promete
+um controle que não existe. Novo teste `test_every_rate_is_referenced_in_src`
+falha se qualquer entrada do registro deixar de ser consumida.
+
+Registro: 22 taxas, 0 calibradas contra referência real.
+
+## v4.26.0 — Decomposição de AUC (2026-08-14)
+
+Auditoria estatística sobre o estado pós-camada-2: nenhum separador de
+precisão 100%, mas AUC do feature set oficial (`ml/features.py`, 15/29 campos
+presentes neste batch) ainda em **0.985999** — bem acima do alvo 0.75–0.95.
+Objetivo: decompor de onde vem a separabilidade residual e corrigir o que for
+claramente errado, sem tocar em taxa nenhuma para "acertar" o número.
+
+### Achado central: `unusual_time` e `new_beneficiary` dominavam por fora do
+### radar da importância de split
+
+Nenhum dos dois aparecia no "top 8 por importância" (a métrica default do
+LightGBM é contagem de splits, e um campo binário só cabe em um split por
+ramo). Mas a AUC univariada de `unusual_time` media **0.885** (odds ratio 60x
+fraude/legítimo) e a de `new_beneficiary` **0.818** (odds ratio 26x) — maior
+que qualquer uma das features "top 8". Uma ablação cumulativa por importância
+mostra a AUC saltando de 0.936 para 0.978 só ao incluir `unusual_time` (feature
+nº 11 na ordem de importância, não nº 1).
+
+- **`config/fraud_patterns.py` — `TIME_ANOMALY_WINDOWS`**: 11 padrões marcam
+  `time_anomaly='LOW'` com comentários como *"Horário normal"*
+  (ENGENHARIA_SOCIAL, 28% de prevalência — o tipo mais comum) ou *"Horário
+  comercial"* (BOLETO_FALSO, FALSA_CENTRAL_TELEFONICA), mas a janela real
+  (22h-2h) era tão noturna quanto HIGH. 7 padrões marcam `MEDIUM` com
+  *"Pode ser qualquer hora"* (CARTAO_CLONADO, PIX_GOLPE — 39% de prevalência
+  juntos), mas a janela (20h-4h) excluía o dia inteiro. LOW+MEDIUM somam ~82%
+  da prevalência de fraude e colapsavam na mesma faixa madrugada de HIGH — o
+  código contradizia o comentário escrito ao lado dele. Corrigido para bater
+  com o texto: `LOW` → 6h-23h (dia inteiro), `MEDIUM` → 0h-24h (literalmente
+  qualquer hora), `HIGH` inalterado (22h-5h — ATO/RAT/sequestro relâmpago com
+  vítima dormindo é fenômeno real, não artefato). `NONE` inalterado.
+- **`enrichers/fraud.py` — probabilidade de `new_beneficiary` só gravava o
+  `True`**: quando o padrão definia `new_beneficiary_prob` e o sorteio dava
+  falso, o campo ficava `None` em vez de `False`, e os enrichers a jusante
+  (`session.py`/`session_context.py`) tratam `None` como "ainda não decidido"
+  e sorteiam de novo com a taxa genérica de fraude (0.40-0.45), ignorando a
+  probabilidade do padrão específico. Dois sorteios independentes por trás de
+  um só campo — `P(True) = 1-(1-p)(1-p_fallback)` — inflava qualquer padrão
+  com prob baixa (CARTAO_CLONADO, 0.25 → efetivo ~0.56) para perto da taxa
+  genérica. Corrigido: o `False` agora é gravado explicitamente quando o
+  padrão define a probabilidade, então o sorteio do padrão vale sozinho.
+
+**Resultado**: `unusual_time` odds ratio 60x → 3.18x, `new_beneficiary` 26x →
+3.39x. AUC do feature set oficial: **0.985999 → 0.957038**. Portão de CI
+(`tools/analyze_batch.py --gate`, teto 0.97) segue aprovado. 346 testes.
+
+### `type` × `channel` eram sorteados independentemente
+
+Cramér's V = 0.082 entre as duas colunas no tráfego legítimo — essencialmente
+não relacionadas, quando na realidade o instrumento de pagamento restringe o
+canal. Produzia combinações que o produto real não tem: PIX via ATM (3.907
+registros em 268k), e ~35% dos registros de WITHDRAWAL (saque) via
+MOBILE_APP/WEB_BANKING — não existe "sacar dinheiro pela web".
+
+- **`config/transactions.py`** — nova `CHANNEL_WEIGHTS_BY_TYPE`: pesos de
+  canal por tipo de transação, construídos a partir de como cada instrumento é
+  de fato acessado num app de banco/PSP brasileiro (WITHDRAWAL quase só
+  ATM/BRANCH; PIX majoritariamente MOBILE_APP; WHATSAPP_PAY ausente onde o
+  produto não oferece o instrumento — BOLETO, TED, WITHDRAWAL, AUTO_DEBIT).
+- **`profiles/behavioral.py` — `get_channel_for_profile`** ganha parâmetro
+  `tx_type` opcional: intersecta a preferência de canal do perfil com a tabela
+  do tipo (multiplicação + renormalização), então um `young_digital` ainda
+  prefere MOBILE_APP mas nunca "saca" por WEB_BANKING.
+- **`generators/transaction.py`** — os dois caminhos de geração (com e sem
+  perfil) passam a amostrar canal condicionado ao tipo já escolhido.
+
+PIX via ATM: 3.907 → 133 (0,1% dos PIX). WITHDRAWAL via canal digital: ~35% →
+0%. Não move a AUC binária (nem `type` nem `channel` fazem parte do feature
+set oficial de `ml/features.py`) — é correção de estrutura conjunta, não de
+separabilidade.
+
+### Ride-share: `DESTINATION_DISPARITY` era um separador quase perfeito isolado
+
+A v4.23.0 fechou o vazamento agregado de corridas (AUC caiu para 0.688 num
+feature set ad-hoc), mas não tinha auditado cada um dos 11 padrões
+individualmente. `DESTINATION_DISPARITY` (rota realizada != rota pedida)
+multiplicava `distance_km` por um fator sempre ≥ 0,35x — sempre acima da
+cauda curta do baseline legítimo (`abs(N(0, 0.8))`, raramente > 3km). Medido
+isolado: `route_deviation_km > 3.43` capturava 97,65% deste tipo com 100% de
+precisão — o mesmo padrão de leak já corrigido em outros campos, só que
+faltando aqui.
+
+- **`generators/ride.py`** — `_apply_fraud_fields` (DESTINATION_DISPARITY):
+  uma fração (`ride.destination_disparity_mild_share`, 30%) agora recebe um
+  desvio discreto — golpe morno ou tentativa abortada, ainda dentro do que
+  trânsito comum explicaria — em vez de sempre um múltiplo grande da
+  distância pedida.
+- **`_apply_legit_ride_fields`** — cauda rara (`ride.legit_large_deviation_prob`,
+  2%) de desvio GRANDE legítimo: obra, bloqueio de via, engarrafamento que
+  força uma rota bem mais longa que a pedida. Sem ela o legítimo nunca
+  ultrapassava ~3,4 km e o tipo acima ficava isolado por construção.
+- **`config/calibration.py`** — as duas taxas novas, ambas `ESTIMATE`.
+
+AUC de `DESTINATION_DISPARITY` isolado contra todo o tráfego legítimo:
+1.0000 → 0.6377. Nenhum outro dos 11 padrões de corrida mediu AUC = 1.0
+isolado (GPS_SPOOFING 0.90, PROMO_ABUSE 0.97, REFUND_ABUSE 0.94, GHOST_RIDE
+0.89 — já tinham contaminação real da v4.23.0).
+
+### Diagnóstico do piso de corridas (AUC 0.688, alvo mínimo 0.75)
+
+Com um feature set ad-hoc mais completo (19 campos: os 5 marcadores de fraude
+mais mecânica de corrida — distância, duração, tarifas, avaliações),
+a AUC agregada mede 0.743 pós-correção acima — ainda abaixo do piso. A
+AUC por tipo isolado explica por quê: **não é contaminação em excesso**, é
+**ausência de campo observável** para quase metade do portfólio de padrões.
+
+| Padrão | AUC isolado | Tem campo dedicado? |
+|---|---|---|
+| PROMO_ABUSE | 0.97 | sim (`promo_abuse_group`) |
+| REFUND_ABUSE | 0.94 | sim (`refund_count_30d`) |
+| GPS_SPOOFING | 0.90 | sim (`route_deviation_km`) |
+| GHOST_RIDE | 0.89 | sim (`driver_rating` ausente) |
+| ACCOUNT_TAKEOVER_RIDE | 0.77 | parcial (`new_device_first_ride`) |
+| DESTINATION_DISPARITY | 0.64 | sim, agora com overlap real |
+| SURGE_ABUSE | 0.53 | não |
+| MULTI_ACCOUNT_DRIVER | 0.44 | não |
+| RATING_FRAUD | 0.45 | não |
+| SPLIT_FARE_FRAUD | 0.43 | não |
+| PAYMENT_CHARGEBACK | 0.40 | não (n pequeno, ruído provável) |
+
+Os cinco últimos padrões existem no gerador (`config/rideshare.py`) mas não
+escrevem nenhum campo que os distinga do tráfego legítimo — não há
+`fare_split_count`, `rating_manipulation_flag`, `driver_account_switch_count`
+ou equivalente no schema de corridas. Fechar o piso exige **instrumentar
+esses tipos com campos observáveis reais**, não recalibrar os que já têm
+sinal. Registrado aqui em vez de maquiado — mexer nas taxas dos tipos que já
+funcionam até a média subir seria o mesmo erro que a auditoria original
+apontou.
+
+### Sensibilidade das 23 taxas de calibração
+
+Perturbação de +50% (ou -50% quando já perto do teto) em cada uma das 16
+taxas que afetam transações, uma de cada vez, medindo ΔAUC do feature set
+oficial contra o baseline 0.957038. Ranking completo e taxas de corrida
+(sensibilidade separada, medida contra o feature set ad-hoc de corridas) no
+relatório da tarefa — não repetido aqui para não expor um número sem o
+método ao lado.
+
+### `fraud.new_beneficiary_prob` está morta — e o registro de calibração não avisava
+
+A varredura de sensibilidade (seção acima) mediu delta de AUC **exatamente
+zero** para esta taxa, mesmo perturbando de 0,82 para 1,0. Motivo: o único
+trecho que a lê é `generators/transaction.py:950-951`, atrás de
+`if characteristics.get('new_beneficiary', False):` — e nenhum dos 25 padrões
+de fraude em `fraud_patterns.py` define a chave booleana `'new_beneficiary'`
+(só a chave separada `'new_beneficiary_prob'`, lida por um mecanismo
+diferente em `enrichers/fraud.py`, que é o que de fato governa o campo). O
+ramo é código morto; girar essa taxa não muda nada gerado. Não é um bug de
+realismo — o campo `new_beneficiary` funciona corretamente pelo outro
+caminho — mas é uma taxa que promete um controle que não existe.
+
+- **`tests/unit/test_calibration.py`** — nova classe `TestEveryRateIsWired`:
+  varre `src/` inteiro e falha se alguma chave do registro de calibração não
+  aparecer referenciada em nenhum módulo (typo, taxa órfã, entrada esquecida
+  depois de uma refatoração). Removido `test_transaction_new_beneficiary_prob`,
+  que só verificava que a constante do módulo espelha a taxa — verdade, mas
+  irrelevante, já que a constante nunca é lida pelo branch morto.
+
+### Testes
+
+346 passed, 3 skipped — mesma contagem (um teste obsoleto saiu, um de guarda
+entrou). Nenhum teste codificava os valores antigos de
+`TIME_ANOMALY_WINDOWS`, o comportamento de `new_beneficiary` ou
+`CHANNELS_LIST`/`CHANNELS_WEIGHTS` diretamente.
+
+---
+
+## v4.25.0 — TSTR de Verdade (2026-08-14)
+
+`tools/tstr_benchmark.py` se chamava "Train Synthetic, Test Real" e rodava
+`StratifiedKFold` sobre um único CSV sintético — treinava em sintético e testava
+em sintético. Não havia dado real em nenhum ponto do fluxo, então a ferramenta
+era **estruturalmente incapaz** de detectar falha de transferência, que é a
+única coisa que TSTR existe para medir. Aprovava com `if auc > 0.85` e incluía
+`fraud_score` entre as features.
+
+### Reescrito
+
+Três medições sobre as colunas que os dois datasets compartilham:
+
+| | o que é |
+|---|---|
+| **TRTR** | treina no real, testa no real — o teto |
+| **TSTR** | treina no sintético, testa no real — a pergunta do produto |
+| **TSTS** | treina e testa no sintético — diagnóstico |
+
+O real é dividido **uma vez** e a mesma metade de teste avalia TRTR e TSTR,
+senão a comparação não seria pareada. `gap = TRTR − TSTR`.
+
+### O veredito reprova nos dois extremos
+
+- `gap > 0.15` — o modelo não transfere.
+- `gap < 0.02` com menos de 6 features alinhadas — bom demais para ser verdade.
+  Critério do próprio `TSTR_FRAUD_ROADMAP.md` do projeto: *"Gap = 0% com 2
+  features indica bug ou overfitting"*. Com poucas colunas em comum, igualar o
+  dado real quase sempre significa que a mesma informação vazou dos dois lados.
+
+### Sem `--real`, recusa
+
+Não cai para cross-validation. Sai com código 2 e explica por que substituir o
+dado real pelo próprio sintético não é uma aproximação — é a medição errada.
+
+Campos derivados do rótulo (`fraud_score`, `fraud_risk_score`, `fraud_labels`,
+`card_test_phase`, …) e identificadores de alta cardinalidade são excluídos do
+espaço de features por construção, não por lista manual.
+
+### Verificação
+
+Rodado contra um proxy com distribuições deliberadamente diferentes:
+TRTR 0.894/0.899, TSTR 0.796/0.777, TSTS 0.976/0.975, gap 0.110 — aprovado. O
+TSTS bem acima do TSTR é o diagnóstico funcionando: indica estrutura no
+sintético que o alvo não tem.
+
+**O proxy usado no teste é ele próprio sintético.** Serve para exercitar a
+ferramenta, não como medição de qualidade — isso continua dependendo de um
+dataset real.
+
+13 testes novos. `docs/02_GUIA_GERACAO.md` documentava o fluxo antigo e
+anunciava "AUC gap = 0.0%" vindo dele; corrigido, com nota histórica.
+
+---
+
+## v4.24.0 — Nota Côncava (2026-08-14)
+
+Fecha a última peça da inversão da métrica: a fórmula da nota A+→F em si, que
+nunca tinha sido tocada.
+
+### A nota deixa de ser monotônica em AUC
+
+`benchmarks/data_quality_benchmark.py` dava +3.0 para qualquer AUC acima de
+0.80, sem teto — AUC 1.0 pontuava igual a 0.81 e mais que 0.79. Nova função
+`_score_separability()`, côncava, com máximo na faixa 0.75–0.92:
+
+| AUC | Pontos |
+|---|---|
+| 0.50 | 0.00 |
+| 0.70 | 2.40 |
+| 0.75–0.92 | 3.00 |
+| 0.95 | 1.17 |
+| 0.97 | 0.42 |
+| 0.9991 | **0.00** |
+
+### A flag `too_easy` finalmente é consumida
+
+`ml/evaluator.py` produzia `too_easy` por tipo de fraude desde a v4.18 e
+**nenhum caminho de código a lia**. Agora `_auc_per_fraud_type()` calcula a AUC
+de cada tipo contra toda a base legítima e vira penalidade multiplicativa, e as
+bandeiras saem em `separability_flags` no JSON. Verificado com dados reais:
+BOLETO_FALSO (0.9937) e MULA_FINANCEIRA (0.9907) são flagrados.
+
+### A AUC do benchmark também era alimentada com vazamento
+
+`_compute_auc()` incluía `fraud_score` e `fraud_risk_score` — as duas features
+removidas de `ml/features.py` na v4.19. A lista `feature_names` foi extraída
+para `BENCHMARK_FEATURE_NAMES` com guard que falha se divergir do vetor: durante
+esta mudança os dois ficaram fora de sincronia e as importâncias saíam
+atribuídas ao nome da feature seguinte.
+
+### Correções de causa encontradas pela nova medição
+
+- **`enrichers/geo.py`** — a anomalia geográfica valia para 30% de TODA fraude,
+  sem olhar o tipo. Golpe do PIX, falsa central e WhatsApp clonado têm a VÍTIMA
+  transferindo do próprio celular, em casa: não há salto geográfico. Nova tabela
+  `_GEO_ANOMALY_PROB` por tipo (2% para engenharia social, 22–28% para ATO e
+  credential stuffing, 40% para operação distribuída).
+  `distance_from_last_km`: razão fraude/legítimo de **22,1x → 3,9x**.
+- **`mule.p_*`** — `recipient_is_mule` a 62% na fraude contra 0,4% no legítimo
+  dava lift de 180x e virava a feature dominante. Lista de mula é indicador
+  atrasado: a conta entra depois que a fraude é reportada. Se um banco soubesse
+  o destino em 62% dos casos no ato, a fraude estaria resolvida. Recalibrado
+  para 14%/0,9% — lift de 16x.
+- **`_apply_decoy_profile`** — teto de 6 traços subiu para 8. Com 6, o
+  `fraud_risk_score` legítimo não passava de 98 e `> 98` isolava fraude com
+  precisão 100% sobre 16% dos registros. Um decoy com a silhueta completa
+  precisa conseguir cravar 100.
+
+Zero separadores perfeitos mantido. Portão de CI aprovado. 333 testes.
+
+---
+
+## v4.23.0 — Ride-share (2026-08-14)
+
+O domínio de corridas — 11 padrões de fraude, um terço do produto — não tinha
+recebido nenhuma das correções de vazamento. Estava exatamente como antes da
+auditoria.
+
+### Estado anterior, medido em 223.696 corridas
+
+Os cinco campos de fraude eram constantes na classe legítima (`nunique() == 1`),
+então qualquer desvio do default significava fraude por construção:
+
+| Regra | Precisão | Recall |
+|---|---|---|
+| `route_deviation_km > 0` | 100,0000% | 19,46% |
+| `promo_abuse_group NOT NULL` | 100,0000% | 14,04% |
+| `refund_count_30d > 0` | 100,0000% | 8,58% |
+| `payment_dispute_flag = True` | 100,0000% | 6,86% |
+| `new_device_first_ride = True` | 100,0000% | 5,28% |
+| **união** | **100,0000%** | **40,36%** |
+
+### Correções
+
+- **`_apply_legit_ride_fields()`** (novo) — corrida legítima passa a receber os
+  cinco campos com dispersão real. Reembolso legítimo existe (motorista não
+  apareceu, corrida cancelada, cobrança duplicada); contestação de cartão
+  legítima existe; desvio de rota quase nunca é exatamente zero (trânsito,
+  obra, atalho); troca de celular acontece; e campanha promocional agrupa
+  passageiros de verdade — `group_id` não nulo indica participação em campanha,
+  não abuso dela.
+- **`_apply_fraud_fields()`** — passa a partir do mesmo baseline legítimo antes
+  de aplicar o desvio do padrão. Sem isso, um `REFUND_ABUSE` sairia com
+  `route_deviation_km = 0.0` exato e, com o legítimo agora variando, esse zero
+  viraria marcador de fraude — o vazamento invertido.
+- Os desvios viraram probabilísticos e sobrepostos. `refund_count_30d` usa
+  exponencial em vez de piso rígido em 3 (passageiro legítimo azarado chega a
+  3, abusador cuidadoso fica em 2); `GPS_SPOOFING` usa log-normal em vez de
+  `uniform(2, 15)`, que deixava as duas pontas exclusivas; `PAYMENT_CHARGEBACK`
+  abre contestação em 72% e não sempre; `GHOST_RIDE` deixa `driver_rating`
+  nulo em 80% — corrida legítima sem avaliação é comum.
+- A combinação de campos por tipo deixou de ser única, o que tornava o
+  `fraud_type` multiclasse recuperável por consulta de tabela.
+
+### Resultado
+
+| Regra | Precisão antes | Precisão depois |
+|---|---|---|
+| `route_deviation_km > 0` | 100,00% | 1,53% |
+| `refund_count_30d > 0` | 100,00% | 3,04% |
+| `payment_dispute_flag` | 100,00% | 16,27% |
+| `new_device_first_ride` | 100,00% | 3,56% |
+| `promo_abuse_group NOT NULL` | 100,00% | 5,07% |
+
+Únicos na classe legítima: de 1 para 2–318 conforme o campo.
+
+### Alerta registrado, não maquiado
+
+A AUC multivariada das corridas foi de 0.766 para **0.688**, abaixo do piso de
+0.75 da faixa alvo. Ou a contaminação ficou agressiva demais, ou o domínio de
+corridas tem menos sinal genuíno que o bancário — o feature set usado na medição
+é ad-hoc, não existe um oficial para corridas como `ml/features.py` é para
+transações.
+
+**As taxas não foram ajustadas para bater o número.** As 7 novas entradas em
+`config/calibration.py` levam o comentário `MEDIÇÃO PENDENTE`. Ajustar até a AUC
+cair na faixa seria exatamente o erro que a auditoria apontou.
+
+---
+
+## v4.22.0 — Paridade de Saída e Calibração (2026-08-13)
+
+Fecha as três pendências registradas na v4.21.0.
+
+### Ground truth em todos os modos de saída
+
+O arquivo companheiro `fraud_ground_truth_NNNNN` só era escrito no caminho de
+arquivo local; MinIO/S3 e streaming ao vivo descartavam os campos em silêncio.
+Saídas diferentes entregavam conteúdo diferente sem o consumidor ter como saber.
+
+- **`cli/workers/batch_gen.py`** — `generate_transaction_batch()` ganha
+  `ground_truth_sink`. Quando fornecido, os campos são coletados em vez de
+  descartados. Default `None` preserva o comportamento anterior.
+- **`cli/runners/minio_runner.py`** — sobe objeto companheiro
+  `fraud_ground_truth_NNNNN` com o mesmo exporter e mesmo número de batch.
+- **`cli/workers/minio_parquet.py`** — mesmo tratamento no caminho Parquet.
+- **`utils/parallel.py`** — streaming não tem arquivo para parear, então ganha
+  `emit_ground_truth` (default `False`). O comportamento é o mesmo de antes, mas
+  agora é uma escolha explícita e não um descarte silencioso.
+
+### Registro de calibração
+
+**`config/calibration.py`** (novo). As 14 taxas que decidem a dificuldade dos
+dados estavam espalhadas como literais em 6 módulos, sem distinção entre chute
+fundamentado e número medido.
+
+Cada entrada carrega proveniência: `ESTIMATE` (raciocinada, é hipótese) ou
+`CALIBRATED` (derivada de referência real, com fonte nomeada). Hoje são
+**0 de 16 calibradas** — `report()` diz isso em voz alta, e é isso que deve ir
+na frente de um comprador que pergunte como o dado foi calibrado.
+
+Overrides carregam de JSON via `FRAUDGEN_CALIBRATION`, então agregados de um
+parceiro entram sem tocar em código. Chave desconhecida ou valor fora de [0,1]
+**levanta exceção** — um typo deixaria o default no lugar e o operador
+acreditaria ter calibrado algo que não calibrou.
+
+Refatoração pura: nenhum valor mudou, AUC idêntica em 0.987865.
+
+### Lint
+
+`ruff check src/` foi de 1117 para 468 problemas. Corrigido **apenas espaço em
+branco** (`W291,W293,W292`, 648 itens) em commit isolado — `F401` e `I001` podem
+alterar comportamento e ficaram de fora deliberadamente. O `CLAUDE.md` afirmava
+que o lint estava limpo; passa a documentar o estado real, a composição por
+regra e a orientação de não rodar `--fix` de uma vez.
+
+Um `F821` novo foi introduzido e corrigido na mesma leva (`pd` usado sem import
+no helper de upload do Parquet).
+
+---
+
+## v4.21.0 — Camada 2: Fechamento (2026-08-13)
+
+Fecha os pendentes deixados pela v4.20.0: o quarto caso do bug de janela curta
+em `CustomerSessionState`, a separação de campos de investigação num arquivo
+próprio, e os 3 separadores de precisão 100% que restavam
+(`velocity_transactions_24h > 32`, `customer_velocity_z_score > 28`,
+`geolocation_lon < -63.9792`). AUC multivariada: 0.986431 → 0.987865
+(praticamente estável — nenhuma das correções deste ciclo visava reduzir AUC,
+e o gate de CI não usa nenhum dos campos-marcador tratados aqui, porque
+nenhum deles jamais esteve no feature set oficial de `ml/features.py`).
+
+### `utils/streaming.py` — quarto caso do padrão de janela curta
+
+- **`is_new_device`**: lia `_primary_devices`, um set travado nos 2 primeiros
+  dispositivos distintos vistos (`_PRIMARY_MAX = 2`). Depois de preenchido, o
+  set parava de crescer — então o 3º dispositivo de um cliente (comum: até 3
+  por cliente em `config/device.py`, 2-3 para os perfis `young_digital` e
+  `subscription_heavy`) ficava marcado "novo" para sempre, inclusive na
+  quingentésima transação de um aparelho de 18 meses. Medido: 34,3% dos
+  clientes legítimos têm 3+ dispositivos. Trocado por `_devices_ever`, um set
+  nunca podado — mesmo padrão já usado em `_merchants_ever` para
+  `is_new_merchant`. `device_new_for_customer` no tráfego legítimo: 12,8% →
+  0,34% (o valor antigo era inflado pelo recount indevido; o novo mede
+  literalmente "primeira vez que este dispositivo específico aparece", que é
+  raro frente ao volume total de um cliente).
+- Auditados todos os demais métodos e consumidores da classe
+  (`get_favorite_merchant`/`_favorite_merchants`, `get_velocity_window`,
+  `get_accumulated_window`, `get_unique_merchants_window`,
+  `get_unique_devices_window`, janelas de 30d) — todos já liam da estrutura
+  correta (marcador vitalício para perguntas "alguma vez", janela real para
+  perguntas "nesta janela"). Nenhuma outra ocorrência encontrada.
+
+### Ground truth separado do registro transacional
+
+- **`utils/ground_truth.py`** (novo) — `GROUND_TRUTH_FIELDS` +
+  `split_ground_truth()`/`ground_truth_path()`. Campos que só existem como
+  *conclusão* de uma investigação — nunca observáveis no instante da
+  transação — saem do registro principal: `fraud_labels` (taxonomia
+  multiclasse), `fraud_chain_id`, `fraud_chain_role`,
+  `fraud_reported_days_after`, `credential_breach_days_before`,
+  `card_test_phase`, `distributed_attack_group`.
+- **`cli/workers/tx_worker.py`** — escreve `fraud_ground_truth_NNNNN.jsonl` ao
+  lado de `transactions_NNNNN.{ext}`, unido por `transaction_id`. `is_fraud`/
+  `fraud_type` são duplicados nesse arquivo (para join autocontido) mas **não**
+  removidos do arquivo principal — ver justificativa no `ARCHITECTURE.md` §10:
+  ao contrário dos 7 campos acima, ambos já estão fora do feature set de ML
+  desde a v4.19.0, e este produto existe para entregar dataset rotulado.
+  Registros sem nenhum campo de investigação (~98%) gravam só
+  `transaction_id`/`is_fraud` no arquivo de ground truth, evitando dobrar o
+  tamanho do output por linhas quase todas nulas.
+- Lacuna conhecida: `cli/workers/batch_gen.py` (MinIO/S3) e `utils/parallel.py`
+  (streaming ao vivo) descartam `_ground_truth` em vez de gravá-lo — nenhum
+  dos dois tinha um canal auxiliar equivalente, e um dict aninhado quebraria
+  upload Parquet/S3 ou um evento de stream.
+- **`card_test_phase`, `distributed_attack_group`**: decisão = ground truth
+  (fase de uma campanha de fraude conhecida e id de cluster de ataque não têm
+  análogo observável em tráfego legítimo).
+- **`motivo_devolucao_med`**: decisão = dual-class. Dos 4 motivos BACEN de
+  devolução, só `FR01`/`MD06` alegam golpe; `BE08` (erro operacional — chave
+  PIX errada, pagamento duplicado) e `REFU` (recusa do recebedor) não
+  envolvem fraude nenhuma. `config/pix.py` ganhou
+  `MOTIVO_DEVOLUCAO_LEGIT_LIST`; `enrichers/pix.py` agora sorteia devolução
+  legítima em 1,5% dos PIX (vs. 30% dos PIX fraudulentos), com motivo
+  restrito a BE08/REFU.
+- **`velocity_burst_id`**: decisão = dual-class. Agrupar transações que caem
+  próximas no tempo não é intrinsecamente fraude — um dono de negócio ou MEI
+  pagando fornecedores em lote (contas a pagar, folha) produz a mesma forma
+  de rajada que `MICRO_BURST_VELOCITY` produz na fraude. `enrichers/fraud.py`
+  passa a sortear rajada legítima para os perfis `business_owner`/
+  `micro_empreendedor` (5% de chance por transação desses perfis).
+- **`fraud_signals`**: decisão = manter no registro principal. Não estava de
+  fato restrito a uma classe (90,6% fraude vs. 26,5% legítimo já antes desta
+  mudança) — é um resumo computado a partir de sinais já observáveis
+  (`build_context_for_fraud` roda para as duas classes), análogo a
+  `fraud_risk_score`.
+
+### Últimos 3 separadores de precisão 100%
+
+- **`geolocation_lon < -63.9792`** (recall 1,81%) — `enrichers/fraud.py`,
+  ramo `location_anomaly == "HIGH"`: o estado de destino da anomalia era
+  sorteado uniformemente entre os 27 estados/DF, ignorando população. Estados
+  do extremo oeste (Acre, Rondônia) raramente são o endereço real de um
+  cliente, mas tinham a mesma chance de qualquer outro no sorteio da fraude —
+  então a fraude visitava o extremo oeste desproporcionalmente mais que o
+  tráfego legítimo jamais visita. Trocado por `random.choices` ponderado por
+  `ESTADOS_WEIGHTS` (o mesmo peso populacional que já governa onde os
+  clientes legítimos moram), excluindo o estado atual do cliente. Corrige a
+  causa (distribuição de UF enviesada), não o sintoma.
+- **`velocity_transactions_24h > 32`** (recall 5,07%) e
+  **`customer_velocity_z_score > 28`** (recall 2,44%, derivado do mesmo
+  campo) — o valor legítimo vinha 100% do estado de sessão real
+  (`session_state.get_velocity()`), sem nenhum caminho de override direto;
+  só o ramo de fraude podia setar o campo diretamente. Num batch de 268 mil
+  registros / 432 clientes / ~1 ano, o máximo empiricamente observável por
+  essa via ficou preso em exatamente 32 — não por limite de código, mas
+  porque nenhum cliente simulado tem um "dia de pico" independente da
+  sazonalidade populacional compartilhada. Um dia de pagamento em lote
+  (contas a pagar, folha) de um `business_owner`/`micro_empreendedor` real
+  facilmente excede isso. `enrichers/fraud.py` agora seta
+  `velocity_transactions_24h` diretamente nesse mesmo evento de rajada
+  legítima (log-normal, mediana 20, até 80) — simétrico ao que o ramo de
+  fraude já fazia para HIGH/MEDIUM/LOW. `customer_velocity_z_score` é
+  recalculado a partir do valor final por `SessionEnricher`, então não
+  precisou de ajuste separado.
+
+### Lint
+
+- **`schema/ai_corrector.py`** — os 2 erros `F821` do ruff eram o mesmo bug:
+  `Any` usado em anotação de tipo (`def _walk(node: Any) -> Any`) sem import.
+  `from __future__ import annotations` evitava o `NameError` em runtime, mas
+  qualquer introspecção de anotações (`typing.get_type_hints`, um decorator
+  de validação) quebraria. Adicionado `Any` ao import de `typing`.
+- Lint completo do projeto (`ruff check src/`) **não está limpo** — 1116
+  ocorrências pré-existentes (883 `W293`, 93 `F401`, 80 `I001`, 30 `E501`,
+  14 `E402`, 9 `F841`, 3 `W291`, 1 cada de `W292`/`F541`/`E741`), a maioria
+  concentrada em `generators/transaction.py` e nos módulos `cli/workers/*`
+  que usam o truque `sys.path.insert` pré-import. Fora de escopo desta
+  entrega (que tratou apenas os 2 `F821`); mantido documentado aqui em vez de
+  omitido.
+
+### Testes
+
+- **`tests/unit/test_output_schema.py::test_legit_max_score_is_low`** →
+  renomeado `test_legit_score_distribution_is_low`. O teto rígido
+  (`max_score < 70` sobre 200 amostras) era, por definição, mais um
+  separador de precisão: se nenhum legítimo passa de 70, então
+  `fraud_risk_score >= 70` prevê fraude com precisão perfeita. Um legítimo
+  pode coincidir em vários sinais de risco por acaso — falso positivo real,
+  não bug — e a mudança de RNG desta entrega expôs exatamente esse caso
+  (score 93 numa amostra de 200). Convertido para forma distribucional
+  (mediana < 10, p95 < 55) sobre 500 amostras, conforme
+  `.claude/rules/testing.md`.
+
+### Pendente
+
+- AUC multivariada em 0.987865, ainda acima do alvo 0.75–0.95. Como já
+  registrado na v4.20.0, o sinal restante está distribuído sem limiar
+  dominante entre `amount`, `accumulated_amount_24h`, `dest_account_age_days`,
+  `bot_confidence_score` e `device_age_days` — reduzir mais exige calibração
+  contra dado real; enfraquecer os sinais sem essa referência repetiria o
+  erro que a auditoria original apontou. Este ciclo não tentou.
+- `fraud_chain_id`/`fraud_chain_role`/`fraud_labels`/
+  `fraud_reported_days_after`/`credential_breach_days_before` continuam
+  sempre nulos no tier padrão (gated Pro+/Team/Enterprise) — o
+  `fraud_ground_truth_NNNNN.jsonl` só carrega valor real quando o batch é
+  gerado com licença paga.
+- Gap de exportação do ground truth para MinIO/S3 e streaming ao vivo (acima).
 
 ---
 
@@ -98,9 +693,76 @@ caiu de 0.999990 para 0.9855, contra um alvo de 0.75–0.95.
   sorte); `test_engenharia_social_pattern` punha teto rígido de R$50k sobre uma
   cauda log-normal.
 
+### Decoys e grafo de contrapartes
+
+- **`enrichers/fraud.py`** — `_apply_decoy_profile()`: 3,2% dos registros legítimos
+  recebem de 3 a 6 traços da silhueta de fraude ao mesmo tempo (aparelho novo,
+  conta de destino recente, madrugada, beneficiário novo, rajada de velocity),
+  com `is_fraud=False` e sem `fraud_type`. Contaminar campo a campo não bastava:
+  o modelo ainda separava pela *combinação*, porque nenhum legítimo exibia vários
+  sinais suspeitos juntos. Derrubou a AUC de 0.9855 para 0.9791 e eliminou
+  `fraud_risk_score > 93` e `bot_confidence_score > 0.85` da lista de separadores
+  perfeitos.
+- **`config/pix.py`** — `counterparty_hash()`: pool de ~14 contrapartes por
+  cliente com pesos Zipf, derivado do `customer_id` (sem estado extra, estável
+  entre workers). Antes, 119.182 PIX legítimos geravam 119.179 recebedores
+  distintos — frequência máxima 2, que era colisão de aniversário. Agora são
+  28.657 distintos com frequência máxima 391, e as top-5 contrapartes de um
+  cliente concentram ~60% do volume.
+- **`generators/transaction.py`** — `new_beneficiary` deixa de ser `True`
+  incondicional para os tipos marcados (o comentário dizia "Always for certain
+  fraud types"). Golpe de boleto e ATO reaproveitam contraparte que a vítima já
+  paga — é justamente isso que os torna difíceis.
+
+### Catálogo de estabelecimentos
+
+- **`config/merchants.py`** — `MERCHANT_CATALOG` + `pick_merchant()`: 3.781
+  estabelecimentos estáveis, marcas maiores com mais lojas, amostragem Zipf.
+  `merchant_id` era um token aleatório `MERCH_%06d` sem relação com
+  `merchant_name`: 57.601 ids para 264k transações, 36,5% deles mapeando para
+  mais de um nome, "Carrefour" com 642 ids distintos e média de 1,49 clientes
+  por id. Agora: 3.390 ids, 0,4% ambíguos, Carrefour com 48 lojas, 19,9 clientes
+  por estabelecimento. Features de nível de merchant passam a ser possíveis.
+- **`utils/streaming.py`** — `_merchants_ever`, não podado. `is_new_merchant()`
+  lia `_merchant_counts`, que `_prune_old` decrementa quando a transação sai da
+  janela de 24h — o docstring dizia "within 24h window". A ~1,7 tx/dia o cliente
+  tem uma ou duas transações em qualquer janela de 24h, então quase todo merchant
+  era "novo". `new_beneficiary` no tráfego legítimo: 84,3% → **26,7%**
+  (real 5–15%); na fraude, 91,2%.
+
+### Sinais mortos e teto do fraud_score
+
+- **`enrichers/risk.py`** — `recipient_is_mule` descrevia o DESTINO mas estava
+  amarrado ao papel do remetente no anel de fraude, disparando **21 vezes em
+  268 mil registros**. Cash-out por conta-laranja é a norma no PIX, não evento
+  raro de anel. Agora: 37,9% na fraude, 0,21% no legítimo — a taxa legítima é
+  deliberada, porque lista de mula tem falso positivo.
+- **`utils/streaming.py`** — `check_impossible_travel()` lia o deque podado em
+  24h. Cliente que transacionou há 30h em outro estado é exatamente o caso que
+  o sinal existe para pegar. Passa a usar o marcador não-podado.
+- **`enrichers/risk.py`** — faixa alta do `fraud_score` legítimo ia até
+  `uniform(80, 95)`, ou seja, máximo 94 após `int()`. Isso fazia
+  `fraud_score > 94` isolar fraude com precisão 100% sobre ~16% dos registros.
+  Teto subiu para 101: um antifraude legado crava 100 em cliente bom de vez em
+  quando.
+- **`tests/`** — `test_non_fraud_transactions` exigia `fraud_score < 96`,
+  recriando exatamente o separador. Convertido para forma da distribuição
+  (mediana < 40, p90 < 75) sobre 400 amostras.
+
+**O portão de CI passa** com estes dados.
+
 ### Pendente
 
-- AUC multivariada em 0.9855 — alvo 0.75–0.95.
+- AUC multivariada em 0.9864 — alvo 0.75–0.95. A correção do `new_beneficiary`
+  subiu a AUC de propósito: o campo virou um discriminador de verdade
+  (26,7% legítimo vs 91,2% fraude) em vez de ruído constante.
+- O sinal restante está distribuído entre `amount`, `accumulated_amount_24h`,
+  `dest_account_age_days`, `bot_confidence_score` e `device_age_days`, sem
+  nenhum limiar dominante. Reduzir mais exige calibração contra dado real —
+  enfraquecer os sinais sem referência seria trocar um número arbitrário por
+  outro.
+- `recipient_is_mule` e `is_impossible_travel` são sinais declarados que nunca
+  disparam (o portão de CI reprova por isso).
 - `fraud_score > 94` e `fraud_risk_score > 93` ainda separam com precisão 100%
   (fora do feature set de ML, mas exportados ao cliente).
 - Campos-marcador remanescentes: `motivo_devolucao_med`, `card_test_phase`,

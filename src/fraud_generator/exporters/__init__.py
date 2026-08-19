@@ -97,7 +97,7 @@ def get_exporter(format_name: str, **kwargs) -> ExporterProtocol:
         >>> exporter.export_batch(data, 'output.parquet')
     """
     format_lower = format_name.lower()
-    
+
     # Handle aliases
     aliases = {
         'json_lines': 'jsonl',
@@ -110,22 +110,22 @@ def get_exporter(format_name: str, **kwargs) -> ExporterProtocol:
         'sql': 'db',
     }
     format_lower = aliases.get(format_lower, format_lower)
-    
+
     if format_lower not in EXPORTERS:
         available = ', '.join(EXPORTERS.keys())
         raise ValueError(
             f"Unsupported format: {format_name}. "
             f"Available formats: {available}"
         )
-    
+
     exporter_class = EXPORTERS[format_lower]
-    
+
     if exporter_class is None:
         raise ImportError(
             f"Format '{format_name}' requires additional dependencies. "
             "Install with: pip install pyarrow pandas"
         )
-    
+
     return exporter_class(**kwargs)
 
 
@@ -171,9 +171,9 @@ def get_minio_exporter(
             "MinIO export requires boto3. "
             "Install with: pip install boto3"
         )
-    
+
     bucket, prefix = parse_minio_url(minio_url)
-    
+
     return MinIOExporter(
         endpoint_url=endpoint_url,
         access_key=access_key,
